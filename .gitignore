@@ -73,3 +73,8 @@ packages/
 # NuGet package restore folders
 **/packages/*
 !**/packages/build/
+
+# MonoGame NuGet packages (auto-restore)
+lib/MonoGame.Framework.Content.Pipeline/
+*.deps.json
+*.runtimeconfig.json
