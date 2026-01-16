@@ -22,9 +22,9 @@
 /processorParam:DebugMode=Auto
 /build:shaders/RCGI.fx
 
-#begin SDF.fx
+#begin SceneGeometry.fx
 /importer:EffectImporter
 /processor:EffectProcessor
 /processorParam:DebugMode=Auto
-/build:shaders/SDF.fx
+/build:shaders/SceneGeometry.fx
 

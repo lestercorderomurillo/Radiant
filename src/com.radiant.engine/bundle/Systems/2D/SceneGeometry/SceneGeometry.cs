@@ -16,7 +16,7 @@ public class SceneGeometry : core.System
 {
     private const float SDFScale = 0.5f;
 
-    private Effect SDFShader;
+    private Effect SceneGeometryShader;
     private SpriteBatch GeometryBatch;
     
     // Geometry buffers
@@ -60,14 +60,14 @@ public class SceneGeometry : core.System
     {
         base.Initialize();
 
-        SDFShader = RenderPipeline.Window.Content.Load<Effect>("shaders/SDF");
+        SceneGeometryShader = RenderPipeline.Window.Content.Load<Effect>("shaders/SceneGeometry");
         GeometryBatch = new SpriteBatch(RenderPipeline.GraphicsDevice);
 
-        ParamEmissiveTexture = SDFShader.Parameters["EmissiveTexture"];
-        ParamJFATexture = SDFShader.Parameters["JFATexture"];
-        ParamWorldsBounds = SDFShader.Parameters["WorldsBounds"];
-        ParamScreenDiagonal = SDFShader.Parameters["ScreenDiagonal"];
-        ParamJumpDistance = SDFShader.Parameters["JumpDistance"];
+        ParamEmissiveTexture = SceneGeometryShader.Parameters["EmissiveTexture"];
+        ParamJFATexture = SceneGeometryShader.Parameters["JFATexture"];
+        ParamWorldsBounds = SceneGeometryShader.Parameters["WorldsBounds"];
+        ParamScreenDiagonal = SceneGeometryShader.Parameters["ScreenDiagonal"];
+        ParamJumpDistance = SceneGeometryShader.Parameters["JumpDistance"];
 
         // Create 1x1 white pixel texture for drawing colored rectangles
         PixelTexture = new Texture2D(RenderPipeline.GraphicsDevice, 1, 1);
@@ -255,7 +255,7 @@ public class SceneGeometry : core.System
         ParamWorldsBounds?.SetValue(SDFBounds);
         ParamScreenDiagonal?.SetValue(ScreenDiagonal);
 
-        RenderPipeline.DrawShader(SDFShader, "InitializeJFA", JFATexture1, Color.Black);
+        RenderPipeline.DrawShader(SceneGeometryShader, "InitializeJFA", JFATexture1, Color.Black);
     }
 
     private void RunJFAPasses()
@@ -264,7 +264,7 @@ public class SceneGeometry : core.System
         ParamScreenDiagonal?.SetValue(ScreenDiagonal);
 
         JFAResult = RenderPipeline.PingPong(
-            SDFShader, "JFAPass",
+            SceneGeometryShader, "JFAPass",
             JFATexture1, JFATexture2,
             JFAPassCount,
             beforePass: (pass, input) => {
@@ -283,7 +283,7 @@ public class SceneGeometry : core.System
         ParamWorldsBounds?.SetValue(WorldBounds);
         ParamScreenDiagonal?.SetValue(ScreenDiagonal);
 
-        RenderPipeline.DrawShader(SDFShader, "GenerateSDFFromJFA", SDFBuffer);
+        RenderPipeline.DrawShader(SceneGeometryShader, "GenerateSDFFromJFA", SDFBuffer);
     }
 
     private void UpdateGizmos()
@@ -307,7 +307,7 @@ public class SceneGeometry : core.System
                 ParamEmissiveTexture?.SetValue(EmissiveBuffer);
                 ParamWorldsBounds?.SetValue(SDFBounds);
                 ParamScreenDiagonal?.SetValue(ScreenDiagonal);
-                RenderPipeline.DrawShader(SDFShader, "DebugEmissive");
+                RenderPipeline.DrawShader(SceneGeometryShader, "DebugEmissive");
                 break;
             case DebugMode.Absorption:
                 GeometryBatch.Begin(SpriteSortMode.Immediate, BlendState.AlphaBlend, SamplerState.LinearClamp);
@@ -319,19 +319,19 @@ public class SceneGeometry : core.System
                 ParamEmissiveTexture?.SetValue(EmissiveBuffer);
                 ParamWorldsBounds?.SetValue(SDFBounds);
                 ParamScreenDiagonal?.SetValue(ScreenDiagonal);
-                RenderPipeline.DrawShader(SDFShader, "DebugSDFVisible");
+                RenderPipeline.DrawShader(SceneGeometryShader, "DebugSDFVisible");
                 break;
             case DebugMode.JFADirection:
                 ParamJFATexture?.SetValue(JFAResult);
                 ParamWorldsBounds?.SetValue(SDFBounds);
                 ParamScreenDiagonal?.SetValue(ScreenDiagonal);
-                RenderPipeline.DrawShader(SDFShader, "DebugJFA");
+                RenderPipeline.DrawShader(SceneGeometryShader, "DebugJFA");
                 break;
             case DebugMode.JFARaw:
                 ParamJFATexture?.SetValue(JFAResult);
                 ParamWorldsBounds?.SetValue(SDFBounds);
                 ParamScreenDiagonal?.SetValue(ScreenDiagonal);
-                RenderPipeline.DrawShader(SDFShader, "DebugJFARaw");
+                RenderPipeline.DrawShader(SceneGeometryShader, "DebugJFARaw");
                 break;
         }
     }
@@ -347,7 +347,7 @@ public class SceneGeometry : core.System
 
     public override void Dispose()
     {
-        SDFShader?.Dispose();
+        SceneGeometryShader?.Dispose();
         GeometryBatch?.Dispose();
         PixelTexture?.Dispose();
         EmissiveBuffer?.Dispose();
