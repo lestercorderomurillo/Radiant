@@ -66,6 +66,10 @@ Content/obj/
 *.exe
 *.pdb
 
-# NuGet
+# NuGet packages (auto-restore)
 packages/
 *.nupkg
+
+# NuGet package restore folders
+**/packages/*
+!**/packages/build/
