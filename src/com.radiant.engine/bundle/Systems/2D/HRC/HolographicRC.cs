@@ -9,7 +9,7 @@ public class HolographicRC : core.System
 {
     const int FC = 4, CC = 4;
     
-    SceneSDF sdf;
+    SceneGeometry sdf;
     GizmosRenderer giz;
     Effect fx;
     SpriteBatch sb;
@@ -29,7 +29,7 @@ public class HolographicRC : core.System
     public override void Initialize()
     {
         base.Initialize();
-        sdf = Scene.ECS.GetSystem<SceneSDF>();
+        sdf = Scene.ECS.GetSystem<SceneGeometry>();
         giz = Scene.ECS.GetSystem<GizmosRenderer>();
         
         fx = RenderPipeline.Window.Content.Load<Effect>("shaders/HRC");

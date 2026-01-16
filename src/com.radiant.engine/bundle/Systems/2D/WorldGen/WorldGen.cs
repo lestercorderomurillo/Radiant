@@ -8,7 +8,7 @@ public class WorldGen : core.System
 {
     private GizmosRenderer Gizmos;
 
-    private PerlinNoise PerlinNoise;
+    private PerlinNoise2D PerlinNoise;
 
     private Random Random;
 
@@ -31,7 +31,7 @@ public class WorldGen : core.System
         base.Initialize();
 
         Gizmos = Scene.ECS.GetSystem<GizmosRenderer>();
-        PerlinNoise = Scene.ECS.GetSystem<PerlinNoise>();
+        PerlinNoise = Scene.ECS.GetSystem<PerlinNoise2D>();
         Random = new Random();
 
         Gizmos.AddSection("WorldGenECS", "World Generation ECS", Color.Green);

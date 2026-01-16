@@ -28,7 +28,7 @@ public class MegaLightsScene : Scene
         // Add systems
         ECS.AddSystem<PerformanceMonitor>();
         ECS.AddSystem<GizmosRenderer>();
-        ECS.AddSystem<SceneSDF>();
+        ECS.AddSystem<SceneGeometry>();
         ECS.AddSystem<RCGI>();
 
         base.SetupECS();

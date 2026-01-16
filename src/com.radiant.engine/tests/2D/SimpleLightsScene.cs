@@ -13,7 +13,7 @@ public class SimpleLightsScene : Scene
     {
         ECS.AddSystem<PerformanceMonitor>();
         ECS.AddSystem<GizmosRenderer>();
-        ECS.AddSystem<SceneSDF>();
+        ECS.AddSystem<SceneGeometry>();
         ECS.AddSystem<HolographicRC>();
 
         base.SetupECS();

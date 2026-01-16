@@ -3,7 +3,7 @@ using com.radiant.engine.core;
 
 namespace com.radiant.engine.bundle;
 
-public class PerlinNoise : core.System
+public class PerlinNoise2D : core.System
 {
     private static readonly int[] p = new int[512];
     private static bool initialized = false;

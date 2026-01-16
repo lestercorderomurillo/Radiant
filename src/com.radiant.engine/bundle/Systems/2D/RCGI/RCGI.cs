@@ -13,7 +13,7 @@ public class RCGI : core.System
     private Effect RCShader;
     private SpriteBatch ShaderSpriteBatch;
     private Texture2D PixelTexture;
-    private SceneSDF SDFSystem;
+    private SceneGeometry SDFSystem;
     private RenderTarget2D[] CascadeLayers;
     private RenderTarget2D FinalTexture;
     private Vector2 ScreenSize;
@@ -70,7 +70,7 @@ public class RCGI : core.System
         PixelTexture = new Texture2D(RenderPipeline.GraphicsDevice, 1, 1);
         PixelTexture.SetData([Color.White]);
 
-        SDFSystem = Scene.ECS.GetSystem<SceneSDF>();
+        SDFSystem = Scene.ECS.GetSystem<SceneGeometry>();
 
         ScreenSize = new Vector2(
             RenderPipeline.GraphicsDevice.Viewport.Width,

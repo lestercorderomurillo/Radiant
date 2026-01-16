@@ -12,7 +12,7 @@ namespace com.radiant.engine.bundle;
 /// - SDF: Signed distance field for raymarching
 /// - Future: Normals, velocity, depth, material IDs
 /// </summary>
-public class SceneSDF : core.System
+public class SceneGeometry : core.System
 {
     private const float SDFScale = 0.5f;
 

@@ -9,7 +9,7 @@ public class TilesetScene : Scene
     
     public override void SetupECS()
     {
-        ECS.AddSystem<PerlinNoise>();
+        ECS.AddSystem<PerlinNoise2D>();
         ECS.AddSystem<GizmosRenderer>();
         ECS.AddSystem<PerformanceMonitor>();
         ECS.AddSystem<WorldGen>();
