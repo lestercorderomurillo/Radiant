@@ -1,8 +1,13 @@
-#OS junk files
+#=====================
+# OS junk files
+#=====================
 [Tt]humbs.db
 *.DS_Store
+~$*
 
-#Visual Studio files
+#=====================
+# Visual Studio
+#=====================
 *.pidb
 *.userprefs
 *.[Oo]bj
@@ -28,53 +33,48 @@
 *.ide
 *.ide-shm
 *.ide-wal
+*.VC.db
+*.VC.opendb
 ipch/
+.vs/
+Ankh.NoLoad
+
+#=====================
+# Tooling
+#=====================
+_ReSharper*/
+*.resharper
+[Tt]est[Rr]esult*
+.svn
+
+#=====================
+# Build outputs
+#=====================
 obj/
 [Bb]in/
 [Dd]ebug*/
 [Rr]elease*/
-Ankh.NoLoad
-
-# Visual Studio 2015+ cache/options
-.vs/
-*.VC.db
-*.VC.opendb
-
-#Tooling
-_ReSharper*/
-*.resharper
-[Tt]est[Rr]esult*
-
-#Project files
 [Bb]uild/
 artifacts/
+*.dll
+*.exe
+*.pdb
+*.deps.json
+*.runtimeconfig.json
 
-#Subversion files
-.svn
-
-# Office Temp Files
-~$*
-
-#MonoGame Compiled Content
+#=====================
+# MonoGame
+#=====================
 Content/bin/
 Content/obj/
 *.cachefile
 *.mgcontent
 
-# Build outputs - DLLs, EXEs, PDBs
-*.dll
-*.exe
-*.pdb
-
-# NuGet packages (auto-restore)
+#=====================
+# NuGet (auto-restore)
+#=====================
 packages/
-*.nupkg
-
-# NuGet package restore folders
 **/packages/*
-!**/packages/build/
-
-# MonoGame NuGet packages (auto-restore)
-lib/MonoGame.Framework.Content.Pipeline/
-*.deps.json
-*.runtimeconfig.json
+*.nupkg
+lib/
+**/runtimes/
