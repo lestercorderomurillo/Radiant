@@ -24,7 +24,6 @@ public class SceneGeometry : core.System
     public RenderTarget2D AbsorptionTexture { get; private set; }
     public RenderTarget2D SDFTexture { get; private set; }
 
-    private bool GeometryDirty;
     private bool UseExternalEmissive;
 
     private int EmissiveCount;
@@ -52,17 +51,32 @@ public class SceneGeometry : core.System
         float sdfDiagonal = SDFBounds.Length();
         JFAPassCount = (int)Math.Ceiling(Math.Log(sdfDiagonal, 2)) + 1;
 
-        CreateGeometryBuffers();
+        InitializeGeometryBuffers();
 
         JFAResult = JFATexture1;
-        GeometryDirty = true;
 
         Gizmos = Scene.ECS.GetSystem<GizmosRenderer>();
         Gizmos.AddSection("Geometry", "Scene Geometry Buffers", Color.Blue);
         PrevKeyState = Keyboard.GetState();
     }
 
-    private void CreateGeometryBuffers()
+    private void InitializeJFA()
+    {
+        Renderer
+            .Reset()
+            .SetShader("SceneGeometry")
+            .SetTechnique("InitializeJFA")
+            .SetTarget(JFATexture1)
+            .Clear(Color.Black)
+            .SetParameter("EmissiveTexture", EmissiveTexture)
+            .SetParameter("WorldsBounds", SDFBounds)
+            .SetParameter("ScreenDiagonal", ScreenDiagonal)
+            .Draw()
+            .Commit()
+            .SetTarget(null);
+    }
+
+    private void InitializeGeometryBuffers()
     {
         EmissiveTexture = new RenderTarget2D(
             Renderer.Device, (int)WorldBounds.X, (int)WorldBounds.Y,
@@ -87,51 +101,29 @@ public class SceneGeometry : core.System
 
     public override void Update()
     {
-        HandleInput();
-
-        if (!UseExternalEmissive)
-        {
-            RenderEmissiveTexture();
-            RenderAbsorptionTexture();
-        }
-
-        if (GeometryDirty)
-        {
-            RenderSDFTexture();
-            GeometryDirty = false;
-        }
-
-        UpdateGizmos();
-        UseExternalEmissive = false;
-    }
-
-    private void HandleInput()
-    {
+        // Handle input
         var key = Keyboard.GetState();
+
         if (key.IsKeyDown(Keys.F2) && !PrevKeyState.IsKeyDown(Keys.F2))
         {
             int count = Enum.GetValues<DebugMode>().Length;
             CurrentDebug = (DebugMode)(((int)CurrentDebug + 1) % count);
         }
         PrevKeyState = key;
+
+        // Control flags
+        if (!UseExternalEmissive)
+        {
+            RenderEmissiveTexture();
+            RenderAbsorptionTexture();
+        }
+
+        RenderSDFTexture();
+
+        UpdateGizmos();
+        UseExternalEmissive = false;
     }
-
-    public void SetEmissiveFromExternal(Action<Renderer> callback)
-    {
-        Renderer
-            .SetTarget(EmissiveTexture)
-            .Clear(Color.Transparent);
-
-        callback.Invoke(Renderer);
-
-        Renderer
-            .Commit()
-            .SetTarget(null);
-
-        UseExternalEmissive = true;
-        GeometryDirty = true;
-    }
-
+    
     private void RenderEmissiveTexture()
     {
         Renderer
@@ -175,7 +167,6 @@ public class SceneGeometry : core.System
             .SetTarget(null);
 
         EmissiveCount = count;
-        GeometryDirty = true;
     }
 
     private void RenderAbsorptionTexture()
@@ -222,22 +213,6 @@ public class SceneGeometry : core.System
         InitializeJFA();
         RunJFAPasses();
         GenerateFinalSDF();
-    }
-
-    private void InitializeJFA()
-    {
-        Renderer
-            .Reset()
-            .SetShader("SceneGeometry")
-            .SetTechnique("InitializeJFA")
-            .SetTarget(JFATexture1)
-            .Clear(Color.Black)
-            .SetParameter("EmissiveTexture", EmissiveTexture)
-            .SetParameter("WorldsBounds", SDFBounds)
-            .SetParameter("ScreenDiagonal", ScreenDiagonal)
-            .Draw()
-            .Commit()
-            .SetTarget(null);
     }
 
     private void RunJFAPasses()
@@ -360,8 +335,6 @@ public class SceneGeometry : core.System
                 break;
         }
     }
-
-    
 
     public override void Dispose()
     {
