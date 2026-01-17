@@ -57,16 +57,13 @@ public class RCGI : core.System
     {
         base.Initialize();
 
-        var device = Renderer.Device;
-
-        RCShader = Renderer.Window.Content.Load<Effect>("shaders/RCGI");
-        ShaderSpriteBatch = new SpriteBatch(device);
-        PixelTexture = new Texture2D(device, 1, 1);
-        PixelTexture.SetData([Color.White]);
+        RCShader = Renderer.GetShaderEffect("RCGI");
+        ShaderSpriteBatch = Renderer.SpriteBatch;
+        PixelTexture = Renderer.PixelTexture;
 
         SDFSystem = Scene.ECS.GetSystem<SceneGeometry>();
 
-        ScreenSize = new Vector2(device.Viewport.Width, device.Viewport.Height);
+        ScreenSize = new Vector2(Renderer.Device.Viewport.Width, Renderer.Device.Viewport.Height);
         CascadeSize = ScreenSize / CascadeLinear;
         InvScreenSize = new Vector2(1f / ScreenSize.X, 1f / ScreenSize.Y);
         InvCascadeSize = new Vector2(1f / CascadeSize.X, 1f / CascadeSize.Y);
@@ -293,9 +290,7 @@ public class RCGI : core.System
 
     public override void Dispose()
     {
-        RCShader?.Dispose();
-        PixelTexture?.Dispose();
-        ShaderSpriteBatch?.Dispose();
+        // Note: RCShader, PixelTexture, ShaderSpriteBatch are managed by Renderer
         FinalTexture?.Dispose();
         CachedRasterizerState?.Dispose();
 

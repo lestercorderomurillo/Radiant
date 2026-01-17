@@ -34,14 +34,11 @@ public class HolographicRC : core.System
         SDFSystem = Scene.ECS.GetSystem<SceneGeometry>();
         Gizmos = Scene.ECS.GetSystem<GizmosRenderer>();
 
-        var device = Renderer.Device;
+        Shader = Renderer.GetShaderEffect("HRC");
+        ShaderBatch = Renderer.SpriteBatch;
+        PixelTexture = Renderer.PixelTexture;
 
-        Shader = Renderer.Window.Content.Load<Effect>("shaders/HRC");
-        ShaderBatch = new SpriteBatch(device);
-        PixelTexture = new Texture2D(device, 1, 1);
-        PixelTexture.SetData([Color.White]);
-
-        WorldSize = new Vector2(device.Viewport.Width, device.Viewport.Height);
+        WorldSize = new Vector2(Renderer.Device.Viewport.Width, Renderer.Device.Viewport.Height);
 
         CalculateCascadeSizes();
         CreateRenderTargets();
@@ -215,9 +212,7 @@ public class HolographicRC : core.System
 
     public override void Dispose()
     {
-        Shader?.Dispose();
-        ShaderBatch?.Dispose();
-        PixelTexture?.Dispose();
+        // Note: Shader, ShaderBatch, PixelTexture are managed by Renderer
         FinalTexture?.Dispose();
 
         for (int f = 0; f < FrustumCount; f++)

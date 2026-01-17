@@ -23,10 +23,10 @@ public class ECS : GameObject
     public Renderer Renderer { get; private set; }
     public SpatialIndex Spatial { get; private set; }
 
-    public ECS(Scene scene, Renderer Renderer)
+    public ECS(Scene scene, Renderer renderer)
     {
         Scene = scene;
-        Renderer = Renderer;
+        Renderer = renderer;
         ActiveEntities = new HashSet<int>();
         RecycledIds = new Stack<int>();
         Systems = new List<System>();
