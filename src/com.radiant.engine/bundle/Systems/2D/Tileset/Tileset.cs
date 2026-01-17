@@ -28,7 +28,6 @@ public class Tileset : core.System
     private Point LastModifiedTile = new Point(-999, -999);
     private bool LastActionWasPlace = false;
 
-    private Texture2D PixelTexture;
     private RenderTarget2D TileRenderTarget;
     private Texture2D LightTexture;
     private Color[] LightData;
@@ -76,9 +75,6 @@ public class Tileset : core.System
     public override void Initialize()
     {
         base.Initialize();
-
-        PixelTexture = new Texture2D(Renderer.Device, 1, 1);
-        PixelTexture.SetData([Color.White]);
 
         MultiplyBlend = new BlendState
         {
@@ -310,7 +306,7 @@ public class Tileset : core.System
             int rtY = (int)(t.Position.Y - gridOriginY);
 
             Rectangle rect = new Rectangle(rtX, rtY, (int)r.Size.X, (int)r.Size.Y);
-            Renderer.SpriteBatch.Draw(PixelTexture, rect, m.Albedo);
+            Renderer.SpriteBatch.Draw(Renderer.GetSolidTexture(Color.White), rect, m.Albedo);
         }
         
         Renderer.SpriteBatch.End();
@@ -532,7 +528,6 @@ public class Tileset : core.System
     {
         IsRunning = false;
         LightingThread?.Join(200);
-        PixelTexture?.Dispose();
         LightTexture?.Dispose();
         TileRenderTarget?.Dispose();
     }

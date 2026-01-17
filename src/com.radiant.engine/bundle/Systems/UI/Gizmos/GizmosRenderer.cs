@@ -9,7 +9,6 @@ namespace com.radiant.engine.bundle;
 
 public class GizmosRenderer : core.System
 {
-    private Texture2D PixelTexture;
     private SpriteFont BaseFont;
 
     private List<LineGizmo> LineQueue = new();
@@ -30,10 +29,6 @@ public class GizmosRenderer : core.System
     public override void Initialize()
     {
         base.Initialize();
-
-        PixelTexture = new Texture2D(Renderer.Device, 1, 1);
-        PixelTexture.SetData([Color.White]);
-
         BaseFont = Renderer.Window.Content.Load<SpriteFont>("fonts/BaseFont");
 
         PrevKeyState = Keyboard.GetState();
@@ -146,7 +141,7 @@ public class GizmosRenderer : core.System
             (int)(textSize.Y + TextPadding * 2)
         );
 
-        batch.Draw(PixelTexture, backgroundRect, TextBackgroundColor);
+        batch.Draw(Renderer.GetSolidTexture(Color.White), backgroundRect, TextBackgroundColor);
         batch.DrawString(BaseFont, text.Text, text.Position, text.Color);
     }
 
@@ -159,7 +154,7 @@ public class GizmosRenderer : core.System
 
         float rotation = (float)Math.Atan2(delta.Y, delta.X);
 
-        batch.Draw(PixelTexture, new Rectangle(
+        batch.Draw(Renderer.GetSolidTexture(Color.White), new Rectangle(
             (int)line.Start.X, (int)line.Start.Y,
             (int)length, (int)line.Thickness),
             null, line.Color, rotation,
@@ -212,7 +207,7 @@ public class GizmosRenderer : core.System
     {
         if (rect.Filled)
         {
-            batch.Draw(PixelTexture, rect.Rect, rect.Color);
+            batch.Draw(Renderer.GetSolidTexture(Color.White), rect.Rect, rect.Color);
         }
         else
         {
@@ -252,10 +247,7 @@ public class GizmosRenderer : core.System
         }
     }
 
-    public override void Dispose()
-    {
-        PixelTexture?.Dispose();
-    }
+    public override void Dispose() { }
 }
 
 class StatsSection

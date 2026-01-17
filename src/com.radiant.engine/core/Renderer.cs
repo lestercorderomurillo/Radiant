@@ -15,7 +15,6 @@ public class Renderer : IDisposable
     public SpriteBatch SpriteBatch { get; }
     public bool IsDrawing { get; private set; }
     public string CurrentShaderName { get; private set; }
-    public Texture2D PixelTexture { get; private set; }
 
     // Screen Info
     public int ScreenWidth { get; private set; }
@@ -32,6 +31,7 @@ public class Renderer : IDisposable
 
     // Internal
     private Dictionary<string, Effect> ShaderCache = new();
+    private Dictionary<(Color, int, int), Texture2D> SolidTextureCache = new();
     private VertexBuffer QuadVertexBuffer;
     private IndexBuffer QuadIndexBuffer;
     private Effect CurrentShader;
@@ -49,9 +49,6 @@ public class Renderer : IDisposable
         Window = window;
         Device = window.GraphicsDevice;
         SpriteBatch = new SpriteBatch(Device);
-
-        PixelTexture = new Texture2D(Device, 1, 1);
-        PixelTexture.SetData([Color.White]);
 
         for (int i = 0; i < SamplerStates.Length; i++)
             SamplerStates[i] = SamplerState.LinearClamp;
@@ -259,81 +256,92 @@ public class Renderer : IDisposable
 
     // Parameters
 
-    public Renderer SetParameter(string name, float value)
+    public Renderer SetParameter(string name, float value, Effect shader = null)
     {
-        CurrentShader?.Parameters[name]?.SetValue(value);
+        (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
         return this;
     }
 
-    public Renderer SetParameter(string name, int value)
+    public Renderer SetParameter(string name, int value, Effect shader = null)
     {
-        CurrentShader?.Parameters[name]?.SetValue(value);
+        (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
         return this;
     }
 
-    public Renderer SetParameter(string name, bool value)
+    public Renderer SetParameter(string name, bool value, Effect shader = null)
     {
-        CurrentShader?.Parameters[name]?.SetValue(value);
+        (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
         return this;
     }
 
-    public Renderer SetParameter(string name, Vector2 value)
+    public Renderer SetParameter(string name, Vector2 value, Effect shader = null)
     {
-        CurrentShader?.Parameters[name]?.SetValue(value);
+        (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
         return this;
     }
 
-    public Renderer SetParameter(string name, Vector3 value)
+    public Renderer SetParameter(string name, Vector3 value, Effect shader = null)
     {
-        CurrentShader?.Parameters[name]?.SetValue(value);
+        (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
         return this;
     }
 
-    public Renderer SetParameter(string name, Vector4 value)
+    public Renderer SetParameter(string name, Vector4 value, Effect shader = null)
     {
-        CurrentShader?.Parameters[name]?.SetValue(value);
+        (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
         return this;
     }
 
-    public Renderer SetParameter(string name, Matrix value)
+    public Renderer SetParameter(string name, Matrix value, Effect shader = null)
     {
-        CurrentShader?.Parameters[name]?.SetValue(value);
+        (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
         return this;
     }
 
-    public Renderer SetParameter(string name, Texture2D value)
+    public Renderer SetParameter(string name, Texture2D value, Effect shader = null)
     {
-        CurrentShader?.Parameters[name]?.SetValue(value);
+        (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
         return this;
     }
 
-    public Renderer SetParameter(string name, float[] value)
+    public Renderer SetParameter(string name, float[] value, Effect shader = null)
     {
-        CurrentShader?.Parameters[name]?.SetValue(value);
+        (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
         return this;
     }
 
-    public Renderer SetParameter(string name, Vector2[] value)
+    public Renderer SetParameter(string name, Vector2[] value, Effect shader = null)
     {
-        CurrentShader?.Parameters[name]?.SetValue(value);
+        (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
         return this;
     }
 
-    public Renderer SetParameter(string name, Vector3[] value)
+    public Renderer SetParameter(string name, Vector3[] value, Effect shader = null)
     {
-        CurrentShader?.Parameters[name]?.SetValue(value);
+        (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
         return this;
     }
 
-    public Renderer SetParameter(string name, Vector4[] value)
+    public Renderer SetParameter(string name, Vector4[] value, Effect shader = null)
     {
-        CurrentShader?.Parameters[name]?.SetValue(value);
+        (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
         return this;
     }
 
-    public Renderer SetParameter(string name, Matrix[] value)
+    public Renderer SetParameter(string name, Matrix[] value, Effect shader = null)
     {
-        CurrentShader?.Parameters[name]?.SetValue(value);
+        (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
+        return this;
+    }
+
+    public Renderer SetParameter(Effect shader = null, params (string name, object value)[] parameters)
+    {
+        var target = shader ?? CurrentShader;
+        if (target == null) return this;
+
+        foreach (var (name, value) in parameters)
+            SetParameter(target, name, value);
+
         return this;
     }
 
@@ -359,6 +367,22 @@ public class Renderer : IDisposable
             case Vector4[] v4a: parameter.SetValue(v4a); break;
             case Matrix[] ma: parameter.SetValue(ma); break;
         }
+    }
+
+    // Solid Textures (cached)
+
+    public Texture2D GetSolidTexture(Color color, int width = 1, int height = 1)
+    {
+        var key = (color, width, height);
+        if (!SolidTextureCache.TryGetValue(key, out var texture))
+        {
+            texture = new Texture2D(Device, width, height);
+            var data = new Color[width * height];
+            Array.Fill(data, color);
+            texture.SetData(data);
+            SolidTextureCache[key] = texture;
+        }
+        return texture;
     }
 
     // Textures
@@ -582,11 +606,13 @@ public class Renderer : IDisposable
         QuadVertexBuffer?.Dispose();
         QuadIndexBuffer?.Dispose();
         SpriteBatch?.Dispose();
-        PixelTexture?.Dispose();
+
+        foreach (var texture in SolidTextureCache.Values)
+            texture?.Dispose();
+        SolidTextureCache.Clear();
 
         foreach (var shader in ShaderCache.Values)
             shader?.Dispose();
-
         ShaderCache.Clear();
     }
 }

@@ -13,7 +13,6 @@ public class RCGI : core.System
 
     private Effect RCShader;
     private SpriteBatch ShaderSpriteBatch;
-    private Texture2D PixelTexture;
     private SceneGeometry SDFSystem;
     private RenderTarget2D[] CascadeLayers;
     private RenderTarget2D FinalTexture;
@@ -59,8 +58,6 @@ public class RCGI : core.System
 
         RCShader = Renderer.GetShaderEffect("RCGI");
         ShaderSpriteBatch = Renderer.SpriteBatch;
-        PixelTexture = Renderer.PixelTexture;
-
         SDFSystem = Scene.ECS.GetSystem<SceneGeometry>();
 
         ScreenSize = new Vector2(Renderer.Device.Viewport.Width, Renderer.Device.Viewport.Height);
@@ -259,7 +256,7 @@ public class RCGI : core.System
 
         RCShader.CurrentTechnique = RCShader.Techniques["GenerateOutputTexture"];
         ShaderSpriteBatch.Begin(SpriteSortMode.Immediate, BlendState.Opaque, SamplerState.PointClamp, null, null, RCShader);
-        ShaderSpriteBatch.Draw(PixelTexture, new Rectangle(0, 0, (int)CascadeSize.X, (int)CascadeSize.Y), Color.White);
+        ShaderSpriteBatch.Draw(Renderer.GetSolidTexture(Color.White), new Rectangle(0, 0, (int)CascadeSize.X, (int)CascadeSize.Y), Color.White);
         ShaderSpriteBatch.End();
 
         device.SetRenderTarget(null);
@@ -290,7 +287,7 @@ public class RCGI : core.System
 
     public override void Dispose()
     {
-        // Note: RCShader, PixelTexture, ShaderSpriteBatch are managed by Renderer
+        // Note: RCShader, ShaderSpriteBatch are managed by Renderer
         FinalTexture?.Dispose();
         CachedRasterizerState?.Dispose();
 

@@ -140,7 +140,7 @@ public class SceneGeometry : core.System
                 position.Y + rect.Size.Y >= 0 && position.Y < WorldBounds.Y)
             {
                 Renderer.DrawTexture(
-                    Renderer.PixelTexture,
+                    Renderer.GetSolidTexture(Color.White),
                     position,
                     new Rectangle(0, 0, 1, 1),
                     mat.Emissive,
@@ -187,7 +187,7 @@ public class SceneGeometry : core.System
 
             if (BufferBounds.Intersects(screen))
             {
-                Renderer.DrawTexture(Renderer.PixelTexture, BufferBounds, mat.Albedo);
+                Renderer.DrawTexture(Renderer.GetSolidTexture(Color.White), BufferBounds, mat.Albedo);
                 count++;
             }
         }
