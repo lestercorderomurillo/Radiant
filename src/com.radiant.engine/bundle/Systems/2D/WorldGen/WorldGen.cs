@@ -33,8 +33,6 @@ public class WorldGen : core.System
         Gizmos = Scene.ECS.GetSystem<GizmosRenderer>();
         PerlinNoise = Scene.ECS.GetSystem<PerlinNoise2D>();
         Random = new Random();
-
-        Gizmos.AddSection("WorldGenECS", "World Generation ECS", Color.Green);
     }
 
     enum SurfaceBiomeType { Greenfields, Desert, Snowy, Volcanic, Mountain }
@@ -269,10 +267,7 @@ public class WorldGen : core.System
         tileData.TileTypeId = tileType.Id;
     }
 
-    public override void Update()
-    {
-        Gizmos.ClearSection("WorldGenECS");
-    }
+    public override void Update() { }
 
     public override void FixedUpdate() { }
     public override void Render() { }

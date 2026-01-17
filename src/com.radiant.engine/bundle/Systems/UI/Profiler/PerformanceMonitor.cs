@@ -55,7 +55,6 @@ public class PerformanceMonitor : core.System
         CpuCoreCountInv = 1f / CpuCoreCount;
 
         InitializeCpuCounter();
-        InitializeSections();
     }
 
     private void InitializeCpuCounter()
@@ -68,12 +67,6 @@ public class PerformanceMonitor : core.System
         {
             CpuCounter = null;
         }
-    }
-
-    private void InitializeSections()
-    {
-        Gizmos.AddSection("Performance", "Performance", Color.DarkKhaki);
-        Gizmos.AddSection("Memory", "Memory", Color.Gold);
     }
 
     public override void Update()
@@ -137,25 +130,21 @@ public class PerformanceMonitor : core.System
         float ActualFps = Renderer.Window.GameLoop?.FramesPerSecond ?? 1f;
         int ActualFpsRounded = (int)MathF.Round(ActualFps);
 
-        Gizmos.ClearSection("Performance");
-        
         // Reuse StringBuilders - zero allocation
         FpsBuilder.Clear().Append("FPS: ").Append(ActualFpsRounded).Append('/').Append(TargetFps);
-        Gizmos.AddSectionString("Performance", FpsBuilder.ToString());
+        Gizmos.Set("Performance", FpsBuilder.ToString());
 
         FrameTimeBuilder.Clear().Append("Frametime: ").AppendFormat("{0:F1}", FrameTimeAverage).Append("ms");
-        Gizmos.AddSectionString("Performance", FrameTimeBuilder.ToString());
+        Gizmos.Set("Performance", FrameTimeBuilder.ToString());
 
         CpuBuilder.Clear().Append("CPU: ").AppendFormat("{0:F1}", CpuUsage).Append("% (").Append(CpuCoreCount).Append(" cores)");
-        Gizmos.AddSectionString("Performance", CpuBuilder.ToString());
+        Gizmos.Set("Performance", CpuBuilder.ToString());
 
-        Gizmos.ClearSection("Memory");
-        
         RamBuilder.Clear().Append("RAM: ").AppendFormat("{0:F1}", MemoryMB).Append("MB");
-        Gizmos.AddSectionString("Memory", RamBuilder.ToString());
+        Gizmos.Set("Memory", RamBuilder.ToString());
 
         PeakBuilder.Clear().Append("Peak: ").AppendFormat("{0:F1}", PeakMemoryMB).Append("MB");
-        Gizmos.AddSectionString("Memory", PeakBuilder.ToString());
+        Gizmos.Set("Memory", PeakBuilder.ToString());
     }
 
     #region Public API

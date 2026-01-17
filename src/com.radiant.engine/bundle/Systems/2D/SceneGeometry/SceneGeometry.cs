@@ -52,7 +52,6 @@ public class SceneGeometry : core.System
         JFAResult = JFATexture1;
 
         Gizmos = Scene.ECS.GetSystem<GizmosRenderer>();
-        Gizmos.AddSection("Geometry", "Scene Geometry Buffers", Color.Blue);
         PrevKeyState = Keyboard.GetState();
     }
 
@@ -247,13 +246,12 @@ public class SceneGeometry : core.System
 
     private void UpdateGizmos()
     {
-        Gizmos.ClearSection("Geometry");
-        Gizmos.AddSectionString("Geometry", $"Debug: {CurrentDebug} (F2)");
-        Gizmos.AddSectionString("Geometry", $"Emissive Objects: {EmissiveCount}");
-        Gizmos.AddSectionString("Geometry", $"Absorption Objects: {AbsorptionCount}");
-        Gizmos.AddSectionString("Geometry", $"JFA Passes: {JFAPassCount}");
-        Gizmos.AddSectionString("Geometry", $"Buffers: {WorldBounds.X}x{WorldBounds.Y}");
-        Gizmos.AddSectionString("Geometry", $"SDF: {SDFBounds.X}x{SDFBounds.Y} ({SDFScale:P0})");
+        Gizmos.Set("Geometry", $"Debug: {CurrentDebug} (F2)");
+        Gizmos.Set("Geometry", $"Emissive Objects: {EmissiveCount}");
+        Gizmos.Set("Geometry", $"Absorption Objects: {AbsorptionCount}");
+        Gizmos.Set("Geometry", $"JFA Passes: {JFAPassCount}");
+        Gizmos.Set("Geometry", $"Buffers: {WorldBounds.X}x{WorldBounds.Y}");
+        Gizmos.Set("Geometry", $"SDF: {SDFBounds.X}x{SDFBounds.Y} ({SDFScale:P0})");
     }
 
     public override void LateRender()

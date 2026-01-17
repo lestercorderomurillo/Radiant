@@ -57,7 +57,6 @@ public class HolographicRC : core.System
         // Debug index layout: 0=Final, then per frustum (VraysR, VraysT, MergeR, MergeT) x cascades, then FrustumOutputs, Emissive, Absorption
         DebugTextureCount = 1 + FrustumCount * CascadeCount * 4 + FrustumCount + 2;
 
-        Gizmos.AddSection("HRC", "HRC", Color.Cyan);
         PrevKeyState = Keyboard.GetState();
     }
 
@@ -123,8 +122,7 @@ public class HolographicRC : core.System
         Compose();
         Renderer.Device.SetRenderTargets(originalTargets);
 
-        Gizmos.ClearSection("HRC");
-        Gizmos.AddSectionString("HRC", $"Debug: {DebugIndex} (F3)");
+        Gizmos.Set("HRC", $"Debug: {DebugIndex} (F3)");
     }
 
     private void RenderFrustumSeed(int frustum, Texture2D emissive, Texture2D absorption)

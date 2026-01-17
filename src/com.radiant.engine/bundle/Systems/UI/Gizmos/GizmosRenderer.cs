@@ -3,7 +3,6 @@ using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace com.radiant.engine.bundle;
 
@@ -17,12 +16,19 @@ public class GizmosRenderer : core.System
     private List<TextGizmo> TextQueue = new();
     private List<RectGizmo> RectQueue = new();
 
-    private Dictionary<string, StatsSection> Stats = new();
+    private Dictionary<string, List<string>> PendingStats = new();
     private bool ShowStats = true;
     private Vector2 StatsPosition = new(15, 15);
     private const float LineSpacing = 28f;
     private const float TextPadding = 4f;
     private Color TextBackgroundColor = new(0, 0, 0, 180);
+
+    private static readonly Color[] CategoryColors = new[]
+    {
+        Color.Cyan, Color.LimeGreen, Color.Gold, Color.HotPink,
+        Color.Orange, Color.LightBlue, Color.Violet, Color.Yellow
+    };
+    private Dictionary<string, Color> CategoryColorMap = new();
 
     private KeyboardState PrevKeyState;
 
@@ -55,6 +61,24 @@ public class GizmosRenderer : core.System
         RectQueue.Clear();
     }
 
+    public void Set(string category, string text)
+    {
+        if (!PendingStats.TryGetValue(category, out var list))
+        {
+            list = new List<string>();
+            PendingStats[category] = list;
+
+            if (!CategoryColorMap.ContainsKey(category))
+                CategoryColorMap[category] = CategoryColors[CategoryColorMap.Count % CategoryColors.Length];
+        }
+        list.Add(text);
+    }
+
+    private Color GetCategoryColor(string category)
+    {
+        return CategoryColorMap.TryGetValue(category, out var color) ? color : Color.White;
+    }
+
     public void AddGizmoLine(Vector2 start, Vector2 end, Color color, float thickness = 1f)
     {
         LineQueue.Add(new LineGizmo(start, end, color, thickness));
@@ -78,26 +102,6 @@ public class GizmosRenderer : core.System
     public void AddGizmoText(Vector2 position, string text, Color color)
     {
         TextQueue.Add(new TextGizmo(position, text, color));
-    }
-
-    public void AddSection(string key, string title, Color color)
-    {
-        if (!Stats.ContainsKey(key))
-            Stats[key] = new StatsSection { Title = title, TitleColor = color };
-    }
-
-    public void AddSectionString(string key, string line)
-    {
-        if (!Stats.ContainsKey(key))
-            AddSection(key, key, Color.White);
-
-        Stats[key].Lines.Add(line);
-    }
-
-    public void ClearSection(string key)
-    {
-        if (Stats.TryGetValue(key, out StatsSection section))
-            section.Lines.Clear();
     }
 
     public override void LateRender()
@@ -228,15 +232,18 @@ public class GizmosRenderer : core.System
         if (!ShowStats || BaseFont == null) return;
 
         float y = StatsPosition.Y;
-        foreach (var section in Stats.Values.Where(s => s.Enabled))
+        foreach (var kvp in PendingStats)
         {
-            if (section.Lines.Count == 0) continue;
+            var category = kvp.Key;
+            var lines = kvp.Value;
+            if (lines.Count == 0) continue;
 
+            var titleColor = GetCategoryColor(category);
             RenderTextWithBackground(batch, new TextGizmo(
-                new Vector2(StatsPosition.X, y), section.Title, section.TitleColor));
+                new Vector2(StatsPosition.X, y), category, titleColor));
             y += LineSpacing;
 
-            foreach (var line in section.Lines)
+            foreach (var line in lines)
             {
                 RenderTextWithBackground(batch, new TextGizmo(
                     new Vector2(StatsPosition.X, y), line, Color.White));
@@ -245,15 +252,10 @@ public class GizmosRenderer : core.System
 
             y += 12;
         }
+
+        foreach (var list in PendingStats.Values)
+            list.Clear();
     }
 
     public override void Dispose() { }
-}
-
-class StatsSection
-{
-    public string Title { get; set; }
-    public bool Enabled { get; set; } = true;
-    public List<string> Lines { get; set; } = new();
-    public Color TitleColor { get; set; } = Color.LightGreen;
 }
