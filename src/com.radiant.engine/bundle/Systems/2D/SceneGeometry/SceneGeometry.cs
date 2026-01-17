@@ -245,7 +245,6 @@ public class SceneGeometry : core.System
         Renderer.SetParameter(SceneGeometryShader, "EmissiveTexture", EmissiveBuffer);
         Renderer.SetParameter(SceneGeometryShader, "WorldsBounds", SDFBounds);
         Renderer.SetParameter(SceneGeometryShader, "ScreenDiagonal", ScreenDiagonal);
-
         Renderer.DrawShader(SceneGeometryShader, "InitializeJFA", JFATexture1, Color.Black);
     }
 
@@ -310,18 +309,21 @@ public class SceneGeometry : core.System
                 Renderer.SetParameter(SceneGeometryShader, "EmissiveTexture", EmissiveBuffer);
                 Renderer.SetParameter(SceneGeometryShader, "WorldsBounds", SDFBounds);
                 Renderer.SetParameter(SceneGeometryShader, "ScreenDiagonal", ScreenDiagonal);
+
                 Renderer.DrawShader(SceneGeometryShader, "DebugSDFVisible");
                 break;
             case DebugMode.JFADirection:
                 Renderer.SetParameter(SceneGeometryShader, "JFATexture", JFAResult);
                 Renderer.SetParameter(SceneGeometryShader, "WorldsBounds", SDFBounds);
                 Renderer.SetParameter(SceneGeometryShader, "ScreenDiagonal", ScreenDiagonal);
+
                 Renderer.DrawShader(SceneGeometryShader, "DebugJFA");
                 break;
             case DebugMode.JFARaw:
                 Renderer.SetParameter(SceneGeometryShader, "JFATexture", JFAResult);
                 Renderer.SetParameter(SceneGeometryShader, "WorldsBounds", SDFBounds);
                 Renderer.SetParameter(SceneGeometryShader, "ScreenDiagonal", ScreenDiagonal);
+
                 Renderer.DrawShader(SceneGeometryShader, "DebugJFARaw");
                 break;
         }
