@@ -8,7 +8,7 @@ namespace com.radiant.engine.bundle;
 
 public class SceneGeometry : core.System
 {
-    public float SDFScale = 0.5f;
+    public float SDFScale = 0.25f;
 
     private RenderTarget2D JFATexture1;
     private RenderTarget2D JFATexture2;
@@ -105,12 +105,11 @@ public class SceneGeometry : core.System
             int count = Enum.GetValues<DebugMode>().Length;
             CurrentDebug = (DebugMode)(((int)CurrentDebug + 1) % count);
         }
+
         PrevKeyState = key;
 
-        
         RenderEmissiveTexture();
         RenderAbsorptionTexture();
-
         RenderSDFTexture();
 
         UpdateGizmos();
