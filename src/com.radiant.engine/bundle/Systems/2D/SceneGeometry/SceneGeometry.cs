@@ -195,7 +195,7 @@ public class SceneGeometry : core.System
             ref var rect = ref Scene.ECS.GetComponent<Rectangle2D>(id);
             ref var mat = ref Scene.ECS.GetComponent<Material>(id);
 
-            if (mat.Albedo.A == 0 && mat.Emissive.A == 0) break;
+            if (mat.Albedo.A == 0) continue;
 
             BufferBounds.X = (int)transform.Position.X;
             BufferBounds.Y = (int)transform.Position.Y;
@@ -204,8 +204,7 @@ public class SceneGeometry : core.System
 
             if (BufferBounds.Intersects(screen))
             {
-                Color absorb = mat.Emissive.A > 0 ? mat.Emissive : mat.Albedo;
-                Renderer.DrawTexture(Renderer.PixelTexture, BufferBounds, absorb);
+                Renderer.DrawTexture(Renderer.PixelTexture, BufferBounds, mat.Albedo);
                 count++;
             }
         }

@@ -8,72 +8,76 @@
     coordinate so that it is rotated properly into the frustum.
 */
 
-Texture2D FrustumIndex0 : register(t0);
-Texture2D FrustumIndex1 : register(t1);
-Texture2D FrustumIndex2 : register(t2);
-Texture2D FrustumIndex3 : register(t3);
+// t0/s0 reserved for MonoGame SpriteBatch
+Texture2D FrustumIndex0 : register(t1);
+Texture2D FrustumIndex1 : register(t2);
+Texture2D FrustumIndex2 : register(t3);
+Texture2D FrustumIndex3 : register(t4);
 
-SamplerState Sampler0 : register(s0);
+SamplerState Sampler0 : register(s1);
+SamplerState Sampler1 : register(s2);
+SamplerState Sampler2 : register(s3);
+SamplerState Sampler3 : register(s4);
 
 float2 WorldSize;
 
 #define SRGB(color) pow(color.rgb, float3(1.0 / 2.2, 1.0 / 2.2, 1.0 / 2.2))
 
-struct VertexShaderInput
-{
-    float3 Position : POSITION0;
-    float2 TexCoord : TEXCOORD0;
-};
-
 struct PixelShaderInput
 {
     float4 Position : SV_POSITION;
-    float2 UV : TEXCOORD0;
+    float4 Color    : COLOR0;
+    float2 UV       : TEXCOORD0;
 };
 
-PixelShaderInput MainVS(VertexShaderInput input)
+// Transforms screen UV to frustum-local sampling coordinate
+// Each frustum is stored "right-facing" - need to rotate offset into frustum space
+float2 GetFrustumSampleCoord(float2 uv, float2 offset, float frustumIndex)
 {
-    PixelShaderInput output;
-    output.Position = float4(input.Position, 1.0);
-    output.UV = input.TexCoord;
-    return output;
+    // Apply offset rotated into frustum space
+    float2 rotatedOffset;
+    if (frustumIndex == 0.0)
+        rotatedOffset = offset;                              // Right: no rotation
+    else if (frustumIndex == 1.0)
+        rotatedOffset = float2(-offset.y, offset.x);         // Down: 90° CW
+    else if (frustumIndex == 2.0)
+        rotatedOffset = -offset;                             // Left: 180°
+    else
+        rotatedOffset = float2(offset.y, -offset.x);         // Up: 90° CCW
+
+    return uv + rotatedOffset;
 }
 
 // Main pixel shader - computes sum of fluence from 4 frustum directions
-// Each frustum is sampled with offset and rotation to account for frustum orientation
-// All frustums are stored "right-facing" in memory and need coordinate transformation
-float4 MainPS(float2 texelCoord : TEXCOORD0) : SV_Target0
+float4 MainPS(PixelShaderInput input) : SV_Target0
 {
-    // Calculate 1 pixel offset in normalized coordinates
-    float2 pixelOffset = float2(1.0, 0.0) / WorldSize;
+    float2 uv = input.UV;
+    float2 pixelOffset = 1.0 / WorldSize;
 
-    // Calculate sampling offsets for each frustum direction
-    // Each offset moves 1 pixel away from center in a different direction
-    float2 offsetRight = texelCoord + pixelOffset.xy;  // +1.0, 0.0  (right)
-    float2 offsetDown  = texelCoord - pixelOffset.yx;  // 0.0, -1.0  (down)
-    float2 offsetLeft  = texelCoord - pixelOffset.xy;  // -1.0, 0.0  (left)
-    float2 offsetUp    = texelCoord + pixelOffset.yx;  // 0.0, +1.0  (up)
+    // Sample each frustum with 1px offset to avoid overlap at origin
+    float2 coord0 = GetFrustumSampleCoord(uv, pixelOffset, 0.0);
+    float2 coord1 = GetFrustumSampleCoord(uv, pixelOffset, 1.0);
+    float2 coord2 = GetFrustumSampleCoord(uv, pixelOffset, 2.0);
+    float2 coord3 = GetFrustumSampleCoord(uv, pixelOffset, 3.0);
 
-    // Sample each frustum with appropriate coordinate transformation
-    // Transformations rotate the offset into each frustum's local space
-    float3 accumulatedRadiance = float3(0.0, 0.0, 0.0);
+    float3 f0 = FrustumIndex0.Sample(Sampler0, coord0).rgb;
+    float3 f1 = FrustumIndex1.Sample(Sampler1, coord1).rgb;
+    float3 f2 = FrustumIndex2.Sample(Sampler2, coord2).rgb;
+    float3 f3 = FrustumIndex3.Sample(Sampler3, coord3).rgb;
 
-    accumulatedRadiance += FrustumIndex0.Sample(Sampler0, offsetRight).rgb;
-    accumulatedRadiance += FrustumIndex1.Sample(Sampler0, 1.0 - offsetDown.yx).rgb;
-    accumulatedRadiance += FrustumIndex2.Sample(Sampler0, 1.0 - offsetLeft).rgb;
-    accumulatedRadiance += FrustumIndex3.Sample(Sampler0, offsetUp.yx).rgb;
+    // Sum fluence from all 4 directions
+    float3 totalFluence = f0 + f1 + f2 + f3;
 
-    // Average the 4 frustums and convert to sRGB color space
-    float3 averageRadiance = accumulatedRadiance / 4.0;
+    // Convert linear radiance to sRGB for display
+    float3 srgb = SRGB(totalFluence);
 
-    return float4(SRGB(averageRadiance), 1.0);
+    return float4(srgb, 1.0);
 }
 
 technique GenerateOutputTexture
 {
     pass P0
     {
-        VertexShader = compile vs_4_0 MainVS();
         PixelShader = compile ps_5_0 MainPS();
     }
 }

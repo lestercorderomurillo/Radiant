@@ -77,6 +77,8 @@ public class MegaLightsScene : Scene
             transform.Rotation = new Vector3((float)Math.Cos(angle), (float)Math.Sin(angle), 0);
 
             rect.Size = new Vector2(boxSize, boxSize);
+
+            material.Albedo = new Color(r, g, b);
             material.Emissive = new Color(r, g, b);
         }
     }
@@ -155,6 +157,7 @@ public class MegaLightsScene : Scene
         emitterTransform.Position = new Vector3(mousePos.X, mousePos.Y, 0);
         emitterTransform.Rotation = new Vector3(1, 0, 0);
         emitterRect.Size = new Vector2(100, 100);
+        emitterMaterial.Albedo = new Color(255, 255, 100);
         emitterMaterial.Emissive = new Color(255, 255, 100); // Bright yellow
 
         // Initialize mouse state
@@ -223,6 +226,7 @@ public class MegaLightsScene : Scene
         transform.Position = new Vector3(position.X, position.Y, 0);
         transform.Rotation = new Vector3(1, 0, 0);
         rect.Size = new Vector2(100, 100);
+        material.Albedo = new Color(255, 255, 255);
         material.Emissive = new Color(255, 255, 255); // Bright white
     }
 
