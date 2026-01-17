@@ -45,7 +45,7 @@ cbuffer SkyParams : register(b1)
     bool EnableSkyRadiance;
 };
 
-struct GPUTexel
+struct PixelShaderInput
 {
     float4 Position : SV_POSITION;
     float4 Color    : COLOR0;
@@ -157,7 +157,7 @@ float4 MergeWithHigherCascade(float2 probeCoord, float rayIndex, float4 radiance
     return float4(mad(higher.rgb, radiance.a, radiance.rgb), radiance.a * higher.a);
 }
 
-float4 GenerateOutputTexture(GPUTexel input) : SV_Target
+float4 GenerateOutputTexture(PixelShaderInput input) : SV_Target
 {
     float2 coord = floor(input.UV * CascadeSize);
     float2 rayBlock = floor(coord * InvProbeExtent);
