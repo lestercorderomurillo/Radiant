@@ -223,6 +223,9 @@ public class SceneGeometry : core.System
             ref var rect = ref Scene.ECS.GetComponent<Rectangle2D>(id);
             ref var mat = ref Scene.ECS.GetComponent<Material>(id);
 
+            // Skip fully transparent objects
+            if (mat.Albedo.A == 0 && mat.Emissive.A == 0) break;
+
             BufferBounds.X = (int)transform.Position.X;
             BufferBounds.Y = (int)transform.Position.Y;
             BufferBounds.Width = (int)rect.Size.X;
