@@ -18,13 +18,10 @@ Texture2D PrevTransmit : register(t3);
 
 SamplerState Sampler0 : register(s0);
 
-cbuffer Constants : register(b0)
-{
-    float2 VraysSize;
-    float2 PrevSize;
-    float2 CascadeSize;
-    float2 CascadeIndex;
-};
+float2 VraysSize;
+float2 PrevSize;
+float2 CascadeSize;
+float2 CascadeIndex;
 
 struct VertexShaderInput
 {

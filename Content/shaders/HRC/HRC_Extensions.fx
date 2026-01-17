@@ -18,12 +18,9 @@ Texture2D PrevTransmit : register(t1);
 
 SamplerState Sampler0 : register(s0);
 
-cbuffer Constants : register(b0)
-{
-    float2 PrevSize;
-    float2 CascadeSize;
-    float2 CascadeIndex;
-};
+float2 PrevSize;
+float2 CascadeSize;
+float2 CascadeIndex;
 
 #define FRUSTUM_COUNT 4.0
 

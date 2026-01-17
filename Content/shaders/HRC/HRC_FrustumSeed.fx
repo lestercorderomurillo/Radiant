@@ -13,12 +13,9 @@ Texture2D Absorption : register(t1);
 
 SamplerState Sampler0 : register(s0);
 
-cbuffer Constants : register(b0)
-{
-    float2 WorldSize;
-    float2 CascadeSize;
-    float FrustumIndex;
-};
+float2 WorldSize;
+float2 CascadeSize;
+float FrustumIndex;
 
 #define LINEAR(color) pow(color.rgb, float3(2.2, 2.2, 2.2))
 

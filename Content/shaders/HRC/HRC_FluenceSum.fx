@@ -15,10 +15,7 @@ Texture2D FrustumIndex3 : register(t3);
 
 SamplerState Sampler0 : register(s0);
 
-cbuffer Constants : register(b0)
-{
-    float2 WorldSize;
-};
+float2 WorldSize;
 
 #define SRGB(color) pow(color.rgb, float3(1.0 / 2.2, 1.0 / 2.2, 1.0 / 2.2))
 
