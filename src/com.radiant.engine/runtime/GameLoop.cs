@@ -83,7 +83,7 @@ public class GameLoop : GameObject
 
         if (SceneId != NO_SCENE)
         {
-            Scenes[SceneId].RenderPipeline = new RenderPipeline(Window);
+            Scenes[SceneId].Renderer = new Renderer(Window);
             Scenes[SceneId].Initialize();
             Scenes[SceneId].SetupECS();
             Scenes[SceneId].SetupScene();
@@ -179,7 +179,7 @@ public class GameLoop : GameObject
         // Actual rendering
         if (SceneId != NO_SCENE)
         {
-            Scenes[SceneId].RenderPipeline.Window.GraphicsDevice.Clear(Color.Black);
+            Scenes[SceneId].Renderer.Window.GraphicsDevice.Clear(Color.Black);
             Scenes[SceneId].GameTime = GameTime;
             Scenes[SceneId].Render();
             Scenes[SceneId].LateRender();

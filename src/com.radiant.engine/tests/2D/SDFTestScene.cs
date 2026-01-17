@@ -22,7 +22,7 @@ public class SDFTestScene : Scene
 
     public override void SetupScene()
     {
-        ScreenCenter = RenderPipeline.Window.GetScreenCenter();
+        ScreenCenter = Renderer.Window.GetScreenCenter();
         CreateCenterBox();
         CreateMouseLight();
         PrevMouse = Mouse.GetState();

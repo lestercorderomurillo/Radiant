@@ -21,7 +21,7 @@ public class SimpleLightsScene : Scene
 
     public override void SetupScene()
     {
-        Vector2 center = RenderPipeline.Window.GetScreenCenter();
+        Vector2 center = Renderer.Window.GetScreenCenter();
 
         // === 2 OCCLUDER BOXES ===
         CreateBox(new Vector2(center.X - 200, center.Y), new Color(40, 40, 40));

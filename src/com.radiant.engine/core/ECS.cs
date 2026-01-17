@@ -20,13 +20,13 @@ public class ECS : GameObject
 
     public int EntityCount => ActiveEntities.Count;
     public Scene Scene { get; set; }
-    public RenderPipeline RenderPipeline { get; private set; }
+    public Renderer Renderer { get; private set; }
     public SpatialIndex Spatial { get; private set; }
 
-    public ECS(Scene scene, RenderPipeline renderPipeline)
+    public ECS(Scene scene, Renderer Renderer)
     {
         Scene = scene;
-        RenderPipeline = renderPipeline;
+        Renderer = Renderer;
         ActiveEntities = new HashSet<int>();
         RecycledIds = new Stack<int>();
         Systems = new List<System>();
@@ -34,7 +34,7 @@ public class ECS : GameObject
         QueryResult = new List<int>();
         Spatial = new SpatialIndex(this, 64f);
 
-        var window = renderPipeline.Window;
+        var window = Renderer.Window;
         ViewportSize = window.GetScreenSize();
         ViewportCenter = window.GetScreenCenter();
     }
@@ -87,7 +87,7 @@ public class ECS : GameObject
     public T AddSystem<T>(T system) where T : System
     {
         system.Scene = Scene;
-        system.RenderPipeline = Scene.RenderPipeline;
+        system.Renderer = Scene.Renderer;
         system.GameTime = Scene.GameTime;
         Systems.Add(system);
         

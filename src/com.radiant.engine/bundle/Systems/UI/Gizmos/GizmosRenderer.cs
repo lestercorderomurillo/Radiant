@@ -31,10 +31,10 @@ public class GizmosRenderer : core.System
     {
         base.Initialize();
 
-        PixelTexture = new Texture2D(RenderPipeline.Device, 1, 1);
+        PixelTexture = new Texture2D(Renderer.Device, 1, 1);
         PixelTexture.SetData([Color.White]);
 
-        BaseFont = RenderPipeline.Window.Content.Load<SpriteFont>("fonts/BaseFont");
+        BaseFont = Renderer.Window.Content.Load<SpriteFont>("fonts/BaseFont");
 
         PrevKeyState = Keyboard.GetState();
     }
@@ -107,12 +107,12 @@ public class GizmosRenderer : core.System
 
     public override void LateRender()
     {
-        RenderPipeline.SpriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
+        Renderer.SpriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
 
-        RenderGizmos(RenderPipeline.SpriteBatch);
-        RenderStats(RenderPipeline.SpriteBatch);
+        RenderGizmos(Renderer.SpriteBatch);
+        RenderStats(Renderer.SpriteBatch);
 
-        RenderPipeline.SpriteBatch.End();
+        Renderer.SpriteBatch.End();
     }
 
     private void RenderGizmos(SpriteBatch batch)

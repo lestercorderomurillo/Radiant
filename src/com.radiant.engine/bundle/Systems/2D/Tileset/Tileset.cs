@@ -77,7 +77,7 @@ public class Tileset : core.System
     {
         base.Initialize();
 
-        PixelTexture = new Texture2D(RenderPipeline.Device, 1, 1);
+        PixelTexture = new Texture2D(Renderer.Device, 1, 1);
         PixelTexture.SetData([Color.White]);
 
         MultiplyBlend = new BlendState
@@ -102,8 +102,8 @@ public class Tileset : core.System
 
         CalculateSkyLevels();
 
-        ViewportWidth = RenderPipeline.Device.Viewport.Width;
-        ViewportHeight = RenderPipeline.Device.Viewport.Height;
+        ViewportWidth = Renderer.Device.Viewport.Width;
+        ViewportHeight = Renderer.Device.Viewport.Height;
 
         // Viewport size in tiles (ceiling + 1 for partial tiles)
         ViewportTilesX = (ViewportWidth + TileSize - 1) / TileSize + 1;
@@ -116,9 +116,9 @@ public class Tileset : core.System
         // Render target sized to fit entire grid (including padding)
         int renderTargetWidth = GridWidth * TileSize;
         int renderTargetHeight = GridHeight * TileSize;
-        TileRenderTarget = new RenderTarget2D(RenderPipeline.Device, renderTargetWidth, renderTargetHeight);
+        TileRenderTarget = new RenderTarget2D(Renderer.Device, renderTargetWidth, renderTargetHeight);
 
-        LightTexture = new Texture2D(RenderPipeline.Device, GridWidth, GridHeight);
+        LightTexture = new Texture2D(Renderer.Device, GridWidth, GridHeight);
         LightData = new Color[GridWidth * GridHeight];
         WorkingBuffer = new Vector3[GridWidth * GridHeight];
         ReadyBuffer = new Vector3[GridWidth * GridHeight];
@@ -287,14 +287,14 @@ public class Tileset : core.System
         float cameraOffsetY = CameraPosition.Y - gridOriginY;
 
         // === RENDER TO TARGET (full grid size) ===
-        RenderPipeline.Device.SetRenderTarget(TileRenderTarget);
-        RenderPipeline.Device.Clear(SkyColor);
+        Renderer.Device.SetRenderTarget(TileRenderTarget);
+        Renderer.Device.Clear(SkyColor);
 
         // === RENDER TILES ===
         Vector3 bMin = new Vector3(gridOriginX, gridOriginY, 0);
         Vector3 bMax = new Vector3(gridOriginX + (GridWidth * TileSize), gridOriginY + (GridHeight * TileSize), 1);
 
-        RenderPipeline.SpriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp);
+        Renderer.SpriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp);
 
         foreach (int id in Scene.ECS.InBox(bMin, bMax))
         {
@@ -310,24 +310,24 @@ public class Tileset : core.System
             int rtY = (int)(t.Position.Y - gridOriginY);
 
             Rectangle rect = new Rectangle(rtX, rtY, (int)r.Size.X, (int)r.Size.Y);
-            RenderPipeline.SpriteBatch.Draw(PixelTexture, rect, m.Albedo);
+            Renderer.SpriteBatch.Draw(PixelTexture, rect, m.Albedo);
         }
         
-        RenderPipeline.SpriteBatch.End();
+        Renderer.SpriteBatch.End();
 
         // === RENDER LIGHT (always at 0,0 since grid origin matches light origin) ===
-        RenderPipeline.SpriteBatch.Begin(SpriteSortMode.Deferred, MultiplyBlend, SamplerState.LinearClamp);
+        Renderer.SpriteBatch.Begin(SpriteSortMode.Deferred, MultiplyBlend, SamplerState.LinearClamp);
 
         Rectangle destRect = new Rectangle(0, 0, GridWidth * TileSize, GridHeight * TileSize);
-        RenderPipeline.SpriteBatch.Draw(LightTexture, destRect, Color.White);
+        Renderer.SpriteBatch.Draw(LightTexture, destRect, Color.White);
 
-        RenderPipeline.SpriteBatch.End();
+        Renderer.SpriteBatch.End();
 
         // === FINAL OUTPUT TO SCREEN ===
-        RenderPipeline.Device.SetRenderTarget(null);
-        RenderPipeline.Device.Clear(Color.Red);
+        Renderer.Device.SetRenderTarget(null);
+        Renderer.Device.Clear(Color.Red);
 
-        RenderPipeline.SpriteBatch.Begin(SpriteSortMode.Deferred, BlendState.Opaque, SamplerState.PointClamp);
+        Renderer.SpriteBatch.Begin(SpriteSortMode.Deferred, BlendState.Opaque, SamplerState.PointClamp);
 
         int rtWidth = GridWidth * TileSize;
         int rtHeight = GridHeight * TileSize;
@@ -374,10 +374,10 @@ public class Tileset : core.System
         {
             Rectangle sourceRect = new Rectangle(srcX, srcY, srcW, srcH);
             Rectangle screenRect = new Rectangle(dstX, dstY, srcW, srcH);
-            RenderPipeline.SpriteBatch.Draw(TileRenderTarget, screenRect, sourceRect, Color.White);
+            Renderer.SpriteBatch.Draw(TileRenderTarget, screenRect, sourceRect, Color.White);
         }
 
-        RenderPipeline.SpriteBatch.End();
+        Renderer.SpriteBatch.End();
     }
     private void CalculateSkyLevels()
     {

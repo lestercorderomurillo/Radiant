@@ -45,13 +45,6 @@ public class SceneGeometry : core.System
     private int EmissiveCount;
     private int AbsorptionCount;
     
-    // Shader parameters
-    private EffectParameter ParamEmissiveTexture;
-    private EffectParameter ParamJFATexture;
-    private EffectParameter ParamWorldsBounds;
-    private EffectParameter ParamScreenDiagonal;
-    private EffectParameter ParamJumpDistance;
-    
     private enum DebugMode { None, Emissive, Absorption, SDF, JFADirection, JFARaw }
     private DebugMode CurrentDebug = DebugMode.None;
     private KeyboardState PrevKeyState;
@@ -61,22 +54,16 @@ public class SceneGeometry : core.System
     {
         base.Initialize();
 
-        SceneGeometryShader = RenderPipeline.Window.Content.Load<Effect>("shaders/SceneGeometry");
-        GeometryBatch = new SpriteBatch(RenderPipeline.Device);
-
-        ParamEmissiveTexture = SceneGeometryShader.Parameters["EmissiveTexture"];
-        ParamJFATexture = SceneGeometryShader.Parameters["JFATexture"];
-        ParamWorldsBounds = SceneGeometryShader.Parameters["WorldsBounds"];
-        ParamScreenDiagonal = SceneGeometryShader.Parameters["ScreenDiagonal"];
-        ParamJumpDistance = SceneGeometryShader.Parameters["JumpDistance"];
+        SceneGeometryShader = Renderer.Window.Content.Load<Effect>("shaders/SceneGeometry");
+        GeometryBatch = new SpriteBatch(Renderer.Device);
 
         // Create 1x1 white pixel texture for drawing colored rectangles
-        PixelTexture = new Texture2D(RenderPipeline.Device, 1, 1);
+        PixelTexture = new Texture2D(Renderer.Device, 1, 1);
         PixelTexture.SetData([Color.White]);
 
         WorldBounds = new Vector2(
-            RenderPipeline.Device.Viewport.Width,
-            RenderPipeline.Device.Viewport.Height);
+            Renderer.Device.Viewport.Width,
+            Renderer.Device.Viewport.Height);
 
         SDFBounds = new Vector2(
             (int)(WorldBounds.X * SDFScale),
@@ -99,7 +86,7 @@ public class SceneGeometry : core.System
 
     private void CreateGeometryBuffers()
     {
-        var device = RenderPipeline.Device;
+        var device = Renderer.Device;
 
         // Full-resolution buffers
         EmissiveBuffer = new RenderTarget2D(
@@ -157,18 +144,18 @@ public class SceneGeometry : core.System
 
     public void SetEmissiveFromExternal(Action<SpriteBatch> callback)
     {
-        RenderPipeline.Device.SetRenderTarget(EmissiveBuffer);
-        RenderPipeline.Device.Clear(Color.Transparent);
+        Renderer.Device.SetRenderTarget(EmissiveBuffer);
+        Renderer.Device.Clear(Color.Transparent);
         callback.Invoke(GeometryBatch);
-        RenderPipeline.Device.SetRenderTarget(null);
+        Renderer.Device.SetRenderTarget(null);
         UseExternalEmissive = true;
         GeometryDirty = true;
     }
 
     private void RenderEmissiveBuffer()
     {
-        RenderPipeline.Device.SetRenderTarget(EmissiveBuffer);
-        RenderPipeline.Device.Clear(Color.Transparent);
+        Renderer.Device.SetRenderTarget(EmissiveBuffer);
+        Renderer.Device.Clear(Color.Transparent);
 
         GeometryBatch.Begin(SpriteSortMode.Immediate, BlendState.AlphaBlend, SamplerState.PointClamp);
 
@@ -202,7 +189,7 @@ public class SceneGeometry : core.System
         }
 
         GeometryBatch.End();
-        RenderPipeline.Device.SetRenderTarget(null);
+        Renderer.Device.SetRenderTarget(null);
 
         EmissiveCount = count;
         GeometryDirty = true;
@@ -210,8 +197,8 @@ public class SceneGeometry : core.System
 
     private void RenderAbsorptionBuffer()
     {
-        RenderPipeline.Device.SetRenderTarget(AbsorptionBuffer);
-        RenderPipeline.Device.Clear(Color.Transparent);
+        Renderer.Device.SetRenderTarget(AbsorptionBuffer);
+        Renderer.Device.Clear(Color.Transparent);
 
         GeometryBatch.Begin(SpriteSortMode.Immediate, BlendState.AlphaBlend, SamplerState.PointClamp);
 
@@ -241,7 +228,7 @@ public class SceneGeometry : core.System
         }
 
         GeometryBatch.End();
-        RenderPipeline.Device.SetRenderTarget(null);
+        Renderer.Device.SetRenderTarget(null);
 
         AbsorptionCount = count;
     }
@@ -255,26 +242,26 @@ public class SceneGeometry : core.System
 
     private void InitializeJFA()
     {
-        ParamEmissiveTexture?.SetValue(EmissiveBuffer);
-        ParamWorldsBounds?.SetValue(SDFBounds);
-        ParamScreenDiagonal?.SetValue(ScreenDiagonal);
+        Renderer.SetParameter(SceneGeometryShader, "EmissiveTexture", EmissiveBuffer);
+        Renderer.SetParameter(SceneGeometryShader, "WorldsBounds", SDFBounds);
+        Renderer.SetParameter(SceneGeometryShader, "ScreenDiagonal", ScreenDiagonal);
 
-        RenderPipeline.DrawShader(SceneGeometryShader, "InitializeJFA", JFATexture1, Color.Black);
+        Renderer.DrawShader(SceneGeometryShader, "InitializeJFA", JFATexture1, Color.Black);
     }
 
     private void RunJFAPasses()
     {
-        ParamWorldsBounds?.SetValue(SDFBounds);
-        ParamScreenDiagonal?.SetValue(ScreenDiagonal);
+        Renderer.SetParameter(SceneGeometryShader, "WorldsBounds", SDFBounds);
+        Renderer.SetParameter(SceneGeometryShader, "ScreenDiagonal", ScreenDiagonal);
 
-        JFAResult = RenderPipeline.PingPong(
+        JFAResult = Renderer.PingPong(
             SceneGeometryShader, "JFAPass",
             JFATexture1, JFATexture2,
             JFAPassCount,
             beforePass: (pass, input) => {
                 int jump = 1 << (JFAPassCount - pass - 1);
-                ParamJFATexture?.SetValue(input);
-                ParamJumpDistance?.SetValue((float)jump);
+                Renderer.SetParameter(SceneGeometryShader, "JFATexture", input);
+                Renderer.SetParameter(SceneGeometryShader, "JumpDistance", (float)jump);
             },
             clearColor: Color.Black
         );
@@ -282,12 +269,12 @@ public class SceneGeometry : core.System
 
     private void GenerateFinalSDF()
     {
-        ParamEmissiveTexture?.SetValue(EmissiveBuffer);
-        ParamJFATexture?.SetValue(JFAResult);
-        ParamWorldsBounds?.SetValue(WorldBounds);
-        ParamScreenDiagonal?.SetValue(ScreenDiagonal);
+        Renderer.SetParameter(SceneGeometryShader, "EmissiveTexture", EmissiveBuffer);
+        Renderer.SetParameter(SceneGeometryShader, "JFATexture", JFAResult);
+        Renderer.SetParameter(SceneGeometryShader, "WorldsBounds", WorldBounds);
+        Renderer.SetParameter(SceneGeometryShader, "ScreenDiagonal", ScreenDiagonal);
 
-        RenderPipeline.DrawShader(SceneGeometryShader, "GenerateSDFFromJFA", SDFBuffer);
+        Renderer.DrawShader(SceneGeometryShader, "GenerateSDFFromJFA", SDFBuffer);
     }
 
     private void UpdateGizmos()
@@ -308,34 +295,34 @@ public class SceneGeometry : core.System
         switch (CurrentDebug)
         {
             case DebugMode.Emissive:
-                ParamEmissiveTexture?.SetValue(EmissiveBuffer);
-                ParamWorldsBounds?.SetValue(SDFBounds);
-                ParamScreenDiagonal?.SetValue(ScreenDiagonal);
-                RenderPipeline.DrawShader(SceneGeometryShader, "DebugEmissive");
+                Renderer.SetParameter(SceneGeometryShader, "EmissiveTexture", EmissiveBuffer);
+                Renderer.SetParameter(SceneGeometryShader, "WorldsBounds", SDFBounds);
+                Renderer.SetParameter(SceneGeometryShader, "ScreenDiagonal", ScreenDiagonal);
+                Renderer.DrawShader(SceneGeometryShader, "DebugEmissive");
                 break;
             case DebugMode.Absorption:
                 GeometryBatch.Begin(SpriteSortMode.Immediate, BlendState.AlphaBlend, SamplerState.LinearClamp);
-                GeometryBatch.Draw(AbsorptionBuffer, RenderPipeline.Device.Viewport.Bounds, Color.White);
+                GeometryBatch.Draw(AbsorptionBuffer, Renderer.Device.Viewport.Bounds, Color.White);
                 GeometryBatch.End();
                 break;
             case DebugMode.SDF:
-                ParamJFATexture?.SetValue(JFAResult);
-                ParamEmissiveTexture?.SetValue(EmissiveBuffer);
-                ParamWorldsBounds?.SetValue(SDFBounds);
-                ParamScreenDiagonal?.SetValue(ScreenDiagonal);
-                RenderPipeline.DrawShader(SceneGeometryShader, "DebugSDFVisible");
+                Renderer.SetParameter(SceneGeometryShader, "JFATexture", JFAResult);
+                Renderer.SetParameter(SceneGeometryShader, "EmissiveTexture", EmissiveBuffer);
+                Renderer.SetParameter(SceneGeometryShader, "WorldsBounds", SDFBounds);
+                Renderer.SetParameter(SceneGeometryShader, "ScreenDiagonal", ScreenDiagonal);
+                Renderer.DrawShader(SceneGeometryShader, "DebugSDFVisible");
                 break;
             case DebugMode.JFADirection:
-                ParamJFATexture?.SetValue(JFAResult);
-                ParamWorldsBounds?.SetValue(SDFBounds);
-                ParamScreenDiagonal?.SetValue(ScreenDiagonal);
-                RenderPipeline.DrawShader(SceneGeometryShader, "DebugJFA");
+                Renderer.SetParameter(SceneGeometryShader, "JFATexture", JFAResult);
+                Renderer.SetParameter(SceneGeometryShader, "WorldsBounds", SDFBounds);
+                Renderer.SetParameter(SceneGeometryShader, "ScreenDiagonal", ScreenDiagonal);
+                Renderer.DrawShader(SceneGeometryShader, "DebugJFA");
                 break;
             case DebugMode.JFARaw:
-                ParamJFATexture?.SetValue(JFAResult);
-                ParamWorldsBounds?.SetValue(SDFBounds);
-                ParamScreenDiagonal?.SetValue(ScreenDiagonal);
-                RenderPipeline.DrawShader(SceneGeometryShader, "DebugJFARaw");
+                Renderer.SetParameter(SceneGeometryShader, "JFATexture", JFAResult);
+                Renderer.SetParameter(SceneGeometryShader, "WorldsBounds", SDFBounds);
+                Renderer.SetParameter(SceneGeometryShader, "ScreenDiagonal", ScreenDiagonal);
+                Renderer.DrawShader(SceneGeometryShader, "DebugJFARaw");
                 break;
         }
     }

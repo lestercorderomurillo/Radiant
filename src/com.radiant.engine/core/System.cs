@@ -11,7 +11,7 @@ public abstract class System
 
     public GameTime GameTime;
 
-    public RenderPipeline RenderPipeline;
+    public Renderer Renderer;
 
     public virtual void Initialize() {}
 

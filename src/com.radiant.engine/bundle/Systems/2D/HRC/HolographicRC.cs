@@ -34,9 +34,9 @@ public class HolographicRC : core.System
         SDFSystem = Scene.ECS.GetSystem<SceneGeometry>();
         Gizmos = Scene.ECS.GetSystem<GizmosRenderer>();
 
-        var device = RenderPipeline.Device;
+        var device = Renderer.Device;
 
-        Shader = RenderPipeline.Window.Content.Load<Effect>("shaders/HRC");
+        Shader = Renderer.Window.Content.Load<Effect>("shaders/HRC");
         ShaderBatch = new SpriteBatch(device);
         PixelTexture = new Texture2D(device, 1, 1);
         PixelTexture.SetData([Color.White]);
@@ -64,7 +64,7 @@ public class HolographicRC : core.System
 
     private void CreateRenderTargets()
     {
-        var device = RenderPipeline.Device;
+        var device = Renderer.Device;
         var format = SurfaceFormat.Color;
 
         Cascades = new RenderTarget2D[FrustumCount, CascadeCount];
@@ -97,7 +97,7 @@ public class HolographicRC : core.System
 
     private void SetSamplers()
     {
-        var device = RenderPipeline.Device;
+        var device = Renderer.Device;
         for (int i = 1; i <= 10; i++)
             device.SamplerStates[i] = SamplerState.LinearClamp;
     }
@@ -130,33 +130,30 @@ public class HolographicRC : core.System
 
     private void RenderCascade(int frustum, int cascade, Texture2D emissive, Texture2D absorption)
     {
-        var device = RenderPipeline.Device;
+        var device = Renderer.Device;
         device.SetRenderTarget(Cascades[frustum, cascade]);
         device.Clear(Color.Transparent);
         SetSamplers();
 
-        Shader
-            .Set("EmissiveTex", emissive)
-            .Set("AbsorpTex", absorption)
-            .Set("WorldSize", WorldSize)
-            .Set("CascadeSize", CascadeSizes[cascade])
-            .Set("CascadeIndex", (float)cascade)
-            .Set("Frustum", (float)frustum);
+        Renderer.SetParameter(Shader, "EmissiveTex", emissive);
+        Renderer.SetParameter(Shader, "AbsorpTex", absorption);
+        Renderer.SetParameter(Shader, "WorldSize", WorldSize);
+        Renderer.SetParameter(Shader, "CascadeSize", CascadeSizes[cascade]);
+        Renderer.SetParameter(Shader, "CascadeIndex", (float)cascade);
+        Renderer.SetParameter(Shader, "Frustum", (float)frustum);
 
         if (cascade > 0)
         {
-            Shader
-                .Set("PrevCasc", Cascades[frustum, cascade - 1])
-                .Set("PrevSize", CascadeSizes[cascade - 1]);
+            Renderer.SetParameter(Shader, "PrevCasc", Cascades[frustum, cascade - 1]);
+            Renderer.SetParameter(Shader, "PrevSize", CascadeSizes[cascade - 1]);
         }
         else
         {
-            Shader
-                .Set("PrevCasc", PixelTexture)
-                .Set("PrevSize", new Vector2(1, 1));
+            Renderer.SetParameter(Shader, "PrevCasc", PixelTexture);
+            Renderer.SetParameter(Shader, "PrevSize", new Vector2(1, 1));
         }
 
-        Shader.Technique("Merge");
+        Shader.CurrentTechnique = Shader.Techniques["Merge"];
         ShaderBatch.Begin(SpriteSortMode.Immediate, BlendState.Opaque, SamplerState.LinearClamp, null, null, Shader);
         ShaderBatch.Draw(PixelTexture, new Rectangle(0, 0, (int)CascadeSizes[cascade].X, (int)CascadeSizes[cascade].Y), Color.White);
         ShaderBatch.End();
@@ -166,7 +163,7 @@ public class HolographicRC : core.System
 
     private void CopyTexture(RenderTarget2D source, RenderTarget2D destination)
     {
-        var device = RenderPipeline.Device;
+        var device = Renderer.Device;
         device.SetRenderTarget(destination);
         ShaderBatch.Begin(SpriteSortMode.Immediate, BlendState.Opaque, SamplerState.LinearClamp);
         ShaderBatch.Draw(source, new Rectangle(0, 0, destination.Width, destination.Height), Color.White);
@@ -176,18 +173,17 @@ public class HolographicRC : core.System
 
     private void Compose()
     {
-        var device = RenderPipeline.Device;
+        var device = Renderer.Device;
         device.SetRenderTarget(FinalTexture);
         device.Clear(Color.Black);
         SetSamplers();
 
-        Shader
-            .Set("Frust0", Resolved[0])
-            .Set("Frust1", Resolved[1])
-            .Set("Frust2", Resolved[2])
-            .Set("Frust3", Resolved[3])
-            .Set("CascadeSize", WorldSize)
-            .Technique("Compose");
+        Renderer.SetParameter(Shader, "Frust0", Resolved[0]);
+        Renderer.SetParameter(Shader, "Frust1", Resolved[1]);
+        Renderer.SetParameter(Shader, "Frust2", Resolved[2]);
+        Renderer.SetParameter(Shader, "Frust3", Resolved[3]);
+        Renderer.SetParameter(Shader, "CascadeSize", WorldSize);
+        Shader.CurrentTechnique = Shader.Techniques["Compose"];
 
         ShaderBatch.Begin(SpriteSortMode.Immediate, BlendState.Opaque, SamplerState.LinearClamp, null, null, Shader);
         ShaderBatch.Draw(PixelTexture, new Rectangle(0, 0, (int)WorldSize.X, (int)WorldSize.Y), Color.White);
@@ -198,9 +194,9 @@ public class HolographicRC : core.System
     public override void Render()
     {
         Texture2D texture = GetDebugTexture();
-        RenderPipeline.SpriteBatch.Begin(SpriteSortMode.Immediate, BlendState.AlphaBlend, SamplerState.LinearClamp);
-        RenderPipeline.SpriteBatch.Draw(texture, RenderPipeline.Device.Viewport.Bounds, Color.White);
-        RenderPipeline.SpriteBatch.End();
+        Renderer.SpriteBatch.Begin(SpriteSortMode.Immediate, BlendState.AlphaBlend, SamplerState.LinearClamp);
+        Renderer.SpriteBatch.Draw(texture, Renderer.Device.Viewport.Bounds, Color.White);
+        Renderer.SpriteBatch.End();
     }
 
     private Texture2D GetDebugTexture()

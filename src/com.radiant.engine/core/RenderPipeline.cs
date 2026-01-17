@@ -5,7 +5,7 @@ using Microsoft.Xna.Framework.Graphics;
 
 namespace com.radiant.engine.core;
 
-public class RenderPipeline : IDisposable
+public class Renderer : IDisposable
 {
     public Window Window { get; }
     public SpriteBatch SpriteBatch { get; }
@@ -15,7 +15,7 @@ public class RenderPipeline : IDisposable
     private IndexBuffer _quadIndexBuffer;
     private RenderTargetBinding[] _savedRenderTargets;
 
-    public RenderPipeline(Window window)
+    public Renderer(Window window)
     {
         Window = window;
         SpriteBatch = window.SpriteBatch;
@@ -82,34 +82,6 @@ public class RenderPipeline : IDisposable
         if (resetStates) Device.SetRenderTargets(_savedRenderTargets);
     }
 
-    public void DrawShader(
-        Effect shader,
-        string[] techniques,
-        RenderTarget2D target = null,
-        Color? clearColor = null,
-        BlendState blendState = null,
-        Action<int> afterPass = null,
-        bool resetStates = true)
-    {
-        if (resetStates) _savedRenderTargets = Device.GetRenderTargets();
-
-        Device.SetRenderTarget(target);
-        if (clearColor.HasValue) Device.Clear(clearColor.Value);
-
-        Device.BlendState = blendState ?? BlendState.Opaque;
-        Device.DepthStencilState = DepthStencilState.None;
-        Device.RasterizerState = RasterizerState.CullNone;
-
-        for (int i = 0; i < techniques.Length; i++)
-        {
-            shader.CurrentTechnique = shader.Techniques[techniques[i]];
-            DrawQuad(shader);
-            afterPass?.Invoke(i);
-        }
-
-        if (resetStates) Device.SetRenderTargets(_savedRenderTargets);
-    }
-
     public RenderTarget2D PingPong(
         Effect shader,
         string technique,
@@ -145,6 +117,29 @@ public class RenderPipeline : IDisposable
 
         Device.SetRenderTarget(null);
         return input;
+    }
+
+    public void SetParameter(Effect shader, string key, object value)
+    {
+        var parameter = shader.Parameters[key];
+        if (parameter == null) return;
+
+        switch (value)
+        {
+            case float f: parameter.SetValue(f); break;
+            case int i: parameter.SetValue(i); break;
+            case bool b: parameter.SetValue(b); break;
+            case Vector2 v2: parameter.SetValue(v2); break;
+            case Vector3 v3: parameter.SetValue(v3); break;
+            case Vector4 v4: parameter.SetValue(v4); break;
+            case Matrix m: parameter.SetValue(m); break;
+            case Texture2D t: parameter.SetValue(t); break;
+            case float[] fa: parameter.SetValue(fa); break;
+            case Vector2[] v2a: parameter.SetValue(v2a); break;
+            case Vector3[] v3a: parameter.SetValue(v3a); break;
+            case Vector4[] v4a: parameter.SetValue(v4a); break;
+            case Matrix[] ma: parameter.SetValue(ma); break;
+        }
     }
 
     public void ClearTextures(int count = 4)

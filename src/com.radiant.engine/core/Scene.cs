@@ -14,11 +14,11 @@ public class Scene : GameObject
 
     public float DeltaTime { get; set; }
 
-    public RenderPipeline RenderPipeline { get; set; }
+    public Renderer Renderer { get; set; }
 
     public override void Initialize()
     {
-        ECS = new ECS(this, RenderPipeline);
+        ECS = new ECS(this, Renderer);
     }
 
     public override void Dispose()
@@ -47,7 +47,7 @@ public class Scene : GameObject
     
     public override void Render()
     {
-        if (!RenderPipeline.Window.IsActive)
+        if (!Renderer.Window.IsActive)
             return;
 
         ECS.Render();
@@ -55,7 +55,7 @@ public class Scene : GameObject
 
     public override void LateRender()
     {
-        if (!RenderPipeline.Window.IsActive)
+        if (!Renderer.Window.IsActive)
             return;
 
         ECS.LateRender();

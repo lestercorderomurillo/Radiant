@@ -133,8 +133,8 @@ public class PerformanceMonitor : core.System
 
     private void UpdateDisplay()
     {
-        int TargetFps = RenderPipeline.Window.GameLoop?.TargetFramesPerSecond ?? 144;
-        float ActualFps = RenderPipeline.Window.GameLoop?.FramesPerSecond ?? 1f;
+        int TargetFps = Renderer.Window.GameLoop?.TargetFramesPerSecond ?? 144;
+        float ActualFps = Renderer.Window.GameLoop?.FramesPerSecond ?? 1f;
         int ActualFpsRounded = (int)MathF.Round(ActualFps);
 
         Gizmos.ClearSection("Performance");

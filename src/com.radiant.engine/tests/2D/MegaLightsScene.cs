@@ -36,7 +36,7 @@ public class MegaLightsScene : Scene
 
     public override void SetupScene()
     {
-        screenCenter = RenderPipeline.Window.GetScreenCenter();
+        screenCenter = Renderer.Window.GetScreenCenter();
 
         // Create ring of boxes
         CreateRotatingBoxes();
@@ -89,7 +89,7 @@ public class MegaLightsScene : Scene
         occluderEntityIds = new int[targetOccluderCount];
 
         // Get screen bounds for scattering
-        Vector2 screenSize = RenderPipeline.Window.GetScreenSize();
+        Vector2 screenSize = Renderer.Window.GetScreenSize();
         float margin = 200; // Keep occluders away from screen edges
 
         int occluderIndex = 0;
