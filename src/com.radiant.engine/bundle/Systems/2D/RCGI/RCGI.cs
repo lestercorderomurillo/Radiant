@@ -54,8 +54,6 @@ public class RCGI : core.System
 
     public override void Initialize()
     {
-        base.Initialize();
-
         RCShader = Renderer.GetShaderEffect("RCGI");
         ShaderSpriteBatch = Renderer.SpriteBatch;
         SDFSystem = Scene.ECS.GetSystem<SceneGeometry>();

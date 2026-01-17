@@ -10,8 +10,6 @@ public class PerlinNoise2D : core.System
 
     public override void Initialize()
     {
-        base.Initialize();
-
         if (initialized) return;
 
         var r = new Random();

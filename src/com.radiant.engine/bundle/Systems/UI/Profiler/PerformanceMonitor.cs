@@ -47,8 +47,6 @@ public class PerformanceMonitor : core.System
 
     public override void Initialize()
     {
-        base.Initialize();
-
         Gizmos = Scene.ECS.GetSystem<GizmosRenderer>();
         Process = Process.GetCurrentProcess();
         CpuCoreCount = Environment.ProcessorCount;

@@ -30,9 +30,4 @@ public class TilesetScene : Scene
         var tileset = ECS.GetSystem<Tileset>();
         tileset.LoadWorld(worldGen);
     }
-
-    public override void Update()
-    {
-        base.Update();
-    }
 }

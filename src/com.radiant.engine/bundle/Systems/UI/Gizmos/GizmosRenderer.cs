@@ -34,7 +34,6 @@ public class GizmosRenderer : core.System
 
     public override void Initialize()
     {
-        base.Initialize();
         BaseFont = Renderer.Window.Content.Load<SpriteFont>("fonts/BaseFont");
 
         PrevKeyState = Keyboard.GetState();

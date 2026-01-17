@@ -28,8 +28,6 @@ public class WorldGen : core.System
 
     public override void Initialize()
     {
-        base.Initialize();
-
         Gizmos = Scene.ECS.GetSystem<GizmosRenderer>();
         PerlinNoise = Scene.ECS.GetSystem<PerlinNoise2D>();
         Random = new Random();

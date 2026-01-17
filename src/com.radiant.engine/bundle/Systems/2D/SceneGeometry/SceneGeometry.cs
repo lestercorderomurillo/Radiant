@@ -34,8 +34,6 @@ public class SceneGeometry : core.System
 
     public override void Initialize()
     {
-        base.Initialize();
-
         WorldBounds = Renderer.ScreenSize;
 
         SDFBounds = new Vector2(

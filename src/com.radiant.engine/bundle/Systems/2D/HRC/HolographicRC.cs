@@ -42,7 +42,6 @@ public class HolographicRC : core.System
 
     public override void Initialize()
     {
-        base.Initialize();
         SDFSystem = Scene.ECS.GetSystem<SceneGeometry>();
         Gizmos = Scene.ECS.GetSystem<GizmosRenderer>();
 

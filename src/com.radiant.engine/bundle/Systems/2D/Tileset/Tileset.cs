@@ -74,8 +74,6 @@ public class Tileset : core.System
 
     public override void Initialize()
     {
-        base.Initialize();
-
         MultiplyBlend = new BlendState
         {
             ColorBlendFunction = BlendFunction.Add,
