@@ -368,7 +368,6 @@ public class Renderer : IDisposable
     }
 
     // Solid Textures (cached)
-
     public Texture2D GetSolidTexture(Color color, int width = 1, int height = 1)
     {
         var key = (color, width, height);
@@ -384,7 +383,6 @@ public class Renderer : IDisposable
     }
 
     // Textures
-
     public Renderer SetTexture(int slot, Texture2D texture)
     {
         Device.Textures[slot] = texture;
@@ -423,7 +421,6 @@ public class Renderer : IDisposable
     }
 
     // Draw Shader
-
     public Renderer Draw()
     {
         CommitTextures();
@@ -452,7 +449,6 @@ public class Renderer : IDisposable
     }
 
     // Draw Textures
-
     public Renderer DrawTexture(Texture2D texture, Vector2 position)
     {
         return DrawTexture(texture, position, Color.White);
@@ -517,7 +513,6 @@ public class Renderer : IDisposable
     }
 
     // PingPong
-
     public RenderTarget2D PingPong(
         RenderTarget2D a,
         RenderTarget2D b,
@@ -565,7 +560,7 @@ public class Renderer : IDisposable
         return input;
     }
 
-    // Control
+    // Control flags
     public Renderer Begin()
     {
         IsDrawing = true;
