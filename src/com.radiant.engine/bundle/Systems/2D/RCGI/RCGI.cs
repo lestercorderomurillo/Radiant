@@ -52,15 +52,6 @@ public class RCGI : core.System
 
     private SkyData CurrentSkyData;
 
-    private EffectParameter _pScreenSize, _pCascadeSize, _pCascadeIndex, _pCascadeCount;
-    private EffectParameter _pAngularPerAxis, _pProbeExtent, _pProbeSpacing;
-    private EffectParameter _pRayOffset, _pRayRange, _pSDFScale, _pThetaScalar;
-    private EffectParameter _pHigherAngularPerAxis, _pHigherExtent, _pInvProbeExtent;
-    private EffectParameter _pInvScreenSize, _pInvCascadeSize;
-    private EffectParameter _pPreCalcSkyColor, _pPreCalcSunColor, _pPreCalcSunAngle;
-    private EffectParameter _pPreCalcSSunS, _pPreCalcISSunS, _pEnableSkyRadiance;
-    private EffectParameter _pEmissiveTexture, _pSceneSDFTexture, _pCascadeTexture;
-
     public override void Initialize()
     {
         base.Initialize();
@@ -83,43 +74,12 @@ public class RCGI : core.System
         CalculateActiveCascades();
         PreCalculateCascadeParameters();
         InitializeRenderTargets();
-        CacheShaderParameters();
 
         CachedRasterizerState = new RasterizerState
         {
             MultiSampleAntiAlias = false,
             CullMode = CullMode.None
         };
-    }
-
-    private void CacheShaderParameters()
-    {
-        var p = RCShader.Parameters;
-        _pScreenSize = p["ScreenSize"];
-        _pCascadeSize = p["CascadeSize"];
-        _pCascadeIndex = p["CascadeIndex"];
-        _pCascadeCount = p["CascadeCount"];
-        _pAngularPerAxis = p["AngularPerAxis"];
-        _pProbeExtent = p["ProbeExtent"];
-        _pProbeSpacing = p["ProbeSpacing"];
-        _pRayOffset = p["RayOffset"];
-        _pRayRange = p["RayRange"];
-        _pSDFScale = p["SDFScale"];
-        _pThetaScalar = p["ThetaScalar"];
-        _pHigherAngularPerAxis = p["HigherAngularPerAxis"];
-        _pHigherExtent = p["HigherExtent"];
-        _pInvProbeExtent = p["InvProbeExtent"];
-        _pInvScreenSize = p["InvScreenSize"];
-        _pInvCascadeSize = p["InvCascadeSize"];
-        _pPreCalcSkyColor = p["PreCalcSkyColor"];
-        _pPreCalcSunColor = p["PreCalcSunColor"];
-        _pPreCalcSunAngle = p["PreCalcSunAngle"];
-        _pPreCalcSSunS = p["PreCalcSSunS"];
-        _pPreCalcISSunS = p["PreCalcISSunS"];
-        _pEnableSkyRadiance = p["EnableSkyRadiance"];
-        _pEmissiveTexture = p["EmissiveTexture"];
-        _pSceneSDFTexture = p["SceneSDFTexture"];
-        _pCascadeTexture = p["CascadeTexture"];
     }
 
     private void CalculateActiveCascades()
@@ -268,34 +228,34 @@ public class RCGI : core.System
 
         ref var data = ref CascadeParameters[cascadeIndex];
 
-        _pScreenSize.SetValue(ScreenSize);
-        _pCascadeSize.SetValue(CascadeSize);
-        _pCascadeIndex.SetValue((float)cascadeIndex);
-        _pCascadeCount.SetValue((float)ActiveCascades);
-        _pAngularPerAxis.SetValue(data.AngularPerAxis);
-        _pProbeExtent.SetValue(data.ProbeExtent);
-        _pProbeSpacing.SetValue(data.ProbeSpacing);
-        _pRayOffset.SetValue(data.RayOffset);
-        _pRayRange.SetValue(data.RayRange);
-        _pSDFScale.SetValue(data.SDFScale);
-        _pThetaScalar.SetValue(data.ThetaScalar);
-        _pInvProbeExtent.SetValue(data.InvProbeExtent);
-        _pInvScreenSize.SetValue(InvScreenSize);
-        _pInvCascadeSize.SetValue(InvCascadeSize);
-        _pPreCalcSkyColor.SetValue(CurrentSkyData.SkyColor);
-        _pPreCalcSunColor.SetValue(CurrentSkyData.SunColor);
-        _pPreCalcSunAngle.SetValue(CurrentSkyData.SunAngle);
-        _pPreCalcSSunS.SetValue(CurrentSkyData.SSunS);
-        _pPreCalcISSunS.SetValue(CurrentSkyData.ISSunS);
-        _pEnableSkyRadiance.SetValue(EnableSkyRadiance);
-        _pEmissiveTexture.SetValue(emissive);
-        _pSceneSDFTexture.SetValue(sdf);
-        _pCascadeTexture.SetValue(cascade);
+        RCShader.Parameters["ScreenSize"].SetValue(ScreenSize);
+        RCShader.Parameters["CascadeSize"].SetValue(CascadeSize);
+        RCShader.Parameters["CascadeIndex"].SetValue((float)cascadeIndex);
+        RCShader.Parameters["CascadeCount"].SetValue((float)ActiveCascades);
+        RCShader.Parameters["AngularPerAxis"].SetValue(data.AngularPerAxis);
+        RCShader.Parameters["ProbeExtent"].SetValue(data.ProbeExtent);
+        RCShader.Parameters["ProbeSpacing"].SetValue(data.ProbeSpacing);
+        RCShader.Parameters["RayOffset"].SetValue(data.RayOffset);
+        RCShader.Parameters["RayRange"].SetValue(data.RayRange);
+        RCShader.Parameters["SDFScale"].SetValue(data.SDFScale);
+        RCShader.Parameters["ThetaScalar"].SetValue(data.ThetaScalar);
+        RCShader.Parameters["InvProbeExtent"].SetValue(data.InvProbeExtent);
+        RCShader.Parameters["InvScreenSize"].SetValue(InvScreenSize);
+        RCShader.Parameters["InvCascadeSize"].SetValue(InvCascadeSize);
+        RCShader.Parameters["PreCalcSkyColor"].SetValue(CurrentSkyData.SkyColor);
+        RCShader.Parameters["PreCalcSunColor"].SetValue(CurrentSkyData.SunColor);
+        RCShader.Parameters["PreCalcSunAngle"].SetValue(CurrentSkyData.SunAngle);
+        RCShader.Parameters["PreCalcSSunS"].SetValue(CurrentSkyData.SSunS);
+        RCShader.Parameters["PreCalcISSunS"].SetValue(CurrentSkyData.ISSunS);
+        RCShader.Parameters["EnableSkyRadiance"].SetValue(EnableSkyRadiance);
+        RCShader.Parameters["EmissiveTexture"].SetValue(emissive);
+        RCShader.Parameters["SceneSDFTexture"].SetValue(sdf);
+        RCShader.Parameters["CascadeTexture"].SetValue(cascade);
 
         if (cascadeIndex < ActiveCascades - 1)
         {
-            _pHigherAngularPerAxis?.SetValue(data.HigherAngularPerAxis);
-            _pHigherExtent?.SetValue(data.HigherExtent);
+            RCShader.Parameters["HigherAngularPerAxis"]?.SetValue(data.HigherAngularPerAxis);
+            RCShader.Parameters["HigherExtent"]?.SetValue(data.HigherExtent);
         }
 
         RCShader.CurrentTechnique = RCShader.Techniques["GenerateOutputTexture"];
