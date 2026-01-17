@@ -130,8 +130,8 @@ public class HolographicRC : core.System
     {
         HandleDebugInput();
 
-        var emissive = SDFSystem.GetEmissiveTexture();
-        var absorption = SDFSystem.GetAbsorptionTexture();
+        var emissive = SDFSystem.EmissiveTexture;
+        var absorption = SDFSystem.AbsorptionTexture;
         var device = Renderer.Device;
 
         var originalTargets = device.GetRenderTargets();
@@ -176,9 +176,10 @@ public class HolographicRC : core.System
         FrustumSeedShader.Parameters["CascadeSize"]?.SetValue(size);
         FrustumSeedShader.Parameters["FrustumIndex"]?.SetValue((float)frustum);
 
-        ShaderBatch.Begin(SpriteSortMode.Immediate, BlendState.Opaque, SamplerState.PointClamp, null, null, FrustumSeedShader);
-        device.SamplerStates[1] = SamplerState.PointClamp;
-        device.SamplerStates[2] = SamplerState.PointClamp;
+        // Use LinearClamp for smooth scene sampling
+        ShaderBatch.Begin(SpriteSortMode.Immediate, BlendState.Opaque, SamplerState.LinearClamp, null, null, FrustumSeedShader);
+        device.SamplerStates[1] = SamplerState.LinearClamp;
+        device.SamplerStates[2] = SamplerState.LinearClamp;
         ShaderBatch.Draw(PixelTexture, new Rectangle(0, 0, (int)size.X, (int)size.Y), Color.White);
         ShaderBatch.End();
     }
@@ -201,6 +202,7 @@ public class HolographicRC : core.System
         ExtensionsShader.Parameters["PrevRadiance"]?.SetValue(VraysRadiance[frustum, cascade - 1]);
         ExtensionsShader.Parameters["PrevTransmit"]?.SetValue(VraysTransmit[frustum, cascade - 1]);
 
+        // Use PointClamp for precise sampling
         ShaderBatch.Begin(SpriteSortMode.Immediate, BlendState.Opaque, SamplerState.PointClamp, null, null, ExtensionsShader);
         device.SamplerStates[1] = SamplerState.PointClamp;
         device.SamplerStates[2] = SamplerState.PointClamp;
@@ -235,6 +237,7 @@ public class HolographicRC : core.System
         MergingConesShader.Parameters["CascadeSize"]?.SetValue(mergeSize);
         MergingConesShader.Parameters["CascadeIndex"]?.SetValue(new Vector2(cascade, CascadeCount));
 
+        // Use PointClamp for precise sampling
         ShaderBatch.Begin(SpriteSortMode.Immediate, BlendState.Opaque, SamplerState.PointClamp, null, null, MergingConesShader);
         device.SamplerStates[1] = SamplerState.PointClamp;
         device.SamplerStates[2] = SamplerState.PointClamp;
@@ -257,11 +260,12 @@ public class HolographicRC : core.System
         FluenceSumShader.Parameters["FrustumIndex3"]?.SetValue(MergeRadiance[3, 0]);
         FluenceSumShader.Parameters["WorldSize"]?.SetValue(WorldSize);
 
-        ShaderBatch.Begin(SpriteSortMode.Immediate, BlendState.Opaque, SamplerState.PointClamp, null, null, FluenceSumShader);
-        device.SamplerStates[1] = SamplerState.PointClamp;
-        device.SamplerStates[2] = SamplerState.PointClamp;
-        device.SamplerStates[3] = SamplerState.PointClamp;
-        device.SamplerStates[4] = SamplerState.PointClamp;
+        // Use LinearClamp for smooth frustum blending
+        ShaderBatch.Begin(SpriteSortMode.Immediate, BlendState.Opaque, SamplerState.LinearClamp, null, null, FluenceSumShader);
+        device.SamplerStates[1] = SamplerState.LinearClamp;
+        device.SamplerStates[2] = SamplerState.LinearClamp;
+        device.SamplerStates[3] = SamplerState.LinearClamp;
+        device.SamplerStates[4] = SamplerState.LinearClamp;
         ShaderBatch.Draw(PixelTexture, new Rectangle(0, 0, (int)WorldSize.X, (int)WorldSize.Y), Color.White);
         ShaderBatch.End();
     }
@@ -306,7 +310,25 @@ public class HolographicRC : core.System
     {
         Texture2D texture = GetDebugTexture();
         Renderer.SpriteBatch.Begin(SpriteSortMode.Immediate, BlendState.AlphaBlend, SamplerState.PointClamp);
-        Renderer.SpriteBatch.Draw(texture, Renderer.Device.Viewport.Bounds, Color.White);
+
+        // For debug textures, preserve aspect ratio instead of stretching
+        if (DebugIndex == 0)
+        {
+            // Final output - fill viewport
+            Renderer.SpriteBatch.Draw(texture, Renderer.Device.Viewport.Bounds, Color.White);
+        }
+        else
+        {
+            // Intermediate textures - draw at actual size (or scaled to fit)
+            float scale = MathF.Min(
+                (float)Renderer.Device.Viewport.Width / texture.Width,
+                (float)Renderer.Device.Viewport.Height / texture.Height
+            );
+            int drawWidth = (int)(texture.Width * scale);
+            int drawHeight = (int)(texture.Height * scale);
+            Renderer.SpriteBatch.Draw(texture, new Rectangle(0, 0, drawWidth, drawHeight), Color.White);
+        }
+
         Renderer.SpriteBatch.End();
     }
 
@@ -341,8 +363,8 @@ public class HolographicRC : core.System
         if (idx < FrustumCount) return FrustumOutput[idx];
         idx -= FrustumCount;
 
-        if (idx == 0) return SDFSystem.GetEmissiveTexture();
-        return SDFSystem.GetAbsorptionTexture();
+        if (idx == 0) return SDFSystem.EmissiveTexture;
+        return SDFSystem.AbsorptionTexture;
     }
 
     public RenderTarget2D GetOutput() => FinalTexture;

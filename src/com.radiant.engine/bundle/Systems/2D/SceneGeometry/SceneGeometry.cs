@@ -8,11 +8,8 @@ namespace com.radiant.engine.bundle;
 
 public class SceneGeometry : core.System
 {
-    private const float SDFScale = 0.5f;
+    public float SDFScale = 0.5f;
 
-    private RenderTarget2D EmissiveBuffer;
-    private RenderTarget2D AbsorptionBuffer;
-    private RenderTarget2D SDFBuffer;
     private RenderTarget2D JFATexture1;
     private RenderTarget2D JFATexture2;
 
@@ -21,7 +18,11 @@ public class SceneGeometry : core.System
     private float ScreenDiagonal;
     private Rectangle BufferBounds;
     private int JFAPassCount;
+
     private RenderTarget2D JFAResult;
+    public RenderTarget2D EmissiveTexture { get; private set; }
+    public RenderTarget2D AbsorptionTexture { get; private set; }
+    public RenderTarget2D SDFTexture { get; private set; }
 
     private bool GeometryDirty;
     private bool UseExternalEmissive;
@@ -63,15 +64,15 @@ public class SceneGeometry : core.System
 
     private void CreateGeometryBuffers()
     {
-        EmissiveBuffer = new RenderTarget2D(
+        EmissiveTexture = new RenderTarget2D(
             Renderer.Device, (int)WorldBounds.X, (int)WorldBounds.Y,
             false, SurfaceFormat.Color, DepthFormat.None);
 
-        AbsorptionBuffer = new RenderTarget2D(
+        AbsorptionTexture = new RenderTarget2D(
             Renderer.Device, (int)WorldBounds.X, (int)WorldBounds.Y,
             false, SurfaceFormat.Color, DepthFormat.None);
 
-        SDFBuffer = new RenderTarget2D(
+        SDFTexture = new RenderTarget2D(
             Renderer.Device, (int)WorldBounds.X, (int)WorldBounds.Y,
             false, SurfaceFormat.HalfVector2, DepthFormat.None);
 
@@ -90,13 +91,13 @@ public class SceneGeometry : core.System
 
         if (!UseExternalEmissive)
         {
-            RenderEmissiveBuffer();
-            RenderAbsorptionBuffer();
+            RenderEmissiveTexture();
+            RenderAbsorptionTexture();
         }
 
         if (GeometryDirty)
         {
-            RenderSDFBuffer();
+            RenderSDFTexture();
             GeometryDirty = false;
         }
 
@@ -118,7 +119,7 @@ public class SceneGeometry : core.System
     public void SetEmissiveFromExternal(Action<Renderer> callback)
     {
         Renderer
-            .SetTarget(EmissiveBuffer)
+            .SetTarget(EmissiveTexture)
             .Clear(Color.Transparent);
 
         callback.Invoke(Renderer);
@@ -131,13 +132,13 @@ public class SceneGeometry : core.System
         GeometryDirty = true;
     }
 
-    private void RenderEmissiveBuffer()
+    private void RenderEmissiveTexture()
     {
         Renderer
             .Reset()
             .Configure(BlendState.AlphaBlend)
             .Configure(SamplerState.PointClamp)
-            .SetTarget(EmissiveBuffer)
+            .SetTarget(EmissiveTexture)
             .Clear(Color.Transparent);
 
         int count = 0;
@@ -177,13 +178,13 @@ public class SceneGeometry : core.System
         GeometryDirty = true;
     }
 
-    private void RenderAbsorptionBuffer()
+    private void RenderAbsorptionTexture()
     {
         Renderer
             .Reset()
             .Configure(BlendState.AlphaBlend)
             .Configure(SamplerState.PointClamp)
-            .SetTarget(AbsorptionBuffer)
+            .SetTarget(AbsorptionTexture)
             .Clear(Color.Transparent);
 
         int count = 0;
@@ -216,7 +217,7 @@ public class SceneGeometry : core.System
         AbsorptionCount = count;
     }
 
-    private void RenderSDFBuffer()
+    private void RenderSDFTexture()
     {
         InitializeJFA();
         RunJFAPasses();
@@ -231,7 +232,7 @@ public class SceneGeometry : core.System
             .SetTechnique("InitializeJFA")
             .SetTarget(JFATexture1)
             .Clear(Color.Black)
-            .SetParameter("EmissiveTexture", EmissiveBuffer)
+            .SetParameter("EmissiveTexture", EmissiveTexture)
             .SetParameter("WorldsBounds", SDFBounds)
             .SetParameter("ScreenDiagonal", ScreenDiagonal)
             .Draw()
@@ -268,8 +269,8 @@ public class SceneGeometry : core.System
             .Reset()
             .SetShader("SceneGeometry")
             .SetTechnique("GenerateSDFFromJFA")
-            .SetTarget(SDFBuffer)
-            .SetParameter("EmissiveTexture", EmissiveBuffer)
+            .SetTarget(SDFTexture)
+            .SetParameter("EmissiveTexture", EmissiveTexture)
             .SetParameter("JFATexture", JFAResult)
             .SetParameter("WorldsBounds", WorldBounds)
             .SetParameter("ScreenDiagonal", ScreenDiagonal)
@@ -301,7 +302,7 @@ public class SceneGeometry : core.System
                     .SetShader("SceneGeometry")
                     .SetTechnique("DebugEmissive")
                     .SetTarget(null)
-                    .SetParameter("EmissiveTexture", EmissiveBuffer)
+                    .SetParameter("EmissiveTexture", EmissiveTexture)
                     .SetParameter("WorldsBounds", SDFBounds)
                     .SetParameter("ScreenDiagonal", ScreenDiagonal)
                     .Draw()
@@ -314,7 +315,7 @@ public class SceneGeometry : core.System
                     .Configure(BlendState.AlphaBlend)
                     .Configure(SamplerState.LinearClamp)
                     .SetTarget(null)
-                    .DrawTexture(AbsorptionBuffer, Renderer.Device.Viewport.Bounds, Color.White)
+                    .DrawTexture(AbsorptionTexture, Renderer.Device.Viewport.Bounds, Color.White)
                     .Commit();
                 break;
 
@@ -325,7 +326,7 @@ public class SceneGeometry : core.System
                     .SetTechnique("DebugSDFVisible")
                     .SetTarget(null)
                     .SetParameter("JFATexture", JFAResult)
-                    .SetParameter("EmissiveTexture", EmissiveBuffer)
+                    .SetParameter("EmissiveTexture", EmissiveTexture)
                     .SetParameter("WorldsBounds", SDFBounds)
                     .SetParameter("ScreenDiagonal", ScreenDiagonal)
                     .Draw()
@@ -360,17 +361,13 @@ public class SceneGeometry : core.System
         }
     }
 
-    public RenderTarget2D GetEmissiveTexture() => EmissiveBuffer;
-    public RenderTarget2D GetAbsorptionTexture() => AbsorptionBuffer;
-    public RenderTarget2D GetSDFTexture() => SDFBuffer;
-    public float GetSDFScale() => SDFScale;
+    
 
     public override void Dispose()
     {
-        // Note: Renderer is managed by Scene
-        EmissiveBuffer?.Dispose();
-        AbsorptionBuffer?.Dispose();
-        SDFBuffer?.Dispose();
+        EmissiveTexture?.Dispose();
+        AbsorptionTexture?.Dispose();
+        SDFTexture?.Dispose();
         JFATexture1?.Dispose();
         JFATexture2?.Dispose();
     }

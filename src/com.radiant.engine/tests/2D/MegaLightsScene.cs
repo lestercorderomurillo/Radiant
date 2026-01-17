@@ -17,7 +17,7 @@ public class MegaLightsScene : Scene
     private Vector2 screenCenter; // Center point for rotation
     private float boxRadius = 300; // Radius of the ring
     private Random random = new Random(); // Random number generator for occluder placement
-    private bool isMoving = false; // Toggle for box movement
+    private bool isMoving = true; // Toggle for box movement
     private KeyboardState previousKeyboardState; // Track keyboard state for toggle
 
     // Personalizable sizes
@@ -31,7 +31,7 @@ public class MegaLightsScene : Scene
         ECS.AddSystem<PerformanceMonitor>();
         ECS.AddSystem<GizmosRenderer>();
         ECS.AddSystem<SceneGeometry>();
-        ECS.AddSystem<HolographicRC>();
+        ECS.AddSystem<RCGI>();
 
         base.SetupECS();
     }

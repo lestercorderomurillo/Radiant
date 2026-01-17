@@ -213,8 +213,8 @@ public class RCGI : core.System
         device.DepthStencilState = DepthStencilState.None;
         device.RasterizerState = CachedRasterizerState;
 
-        var emissive = SDFSystem.GetEmissiveTexture();
-        var sdf = SDFSystem.GetSDFTexture();
+        var emissive = SDFSystem.EmissiveTexture;
+        var sdf = SDFSystem.SDFTexture;
         var cascade = cascadeIndex < ActiveCascades - 1 ? CascadeLayers[cascadeIndex + 1] : null;
 
         device.Textures[1] = emissive;
