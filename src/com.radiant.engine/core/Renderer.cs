@@ -10,11 +10,25 @@ public class Renderer : IDisposable
 {
     // State
     public Window Window { get; }
+    private GameWindow NativeWindow => Window.Window;
     public GraphicsDevice Device { get; }
     public SpriteBatch SpriteBatch { get; }
     public bool IsDrawing { get; private set; }
     public string CurrentShaderName { get; private set; }
     public Texture2D PixelTexture { get; private set; }
+
+    // Screen Info
+    public int ScreenWidth { get; private set; }
+    public int ScreenHeight { get; private set; }
+    public Vector2 ScreenSize { get; private set; }
+    public float AspectRatio { get; private set; }
+    public float InverseAspectRatio { get; private set; }
+    public float ScreenDiagonal { get; private set; }
+    public int ScreenArea { get; private set; }
+    public int ScreenLowerPowerOfTwo { get; private set; }
+    public int ScreenHigherPowerOfTwo { get; private set; }
+    public Vector2 ScreenSizeLowerPowerOfTwo { get; private set; }
+    public Vector2 ScreenSizeHigherPowerOfTwo { get; private set; }
 
     // Internal
     private Dictionary<string, Effect> ShaderCache = new();
@@ -43,6 +57,45 @@ public class Renderer : IDisposable
             SamplerStates[i] = SamplerState.LinearClamp;
 
         InitializeQuad();
+        UpdateScreenInfo();
+
+        NativeWindow.ClientSizeChanged += (_, _) => UpdateScreenInfo();
+    }
+
+    public void UpdateScreenInfo()
+    {
+        var viewport = Device.Viewport;
+        ScreenWidth = viewport.Width;
+        ScreenHeight = viewport.Height;
+        ScreenSize = new Vector2(ScreenWidth, ScreenHeight);
+        AspectRatio = (float)ScreenWidth / ScreenHeight;
+        InverseAspectRatio = (float)ScreenHeight / ScreenWidth;
+        ScreenDiagonal = MathF.Sqrt(ScreenWidth * ScreenWidth + ScreenHeight * ScreenHeight);
+        ScreenArea = ScreenWidth * ScreenHeight;
+
+        int maxDimension = Math.Max(ScreenWidth, ScreenHeight);
+        ScreenLowerPowerOfTwo = GetLowerPowerOfTwo(maxDimension);
+        ScreenHigherPowerOfTwo = GetHigherPowerOfTwo(maxDimension);
+        ScreenSizeLowerPowerOfTwo = new Vector2(ScreenLowerPowerOfTwo, ScreenLowerPowerOfTwo);
+        ScreenSizeHigherPowerOfTwo = new Vector2(ScreenHigherPowerOfTwo, ScreenHigherPowerOfTwo);
+    }
+
+    private static int GetLowerPowerOfTwo(int value)
+    {
+        if (value <= 0) return 1;
+        int power = 1;
+        while (power * 2 <= value)
+            power *= 2;
+        return power;
+    }
+
+    private static int GetHigherPowerOfTwo(int value)
+    {
+        if (value <= 0) return 1;
+        int power = 1;
+        while (power < value)
+            power *= 2;
+        return power;
     }
 
     private void InitializeQuad()

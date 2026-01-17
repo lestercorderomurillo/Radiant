@@ -24,8 +24,6 @@ public class SceneGeometry : core.System
     public RenderTarget2D AbsorptionTexture { get; private set; }
     public RenderTarget2D SDFTexture { get; private set; }
 
-    private bool UseExternalEmissive;
-
     private int EmissiveCount;
     private int AbsorptionCount;
 
@@ -38,15 +36,13 @@ public class SceneGeometry : core.System
     {
         base.Initialize();
 
-        WorldBounds = new Vector2(
-            Renderer.Device.Viewport.Width,
-            Renderer.Device.Viewport.Height);
+        WorldBounds = Renderer.ScreenSize;
 
         SDFBounds = new Vector2(
             (int)(WorldBounds.X * SDFScale),
             (int)(WorldBounds.Y * SDFScale));
 
-        ScreenDiagonal = WorldBounds.Length();
+        ScreenDiagonal = Renderer.ScreenDiagonal;
 
         float sdfDiagonal = SDFBounds.Length();
         JFAPassCount = (int)Math.Ceiling(Math.Log(sdfDiagonal, 2)) + 1;
@@ -111,17 +107,13 @@ public class SceneGeometry : core.System
         }
         PrevKeyState = key;
 
-        // Control flags
-        if (!UseExternalEmissive)
-        {
-            RenderEmissiveTexture();
-            RenderAbsorptionTexture();
-        }
+        
+        RenderEmissiveTexture();
+        RenderAbsorptionTexture();
 
         RenderSDFTexture();
 
         UpdateGizmos();
-        UseExternalEmissive = false;
     }
     
     private void RenderEmissiveTexture()
@@ -290,7 +282,7 @@ public class SceneGeometry : core.System
                     .Configure(BlendState.AlphaBlend)
                     .Configure(SamplerState.LinearClamp)
                     .SetTarget(null)
-                    .DrawTexture(AbsorptionTexture, Renderer.Device.Viewport.Bounds, Color.White)
+                    .DrawTexture(AbsorptionTexture, new Rectangle(0, 0, Renderer.ScreenWidth, Renderer.ScreenHeight), Color.White)
                     .Commit();
                 break;
 
