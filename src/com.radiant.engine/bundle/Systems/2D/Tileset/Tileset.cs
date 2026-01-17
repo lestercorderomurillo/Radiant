@@ -77,7 +77,7 @@ public class Tileset : core.System
     {
         base.Initialize();
 
-        PixelTexture = new Texture2D(RenderPipeline.GraphicsDevice, 1, 1);
+        PixelTexture = new Texture2D(RenderPipeline.Device, 1, 1);
         PixelTexture.SetData([Color.White]);
 
         MultiplyBlend = new BlendState
@@ -102,8 +102,8 @@ public class Tileset : core.System
 
         CalculateSkyLevels();
 
-        ViewportWidth = RenderPipeline.GraphicsDevice.Viewport.Width;
-        ViewportHeight = RenderPipeline.GraphicsDevice.Viewport.Height;
+        ViewportWidth = RenderPipeline.Device.Viewport.Width;
+        ViewportHeight = RenderPipeline.Device.Viewport.Height;
 
         // Viewport size in tiles (ceiling + 1 for partial tiles)
         ViewportTilesX = (ViewportWidth + TileSize - 1) / TileSize + 1;
@@ -116,9 +116,9 @@ public class Tileset : core.System
         // Render target sized to fit entire grid (including padding)
         int renderTargetWidth = GridWidth * TileSize;
         int renderTargetHeight = GridHeight * TileSize;
-        TileRenderTarget = new RenderTarget2D(RenderPipeline.GraphicsDevice, renderTargetWidth, renderTargetHeight);
+        TileRenderTarget = new RenderTarget2D(RenderPipeline.Device, renderTargetWidth, renderTargetHeight);
 
-        LightTexture = new Texture2D(RenderPipeline.GraphicsDevice, GridWidth, GridHeight);
+        LightTexture = new Texture2D(RenderPipeline.Device, GridWidth, GridHeight);
         LightData = new Color[GridWidth * GridHeight];
         WorkingBuffer = new Vector3[GridWidth * GridHeight];
         ReadyBuffer = new Vector3[GridWidth * GridHeight];
@@ -287,8 +287,8 @@ public class Tileset : core.System
         float cameraOffsetY = CameraPosition.Y - gridOriginY;
 
         // === RENDER TO TARGET (full grid size) ===
-        RenderPipeline.GraphicsDevice.SetRenderTarget(TileRenderTarget);
-        RenderPipeline.GraphicsDevice.Clear(SkyColor);
+        RenderPipeline.Device.SetRenderTarget(TileRenderTarget);
+        RenderPipeline.Device.Clear(SkyColor);
 
         // === RENDER TILES ===
         Vector3 bMin = new Vector3(gridOriginX, gridOriginY, 0);
@@ -324,8 +324,8 @@ public class Tileset : core.System
         RenderPipeline.SpriteBatch.End();
 
         // === FINAL OUTPUT TO SCREEN ===
-        RenderPipeline.GraphicsDevice.SetRenderTarget(null);
-        RenderPipeline.GraphicsDevice.Clear(Color.Red);
+        RenderPipeline.Device.SetRenderTarget(null);
+        RenderPipeline.Device.Clear(Color.Red);
 
         RenderPipeline.SpriteBatch.Begin(SpriteSortMode.Deferred, BlendState.Opaque, SamplerState.PointClamp);
 

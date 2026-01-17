@@ -3,7 +3,7 @@ using Microsoft.Xna.Framework;
 
 namespace com.radiant.engine.bundle;
 
-public static class Vector
+public static class VectorExtensions
 {
     // Addition
     public static Vector3 Add(this Vector3 v, float scalar) 

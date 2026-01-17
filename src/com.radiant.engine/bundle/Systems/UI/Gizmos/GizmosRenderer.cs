@@ -3,130 +3,107 @@ using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 
 namespace com.radiant.engine.bundle;
 
 public class GizmosRenderer : core.System
 {
-    #region Rendering Resources
     private Texture2D PixelTexture;
-
     private SpriteFont BaseFont;
-    #endregion
 
-    #region Gizmo Queues
-    private List<LineGizmo> _lineQueue = new List<LineGizmo>();
+    private List<LineGizmo> LineQueue = new();
+    private List<CircleGizmo> CircleQueue = new();
+    private List<ArcGizmo> ArcQueue = new();
+    private List<TextGizmo> TextQueue = new();
+    private List<RectGizmo> RectQueue = new();
 
-    private List<CircleGizmo> _circleQueue = new List<CircleGizmo>();
+    private Dictionary<string, StatsSection> Stats = new();
+    private bool ShowStats = true;
+    private Vector2 StatsPosition = new(15, 15);
+    private const float LineSpacing = 28f;
+    private const float TextPadding = 4f;
+    private Color TextBackgroundColor = new(0, 0, 0, 180);
 
-    private List<ArcGizmo> _arcQueue = new List<ArcGizmo>();
-
-    private List<TextGizmo> _textQueue = new List<TextGizmo>();
-
-    private List<RectGizmo> _rectQueue = new List<RectGizmo>();
-    #endregion
-
-    #region Stats Display
-    private Dictionary<string, StatsSection> _stats = new Dictionary<string, StatsSection>();
-
-    private bool _showStats = true;
-
-    private Vector2 _statsPosition = new Vector2(15, 15);
-
-    private const float LINE_SPACING = 28f;
-
-
-    private KeyboardState previousKeyState;
-    #endregion
-
-    // Text background settings
-    private const float TEXT_PADDING = 4f;
-
-    private Color TextBackgroundColor = new Color(0, 0, 0, 180); // Semi-transparent black
+    private KeyboardState PrevKeyState;
 
     public override void Initialize()
     {
         base.Initialize();
-        
-        PixelTexture = new Texture2D(RenderPipeline.GraphicsDevice, 1, 1);
+
+        PixelTexture = new Texture2D(RenderPipeline.Device, 1, 1);
         PixelTexture.SetData([Color.White]);
 
         BaseFont = RenderPipeline.Window.Content.Load<SpriteFont>("fonts/BaseFont");
 
-        previousKeyState = Keyboard.GetState();
+        PrevKeyState = Keyboard.GetState();
     }
 
     public override void Update()
     {
         var keyboard = Keyboard.GetState();
 
-        if (keyboard.IsKeyDown(Keys.F1) && previousKeyState.IsKeyUp(Keys.F1))
-            _showStats = !_showStats;
+        if (keyboard.IsKeyDown(Keys.F1) && PrevKeyState.IsKeyUp(Keys.F1))
+            ShowStats = !ShowStats;
 
-        previousKeyState = keyboard;
+        PrevKeyState = keyboard;
 
         ClearGizmoQueues();
     }
 
     private void ClearGizmoQueues()
     {
-        _lineQueue.Clear();
-        _circleQueue.Clear();
-        _arcQueue.Clear();
-        _textQueue.Clear();
-        _rectQueue.Clear();
+        LineQueue.Clear();
+        CircleQueue.Clear();
+        ArcQueue.Clear();
+        TextQueue.Clear();
+        RectQueue.Clear();
     }
 
-    #region Public API
     public void AddGizmoLine(Vector2 start, Vector2 end, Color color, float thickness = 1f)
     {
-        _lineQueue.Add(new LineGizmo(start, end, color, thickness));
+        LineQueue.Add(new LineGizmo(start, end, color, thickness));
     }
 
     public void AddGizmoCircle(Vector2 center, float radius, Color color)
     {
-        _circleQueue.Add(new CircleGizmo(center, radius, color));
+        CircleQueue.Add(new CircleGizmo(center, radius, color));
     }
 
     public void AddGizmoArc(Vector2 center, float radius, float startAngle, float endAngle, Color color)
     {
-        _arcQueue.Add(new ArcGizmo(center, radius, startAngle, endAngle, color));
+        ArcQueue.Add(new ArcGizmo(center, radius, startAngle, endAngle, color));
     }
 
     public void AddGizmoRect(Rectangle rect, Color color, bool filled = false)
     {
-        _rectQueue.Add(new RectGizmo(rect, color, filled));
+        RectQueue.Add(new RectGizmo(rect, color, filled));
     }
 
     public void AddGizmoText(Vector2 position, string text, Color color)
     {
-        _textQueue.Add(new TextGizmo(position, text, color));
+        TextQueue.Add(new TextGizmo(position, text, color));
     }
 
     public void AddSection(string key, string title, Color color)
     {
-        if (!_stats.ContainsKey(key))
-            _stats[key] = new StatsSection { 
-                Title = title, TitleColor = color 
-            };
+        if (!Stats.ContainsKey(key))
+            Stats[key] = new StatsSection { Title = title, TitleColor = color };
     }
 
     public void AddSectionString(string key, string line)
     {
-        if (!_stats.ContainsKey(key))
+        if (!Stats.ContainsKey(key))
             AddSection(key, key, Color.White);
-        
-        _stats[key].Lines.Add(line);
+
+        Stats[key].Lines.Add(line);
     }
 
     public void ClearSection(string key)
     {
-        if (_stats.TryGetValue(key, out StatsSection section))
+        if (Stats.TryGetValue(key, out StatsSection section))
             section.Lines.Clear();
     }
-    #endregion
 
     public override void LateRender()
     {
@@ -134,25 +111,25 @@ public class GizmosRenderer : core.System
 
         RenderGizmos(RenderPipeline.SpriteBatch);
         RenderStats(RenderPipeline.SpriteBatch);
-        
+
         RenderPipeline.SpriteBatch.End();
     }
 
     private void RenderGizmos(SpriteBatch batch)
     {
-        foreach (var line in _lineQueue)
+        foreach (var line in LineQueue)
             RenderLine(batch, line);
-            
-        foreach (var circle in _circleQueue)
+
+        foreach (var circle in CircleQueue)
             RenderCircle(batch, circle);
 
-        foreach (var arc in _arcQueue)
+        foreach (var arc in ArcQueue)
             RenderArc(batch, arc);
 
-        foreach (var rect in _rectQueue)
+        foreach (var rect in RectQueue)
             RenderRect(batch, rect);
-            
-        foreach (var text in _textQueue)
+
+        foreach (var text in TextQueue)
             RenderTextWithBackground(batch, text);
     }
 
@@ -160,21 +137,16 @@ public class GizmosRenderer : core.System
     {
         if (string.IsNullOrEmpty(text.Text)) return;
 
-        // Measure the text to get its size
         Vector2 textSize = BaseFont.MeasureString(text.Text);
-        
-        // Create background rectangle with padding
-        Rectangle backgroundRect = new Rectangle(
-            (int)(text.Position.X - TEXT_PADDING),
-            (int)(text.Position.Y - TEXT_PADDING),
-            (int)(textSize.X + TEXT_PADDING * 2),
-            (int)(textSize.Y + TEXT_PADDING * 2)
+
+        Rectangle backgroundRect = new(
+            (int)(text.Position.X - TextPadding),
+            (int)(text.Position.Y - TextPadding),
+            (int)(textSize.X + TextPadding * 2),
+            (int)(textSize.Y + TextPadding * 2)
         );
-        
-        // Draw the background
+
         batch.Draw(PixelTexture, backgroundRect, TextBackgroundColor);
-        
-        // Draw the text on top
         batch.DrawString(BaseFont, text.Text, text.Position, text.Color);
     }
 
@@ -182,31 +154,31 @@ public class GizmosRenderer : core.System
     {
         Vector2 delta = line.End - line.Start;
         float length = delta.Length();
-        
+
         if (length == 0) return;
-        
+
         float rotation = (float)Math.Atan2(delta.Y, delta.X);
-        
+
         batch.Draw(PixelTexture, new Rectangle(
             (int)line.Start.X, (int)line.Start.Y,
             (int)length, (int)line.Thickness),
-            null, line.Color, rotation, 
+            null, line.Color, rotation,
             new Vector2(0, 0.5f), SpriteEffects.None, 0);
     }
 
     private void RenderCircle(SpriteBatch batch, CircleGizmo circle)
     {
-        const int SEGMENTS = 32;
+        const int segments = 32;
         Vector2 prev = circle.Center + new Vector2(circle.Radius, 0);
-        
-        for (int i = 1; i <= SEGMENTS; i++)
+
+        for (int i = 1; i <= segments; i++)
         {
-            float angle = i * MathHelper.TwoPi / SEGMENTS;
+            float angle = i * MathHelper.TwoPi / segments;
             Vector2 next = circle.Center + new Vector2(
                 (float)Math.Cos(angle) * circle.Radius,
                 (float)Math.Sin(angle) * circle.Radius
             );
-            
+
             RenderLine(batch, new LineGizmo(prev, next, circle.Color, 1f));
             prev = next;
         }
@@ -214,15 +186,15 @@ public class GizmosRenderer : core.System
 
     private void RenderArc(SpriteBatch batch, ArcGizmo arc)
     {
-        const int SEGMENTS = 32;
+        const int segments = 32;
         float angleRange = arc.EndAngle - arc.StartAngle;
-        int numSegments = Math.Max(1, (int)(SEGMENTS * Math.Abs(angleRange) / MathHelper.TwoPi));
-        
+        int numSegments = Math.Max(1, (int)(segments * Math.Abs(angleRange) / MathHelper.TwoPi));
+
         Vector2 prev = arc.Center + new Vector2(
             (float)Math.Cos(arc.StartAngle) * arc.Radius,
             (float)Math.Sin(arc.StartAngle) * arc.Radius
         );
-        
+
         for (int i = 1; i <= numSegments; i++)
         {
             float angle = arc.StartAngle + (angleRange * i / numSegments);
@@ -230,7 +202,7 @@ public class GizmosRenderer : core.System
                 (float)Math.Cos(angle) * arc.Radius,
                 (float)Math.Sin(angle) * arc.Radius
             );
-            
+
             RenderLine(batch, new LineGizmo(prev, next, arc.Color, 1f));
             prev = next;
         }
@@ -244,11 +216,11 @@ public class GizmosRenderer : core.System
         }
         else
         {
-            Vector2 topLeft = new Vector2(rect.Rect.X, rect.Rect.Y);
-            Vector2 topRight = new Vector2(rect.Rect.Right, rect.Rect.Y);
-            Vector2 bottomLeft = new Vector2(rect.Rect.X, rect.Rect.Bottom);
-            Vector2 bottomRight = new Vector2(rect.Rect.Right, rect.Rect.Bottom);
-            
+            Vector2 topLeft = new(rect.Rect.X, rect.Rect.Y);
+            Vector2 topRight = new(rect.Rect.Right, rect.Rect.Y);
+            Vector2 bottomLeft = new(rect.Rect.X, rect.Rect.Bottom);
+            Vector2 bottomRight = new(rect.Rect.Right, rect.Rect.Bottom);
+
             RenderLine(batch, new LineGizmo(topLeft, topRight, rect.Color, 1f));
             RenderLine(batch, new LineGizmo(topRight, bottomRight, rect.Color, 1f));
             RenderLine(batch, new LineGizmo(bottomRight, bottomLeft, rect.Color, 1f));
@@ -258,26 +230,24 @@ public class GizmosRenderer : core.System
 
     private void RenderStats(SpriteBatch batch)
     {
-        if (!_showStats || BaseFont == null) return;
+        if (!ShowStats || BaseFont == null) return;
 
-        float y = _statsPosition.Y;
-        foreach (var section in _stats.Values.Where(s => s.Enabled))
+        float y = StatsPosition.Y;
+        foreach (var section in Stats.Values.Where(s => s.Enabled))
         {
             if (section.Lines.Count == 0) continue;
-            
-            // Render title with background
+
             RenderTextWithBackground(batch, new TextGizmo(
-                new Vector2(_statsPosition.X, y), section.Title, section.TitleColor));
-            y += LINE_SPACING;
-            
+                new Vector2(StatsPosition.X, y), section.Title, section.TitleColor));
+            y += LineSpacing;
+
             foreach (var line in section.Lines)
             {
-                // Render stats lines with background
                 RenderTextWithBackground(batch, new TextGizmo(
-                    new Vector2(_statsPosition.X, y), line, Color.White));
-                y += LINE_SPACING;
+                    new Vector2(StatsPosition.X, y), line, Color.White));
+                y += LineSpacing;
             }
-            
+
             y += 12;
         }
     }
@@ -292,6 +262,6 @@ class StatsSection
 {
     public string Title { get; set; }
     public bool Enabled { get; set; } = true;
-    public List<string> Lines { get; set; } = new List<string>();
+    public List<string> Lines { get; set; } = new();
     public Color TitleColor { get; set; } = Color.LightGreen;
 }
