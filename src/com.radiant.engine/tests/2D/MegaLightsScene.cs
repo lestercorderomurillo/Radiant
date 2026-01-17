@@ -17,9 +17,11 @@ public class MegaLightsScene : Scene
     private Vector2 screenCenter; // Center point for rotation
     private float boxRadius = 300; // Radius of the ring
     private Random random = new Random(); // Random number generator for occluder placement
+    private bool isMoving = false; // Toggle for box movement
+    private KeyboardState previousKeyboardState; // Track keyboard state for toggle
 
     // Personalizable sizes
-    private float boxSize = 60; // Size for rotating light boxes
+    private float boxSize = 75; // Size for rotating light boxes
     private float occluderSize = 75; // Size for occluders
     private float centerExclusionRadius = 400; // Radius around center to keep clear of occluders
 
@@ -29,7 +31,7 @@ public class MegaLightsScene : Scene
         ECS.AddSystem<PerformanceMonitor>();
         ECS.AddSystem<GizmosRenderer>();
         ECS.AddSystem<SceneGeometry>();
-        ECS.AddSystem<RCGI>();
+        ECS.AddSystem<HolographicRC>();
 
         base.SetupECS();
     }
@@ -166,8 +168,19 @@ public class MegaLightsScene : Scene
 
     public override void Update()
     {
-        // Update rotation angle
-        currentRotation += rotationSpeed * DeltaTime;
+        // Check for Space key to toggle movement
+        KeyboardState currentKeyboardState = Keyboard.GetState();
+        if (currentKeyboardState.IsKeyDown(Keys.Space) && previousKeyboardState.IsKeyUp(Keys.Space))
+        {
+            isMoving = !isMoving;
+        }
+        previousKeyboardState = currentKeyboardState;
+
+        // Update rotation angle only if moving
+        if (isMoving)
+        {
+            currentRotation += rotationSpeed * DeltaTime;
+        }
 
         // Update box positions
         for (int i = 0; i < boxEntityIds.Length; i++)

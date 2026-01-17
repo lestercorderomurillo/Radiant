@@ -1,24 +1,22 @@
-/*
-	Merging in HRC does not work like merging in Vanilla RC.
-	We have two different merging strategies, one for even-index planes and one for odd-index planes.
-	Ray-Endpoints of odd-planes perfectly align with Ray-Startpoints of the nearest cN+1 plane.
-	However this is not the case for even planes, so we must compute the merging at the closest near
-	and far planes, compute merge results for both, then interpolate their fluence to get the
-	final merge result for the non-existent plane that even-planes need to merge with.
+/* HRC_MergingCones.fx - MRT Output
+   Matches GLSL reference implementation EXACTLY.
 
-	The general case merging strategy is that we must compute this current cone of cN by sampling
-	the rays at the cone's left/right edges and merging each ray with its respective cN+1 cone.
-	We then add the merge result of both the merged left/right rays to compute the cone's fluence.
-
-	PACKED FORMAT: RGB = radiance, A = transmittance (grayscale)
+   Key insight from GLSL:
+   - getVolume for prev uses interval=1.0, lookupWidth=1.0 (direct sample)
+   - Cone weighting using atan for angular coverage
+   - Even planes: extend ray THEN merge with interpolated prev
+   - Odd planes: direct merge with cone weighting
 */
 
-// t0/s0 reserved for MonoGame SpriteBatch
-Texture2D VraysCascade : register(t1);
-Texture2D PrevMerge : register(t2);
+Texture2D VraysRadiance : register(t1);
+Texture2D VraysTransmit : register(t2);
+Texture2D PrevRadiance : register(t3);
+Texture2D PrevTransmit : register(t4);
 
-SamplerState SamplerVrays : register(s1);
-SamplerState SamplerPrev : register(s2);
+SamplerState SamplerVraysR : register(s1);
+SamplerState SamplerVraysT : register(s2);
+SamplerState SamplerPrevR : register(s3);
+SamplerState SamplerPrevT : register(s4);
 
 float2 VraysSize;
 float2 PrevSize;
@@ -32,141 +30,124 @@ struct PixelShaderInput
     float2 UV       : TEXCOORD0;
 };
 
-// Merges packed near and far: RGB = radiance, A = transmittance
-float4 MergePacked(float4 near, float4 far)
+struct PixelShaderOutput
 {
-    float3 radiance = near.rgb + (far.rgb * near.a);
-    float transmit = near.a * far.a;
-    return float4(radiance, transmit);
+    float4 Radiance : COLOR0;
+    float4 Transmit : COLOR1;
+};
+
+void MergeRadiance(float4 nearR, float4 nearT, float4 farR, float4 farT,
+                   out float4 radiance, out float4 transmit)
+{
+    radiance = nearR + (farR * nearT);
+    transmit = nearT * farT;
 }
 
-// Samples packed radiance+transmit from Vrays texture
-// probe is in pixel coordinates, converts to normalized UV for sampling
-float4 GetVraysVolume(float2 probe, float index, float interval, float lookupWidth)
+// Generic volume lookup matching GLSL reference exactly
+void GetVolume(float2 probe, float index, float interval, float lookupWidth,
+               float2 resolution, Texture2D txtR, SamplerState sampR,
+               Texture2D txtT, SamplerState sampT,
+               float4 defValR, float4 defValT,
+               out float4 rad, out float4 trn)
 {
-    // Convert probe position to texel coordinate in Vrays texture
-    float planeIndex = floor(probe.x / interval);
-    float2 samplePos = float2(planeIndex * lookupWidth + index + 0.5, probe.y + 0.5);
+    float2 samplePos = float2(floor(probe.x / interval) * lookupWidth, probe.y) + float2(0.5, 0.0);
+    samplePos = float2(samplePos.x + index, samplePos.y) / resolution;
 
-    // Convert to normalized UV coordinates
-    float2 uv = samplePos / VraysSize;
+    // GLSL: float weight = float(floor(samplePos) != vec2(0.0));
+    // This is bounds check - if outside [0,1] use default
+    float weight = (samplePos.x < 0.0 || samplePos.x > 1.0 ||
+                    samplePos.y < 0.0 || samplePos.y > 1.0) ? 1.0 : 0.0;
 
-    // Bounds check - return transparent black if out of bounds
-    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)
-        return float4(0.0, 0.0, 0.0, 1.0);
-
-    return VraysCascade.Sample(SamplerVrays, uv);
+    rad = lerp(txtR.Sample(sampR, samplePos), defValR, weight);
+    trn = lerp(txtT.Sample(sampT, samplePos), defValT, weight);
 }
 
-// Samples packed radiance+transmit from Prev (merged) texture
-// probe is in pixel coordinates, converts to normalized UV for sampling
-float4 GetPrevVolume(float2 probe, float index, float interval, float lookupWidth)
+void MergeCone(float2 probe, float plane, float intrv, float vrays, float index, float side,
+               out float4 radiance, out float4 transmit)
 {
-    // Convert probe position to texel coordinate in Prev texture
-    float planeIndex = floor(probe.x / interval);
-    float2 samplePos = float2(planeIndex * lookupWidth + index + 0.5, probe.y + 0.5);
+    float coneI = index * 2.0 + side;
+    float vrayI = index + side;
+    float2 limit = float2(intrv, -intrv);
+    float align = 2.0 - fmod(plane, 2.0);
 
-    // Convert to normalized UV coordinates
-    float2 uv = samplePos / PrevSize;
+    float2 merge = probe + align * (limit + float2(0.0, vrayI * 2.0));
 
-    // Bounds check - return transparent black if out of bounds
-    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)
-        return float4(0.0, 0.0, 0.0, 1.0);
+    // Cone angle weighting (matches GLSL reference)
+    float2 vrayLL = (limit * 2.0) + float2(0.0, coneI * 2.0);
+    float2 vrayRR = (limit * 2.0) + float2(0.0, (coneI + 1.0) * 2.0);
+    float coneW = atan2(vrayRR.y, vrayRR.x) - atan2(vrayLL.y, vrayLL.x);
 
-    return PrevMerge.Sample(SamplerPrev, uv);
-}
+    float4 vrayR, vrayT, coneFarR, coneFarT;
 
-// Merges a single cone (left or right side) by sampling rays and combining with previous cascade
-// Returns packed float4: RGB = radiance, A = transmittance
-// side: 0.0 = left cone edge, 1.0 = right cone edge
-float4 MergeCone(float2 probe, float plane, float intrv, float vrays, float index, float side)
-{
-    // In HRC, cones are formed by pairs of rays
-    // For cascade N, each cone samples 2 rays from cascade N's Vrays
-    // and merges with the corresponding cone from the previous merged cascade
-    float vrayIndex = index + side;
+    // Sample from vrays with full lookup
+    GetVolume(probe, vrayI, intrv, vrays, VraysSize,
+              VraysRadiance, SamplerVraysR, VraysTransmit, SamplerVraysT,
+              float4(0.0, 0.0, 0.0, 0.0), float4(1.0, 1.0, 1.0, 1.0),
+              vrayR, vrayT);
 
-    // Compute the cone index for the previous merge level
-    // Each cone in the current level maps to 2 cones in the next level
-    float prevConeIndex = index * 2.0 + side;
+    // Sample from prev with interval=1.0, lookupWidth=1.0 (direct sample)
+    GetVolume(merge, coneI, 1.0, 1.0, PrevSize,
+              PrevRadiance, SamplerPrevR, PrevTransmit, SamplerPrevT,
+              float4(0.0, 0.0, 0.0, 0.0), float4(1.0, 1.0, 1.0, 1.0),
+              coneFarR, coneFarT);
 
-    // Sample the current cascade's ray
-    float4 vray = GetVraysVolume(probe, vrayIndex, intrv, vrays);
-
-    // Determine alignment offset based on even/odd plane
-    // Odd planes: ray endpoints align with next cascade's ray origins
-    // Even planes: need interpolation between near/far planes
-    float isEven = 1.0 - fmod(plane, 2.0);
-
-    // Compute merge position for sampling previous cascade
-    // For odd planes: offset by full interval
-    // For even planes: offset by half interval (interpolate)
-    float alignmentFactor = isEven == 1.0 ? 1.0 : 2.0;
-    float2 mergeOffset = float2(intrv * alignmentFactor, vrayIndex * 2.0 - intrv);
-    float2 mergeProbe = probe + mergeOffset;
-
-    // Previous cascade parameters (one level coarser)
-    float prevInterval = intrv * 2.0;
-    float prevVrays = prevInterval + 1.0;
-
-    // Sample the previously merged cascade at the cone position
-    float4 prevCone = GetPrevVolume(mergeProbe, prevConeIndex, prevInterval, prevVrays);
-
-    if (isEven == 1.0)
+    if (fmod(plane, 2.0) < 0.5)
     {
-        // Even planes: interpolate between near and far merge points
-        float2 nearProbe = probe;
-        float2 farProbe = probe + float2(intrv * 2.0, vrayIndex * 2.0 - intrv);
+        // EVEN PLANE: extend ray, then merge with interpolated prev
+        float2 probeFar = probe + (limit + float2(0.0, vrayI * 2.0));
+        float2 probeNear = probe;
 
-        float4 nearCone = GetPrevVolume(nearProbe, prevConeIndex, prevInterval, prevVrays);
-        float4 farCone = GetPrevVolume(farProbe, prevConeIndex, prevInterval, prevVrays);
+        float4 vrayR_Ext, vrayT_Ext, coneNearR, coneNearT;
 
-        // Merge ray with interpolated cone using standard radiance cascade merge
-        float4 interpCone = lerp(nearCone, farCone, 0.5);
-        return MergePacked(vray, interpCone);
+        GetVolume(probeFar, vrayI, intrv, vrays, VraysSize,
+                  VraysRadiance, SamplerVraysR, VraysTransmit, SamplerVraysT,
+                  float4(0.0, 0.0, 0.0, 0.0), float4(1.0, 1.0, 1.0, 1.0),
+                  vrayR_Ext, vrayT_Ext);
+
+        GetVolume(probeNear, coneI, 1.0, 1.0, PrevSize,
+                  PrevRadiance, SamplerPrevR, PrevTransmit, SamplerPrevT,
+                  float4(0.0, 0.0, 0.0, 0.0), float4(1.0, 1.0, 1.0, 1.0),
+                  coneNearR, coneNearT);
+
+        // Extend the ray first
+        MergeRadiance(vrayR, vrayT, vrayR_Ext, vrayT_Ext, vrayR, vrayT);
+
+        // Merge with far cone (with cone weighting)
+        MergeRadiance(vrayR * coneW, vrayT, coneFarR, coneFarT, radiance, transmit);
+
+        // Interpolate with near cone
+        radiance = lerp(radiance, coneNearR, 0.5);
+        transmit = lerp(transmit, coneNearT, 0.5);
     }
     else
     {
-        // Odd planes: direct merge with aligned cascade
-        return MergePacked(vray, prevCone);
+        // ODD PLANE: direct merge with cone weighting
+        radiance = (vrayR * coneW) + (coneFarR * vrayT);
+        transmit = vrayT * coneFarT;
     }
 }
 
-// Main pixel shader - merges cones from current cascade with previous cascade
-// Single render target: RGB = radiance, A = transmittance
-float4 MainPS(PixelShaderInput input) : SV_Target0
+PixelShaderOutput MainPS(PixelShaderInput input)
 {
-    // Convert UV to texel coordinates in the merge output texture
+    PixelShaderOutput output;
+
     float2 texel = input.UV * CascadeSize;
+    float intrv = pow(2.0, CascadeIndex.x);
+    float vrays = intrv + 1.0;
+    float plane = floor(texel.x / intrv);
+    float index = floor(texel.x - (plane * intrv));
+    float2 probe = float2(plane * intrv, texel.y) + float2(0.5, 0.0);
 
-    // Compute cascade parameters
-    float cascadeIdx = CascadeIndex.x;
-    float interval = pow(2.0, cascadeIdx);
-    float virtualRays = interval + 1.0;
+    float4 radL, radR, trnL, trnR;
+    MergeCone(probe, plane, intrv, vrays, index, 0.0, radL, trnL);
+    MergeCone(probe, plane, intrv, vrays, index, 1.0, radR, trnR);
 
-    // Determine which probe plane and cone index we're computing
-    float plane = floor(texel.x / interval);
-    float coneIndex = floor(texel.x - (plane * interval));
-
-    // Probe position in world/pixel space
-    float2 probe = float2(plane * interval + 0.5, texel.y);
-
-    // Merge left cone (side = 0.0) and right cone (side = 1.0)
-    float4 leftCone = MergeCone(probe, plane, interval, virtualRays, coneIndex, 0.0);
-    float4 rightCone = MergeCone(probe, plane, interval, virtualRays, coneIndex, 1.0);
-
-    // Combine left and right cone contributions
-    // Sum radiance, multiply transmittance
-    float3 totalRadiance = leftCone.rgb + rightCone.rgb;
-    float totalTransmit = leftCone.a * rightCone.a;
-
-    return float4(totalRadiance, totalTransmit);
+    output.Radiance = radL + radR;
+    output.Transmit = trnL + trnR;
+    return output;
 }
 
 technique GenerateOutputTexture
 {
-    pass P0
-    {
-        PixelShader = compile ps_5_0 MainPS();
-    }
+    pass P0 { PixelShader = compile ps_5_0 MainPS(); }
 }

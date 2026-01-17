@@ -1,23 +1,12 @@
-/*
-	For each ray of cN compute the ray-extension from 4 smaller left and right rays of cN-1.
+/* HRC_Extensions.fx - MRT Output
+   Matches GLSL reference implementation EXACTLY.
+   Ray extension combines chained rays from cN-1 to form rays of cN */
 
-		R /\ L
-		L \/ R
+Texture2D PrevRadiance : register(t1);
+Texture2D PrevTransmit : register(t2);
 
-	Two rays of cN-1 diverge and then converge when their directions are swapped.
-	For the left ray extent the L -> R ray(s) indices at the near/far planes.
-	For the right ray extent the R -> L ray(s) indices at the near/far planes.
-	Interpolate the final result to converge back to the extended cN ray direction.
-
-	Even ray indices will have the same left/right ray indices as their directions
-	in cN will be the same as the lower cascade cN-1.
-
-	PACKED FORMAT: RGB = radiance, A = transmittance (grayscale)
-*/
-
-// t0/s0 reserved for MonoGame SpriteBatch
-Texture2D PrevCascade : register(t1);
-SamplerState SamplerPrev : register(s1);
+SamplerState SamplerPrevR : register(s1);
+SamplerState SamplerPrevT : register(s2);
 
 float2 PrevSize;
 float2 CascadeSize;
@@ -30,65 +19,84 @@ struct PixelShaderInput
     float2 UV       : TEXCOORD0;
 };
 
-// Merges packed radiance+transmit from near and far volumes
-// RGB = radiance, A = transmittance
-float4 MergePacked(float4 near, float4 far)
+struct PixelShaderOutput
 {
-    float3 radiance = near.rgb + (far.rgb * near.a);
-    float transmit = near.a * far.a;
-    return float4(radiance, transmit);
+    float4 Radiance : COLOR0;
+    float4 Transmit : COLOR1;
+};
+
+void MergeRadiance(float4 nearR, float4 nearT, float4 farR, float4 farT,
+                   out float4 radiance, out float4 transmit)
+{
+    radiance = nearR + (farR * nearT);
+    transmit = nearT * farT;
 }
 
-// Samples packed radiance+transmit from texture at a specific volume position
-float4 GetVolume(float2 probe, float index, float interval, float lookupWidth)
+void GetVolume(float2 probe, float index, float interval, float lookupWidth,
+               float2 resolution, Texture2D txtR, SamplerState sampR,
+               Texture2D txtT, SamplerState sampT,
+               float4 defValR, float4 defValT,
+               out float4 rad, out float4 trn)
 {
     float2 samplePos = float2(floor(probe.x / interval) * lookupWidth, probe.y) + float2(0.5, 0.0);
-    samplePos = float2(samplePos.x + index, samplePos.y) / PrevSize;
+    samplePos = float2(samplePos.x + index, samplePos.y) / resolution;
 
-    // Clamp to valid UV range and sample
-    samplePos = saturate(samplePos);
-    return PrevCascade.Sample(SamplerPrev, samplePos);
+    // GLSL: float weight = float(floor(samplePos) != vec2(0.0));
+    float weight = (samplePos.x < 0.0 || samplePos.x > 1.0 ||
+                    samplePos.y < 0.0 || samplePos.y > 1.0) ? 1.0 : 0.0;
+
+    rad = lerp(txtR.Sample(sampR, samplePos), defValR, weight);
+    trn = lerp(txtT.Sample(sampT, samplePos), defValT, weight);
 }
 
-// Extends a ray by merging two rays from the previous cascade level
-float4 ExtendRay(float2 probe, float lowerIndex, float higherIndex,
-                 float previousInterval, float previousVirtualRays)
+void ExtendRay(float2 probe, float lo_index, float hi_index,
+               float prev_intrv, float prev_vrays,
+               out float4 radiance, out float4 transmit)
 {
-    float2 mergePosition = probe + float2(previousInterval, -previousInterval + (lowerIndex * 2.0));
+    float2 merge = probe + float2(prev_intrv, -prev_intrv + (lo_index * 2.0));
 
-    float4 near = GetVolume(probe, lowerIndex, previousInterval, previousVirtualRays);
-    float4 far = GetVolume(mergePosition, higherIndex, previousInterval, previousVirtualRays);
+    float4 radiance_near, transmit_near, radiance_far, transmit_far;
 
-    return MergePacked(near, far);
+    GetVolume(probe, lo_index, prev_intrv, prev_vrays, PrevSize,
+              PrevRadiance, SamplerPrevR, PrevTransmit, SamplerPrevT,
+              float4(0.0, 0.0, 0.0, 0.0), float4(1.0, 1.0, 1.0, 1.0),
+              radiance_near, transmit_near);
+
+    GetVolume(merge, hi_index, prev_intrv, prev_vrays, PrevSize,
+              PrevRadiance, SamplerPrevR, PrevTransmit, SamplerPrevT,
+              float4(0.0, 0.0, 0.0, 0.0), float4(1.0, 1.0, 1.0, 1.0),
+              radiance_far, transmit_far);
+
+    MergeRadiance(radiance_near, transmit_near, radiance_far, transmit_far, radiance, transmit);
 }
 
-// Main pixel shader - computes cascaded volumetric light propagation
-// Single render target: RGB = radiance, A = transmittance
-float4 MainPS(PixelShaderInput input) : SV_Target0
+PixelShaderOutput MainPS(PixelShaderInput input)
 {
+    PixelShaderOutput output;
+
     float2 texel = input.UV * CascadeSize;
-    float interval = pow(2.0, CascadeIndex.x);
-    float virtualRays = interval + 1.0;
-    float plane = floor(texel.x / virtualRays);
-    float index = floor(texel.x - (plane * virtualRays));
-    float2 probe = float2(plane * interval, texel.y) + float2(0.5, 0.0);
+    float intrv = pow(2.0, CascadeIndex.x);
+    float vrays = intrv + 1.0;
+    float plane = floor(texel.x / vrays);
+    float index = floor(texel.x - (plane * vrays));
+    float2 probe = float2(plane * intrv, texel.y) + float2(0.5, 0.0);
 
-    float previousInterval = pow(2.0, CascadeIndex.x - 1.0);
-    float previousVirtualRays = previousInterval + 1.0;
+    float prev_intrv = pow(2.0, CascadeIndex.x - 1.0);
+    float prev_vrays = prev_intrv + 1.0;
 
-    float lowerIndex = floor(index * 0.5);
-    float upperIndex = ceil(index * 0.5);
+    float lower = floor(index * 0.5);
+    float upper = ceil(index * 0.5);
 
-    float4 left = ExtendRay(probe, lowerIndex, upperIndex, previousInterval, previousVirtualRays);
-    float4 right = ExtendRay(probe, upperIndex, lowerIndex, previousInterval, previousVirtualRays);
+    float4 radianceL, radianceU, transmitL, transmitU;
+    ExtendRay(probe, lower, upper, prev_intrv, prev_vrays, radianceL, transmitL);
+    ExtendRay(probe, upper, lower, prev_intrv, prev_vrays, radianceU, transmitU);
 
-    return lerp(left, right, 0.5);
+    output.Radiance = lerp(radianceL, radianceU, 0.5);
+    output.Transmit = lerp(transmitL, transmitU, 0.5);
+    return output;
 }
 
 technique GenerateOutputTexture
 {
-    pass P0
-    {
-        PixelShader = compile ps_5_0 MainPS();
-    }
+    pass P0 { PixelShader = compile ps_5_0 MainPS(); }
 }

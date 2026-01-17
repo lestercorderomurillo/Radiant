@@ -6,29 +6,40 @@ using Microsoft.Xna.Framework.Input;
 
 namespace com.radiant.engine.bundle;
 
+/// <summary>
+/// Holographic Radiance Cascades - 2D Global Illumination System
+/// Based on the paper by Rouli Freeman (arXiv:2505.02041)
+///
+/// Uses MRT (Multiple Render Targets) for single-pass radiance+transmittance output.
+/// </summary>
 public class HolographicRC : core.System
 {
     private const int FrustumCount = 4;
-    private const int CascadeCount = 4;
+    private const int CascadeCount = 6;
 
     private SceneGeometry SDFSystem;
     private GizmosRenderer Gizmos;
+
     private Effect FrustumSeedShader;
     private Effect ExtensionsShader;
     private Effect MergingConesShader;
     private Effect FluenceSumShader;
+
     private SpriteBatch ShaderBatch;
     private Texture2D PixelTexture;
 
-    // Vrays buffers: store ray extensions per frustum per cascade
-    // Packed format: RGB = radiance, A = transmittance
-    private RenderTarget2D[,] Vrays;
+    private Texture2D BlackTexture;
+    private Texture2D WhiteTexture;
 
-    // Merge buffers: store merged cone results per frustum per cascade
-    // Packed format: RGB = radiance, A = transmittance
-    private RenderTarget2D[,] Merge;
+    // Dual textures: [frustum, cascade]
+    private RenderTarget2D[,] VraysRadiance;
+    private RenderTarget2D[,] VraysTransmit;
+    private RenderTarget2D[,] MergeRadiance;
+    private RenderTarget2D[,] MergeTransmit;
 
-    // Per-frustum resolved output and final composited result
+    // MRT binding arrays (reusable to avoid GC)
+    private RenderTargetBinding[] MRT2;
+
     private RenderTarget2D[] FrustumOutput;
     private RenderTarget2D FinalTexture;
 
@@ -50,10 +61,21 @@ public class HolographicRC : core.System
         ExtensionsShader = Renderer.GetShaderEffect("HRC/HRC_Extensions");
         MergingConesShader = Renderer.GetShaderEffect("HRC/HRC_MergingCones");
         FluenceSumShader = Renderer.GetShaderEffect("HRC/HRC_FluenceSum");
+
         ShaderBatch = Renderer.SpriteBatch;
         PixelTexture = Renderer.PixelTexture;
 
-        WorldSize = new Vector2(Renderer.Device.Viewport.Width, Renderer.Device.Viewport.Height);
+        BlackTexture = new Texture2D(Renderer.Device, 1, 1);
+        BlackTexture.SetData(new[] { Color.Black });
+
+        WhiteTexture = new Texture2D(Renderer.Device, 1, 1);
+        WhiteTexture.SetData(new[] { Color.White });
+
+        // MRT binding array
+        MRT2 = new RenderTargetBinding[2];
+
+        var device = Renderer.Device;
+        WorldSize = new Vector2(device.Viewport.Width, device.Viewport.Height);
 
         CalculateCascadeSizes();
         CreateRenderTargets();
@@ -72,12 +94,9 @@ public class HolographicRC : core.System
         {
             float interval = MathF.Pow(2, c);
             float virtualRays = interval + 1;
-            int numProbes = (int)MathF.Floor(WorldSize.X / interval);
+            int numProbes = (int)MathF.Ceiling(WorldSize.X / interval);
 
-            // Vrays size: numProbes * virtualRays wide
             CascadeSizes[c] = new Vector2(numProbes * virtualRays, WorldSize.Y);
-
-            // Merge size: numProbes * interval wide (cones, not rays)
             MergeSizes[c] = new Vector2(numProbes * interval, WorldSize.Y);
         }
     }
@@ -85,83 +104,59 @@ public class HolographicRC : core.System
     private void CreateRenderTargets()
     {
         var device = Renderer.Device;
-        // Use HalfVector4 for sufficient bit-depth in radiance cascade math
-        // Standard Color (RGBA8) lacks precision and causes heavy banding
         var format = SurfaceFormat.HalfVector4;
 
-        Vrays = new RenderTarget2D[FrustumCount, CascadeCount];
-        Merge = new RenderTarget2D[FrustumCount, CascadeCount];
+        VraysRadiance = new RenderTarget2D[FrustumCount, CascadeCount];
+        VraysTransmit = new RenderTarget2D[FrustumCount, CascadeCount];
+        MergeRadiance = new RenderTarget2D[FrustumCount, CascadeCount];
+        MergeTransmit = new RenderTarget2D[FrustumCount, CascadeCount];
         FrustumOutput = new RenderTarget2D[FrustumCount];
 
         for (int f = 0; f < FrustumCount; f++)
         {
             for (int c = 0; c < CascadeCount; c++)
             {
-                int vw = (int)CascadeSizes[c].X;
-                int vh = (int)CascadeSizes[c].Y;
-                Vrays[f, c] = new RenderTarget2D(device, vw, vh, false, format, DepthFormat.None);
-
-                int mw = (int)MergeSizes[c].X;
-                int mh = (int)MergeSizes[c].Y;
-                Merge[f, c] = new RenderTarget2D(device, mw, mh, false, format, DepthFormat.None);
+                VraysRadiance[f, c] = new RenderTarget2D(device, (int)CascadeSizes[c].X, (int)CascadeSizes[c].Y, false, format, DepthFormat.None);
+                VraysTransmit[f, c] = new RenderTarget2D(device, (int)CascadeSizes[c].X, (int)CascadeSizes[c].Y, false, format, DepthFormat.None);
+                MergeRadiance[f, c] = new RenderTarget2D(device, (int)MergeSizes[c].X, (int)MergeSizes[c].Y, false, format, DepthFormat.None);
+                MergeTransmit[f, c] = new RenderTarget2D(device, (int)MergeSizes[c].X, (int)MergeSizes[c].Y, false, format, DepthFormat.None);
             }
             FrustumOutput[f] = new RenderTarget2D(device, (int)WorldSize.X, (int)WorldSize.Y, false, format, DepthFormat.None);
         }
         FinalTexture = new RenderTarget2D(device, (int)WorldSize.X, (int)WorldSize.Y, false, format, DepthFormat.None);
     }
 
-    private void BuildDebugNames()
-    {
-        var names = new System.Collections.Generic.List<string> { "Final" };
-        // C0 first for all frustums, then C1, etc.
-        for (int c = 0; c < CascadeCount; c++)
-            for (int f = 0; f < FrustumCount; f++)
-                names.Add($"Vrays F{f}C{c}");
-        for (int c = 0; c < CascadeCount; c++)
-            for (int f = 0; f < FrustumCount; f++)
-                names.Add($"Merge F{f}C{c}");
-        for (int f = 0; f < FrustumCount; f++) names.Add($"Frustum{f}");
-        names.Add("Emissive");
-        names.Add("Absorption");
-        DebugNames = names.ToArray();
-    }
-
     public override void Update()
     {
-        var keyboard = Keyboard.GetState();
-        if (keyboard.IsKeyDown(Keys.F3) && !PrevKeyState.IsKeyDown(Keys.F3))
-            DebugIndex = (DebugIndex + 1) % DebugNames.Length;
-        PrevKeyState = keyboard;
+        HandleDebugInput();
 
         var emissive = SDFSystem.GetEmissiveTexture();
         var absorption = SDFSystem.GetAbsorptionTexture();
+        var device = Renderer.Device;
+
+        var originalTargets = device.GetRenderTargets();
 
         for (int f = 0; f < FrustumCount; f++)
         {
-            // Step 1: Seed cascade 0 with FrustumSeed shader
             RenderFrustumSeed(f, emissive, absorption);
 
-            // Step 2: Extend rays for cascades 1 to N-1
             for (int c = 1; c < CascadeCount; c++)
             {
                 RenderExtensions(f, c);
             }
 
-            // Step 3: Merge cones from cascade N-1 down to 0
             for (int c = CascadeCount - 1; c >= 0; c--)
             {
                 RenderMerging(f, c);
             }
-
-            // Step 4: Copy merge result of cascade 0 to frustum output
-            CopyTexture(Merge[f, 0], FrustumOutput[f]);
+            // MergeRadiance[f, 0] is passed directly to FluenceSum - no copy needed
         }
 
-        // Step 5: Sum all 4 frustums
         Compose();
+        device.SetRenderTargets(originalTargets);
 
         Gizmos.ClearSection("HRC");
-        Gizmos.AddSectionString("HRC", $"{DebugNames[DebugIndex]} (F3)");
+        Gizmos.AddSectionString("HRC", $"Debug: {DebugNames[DebugIndex]} (F3)");
     }
 
     private void RenderFrustumSeed(int frustum, Texture2D emissive, Texture2D absorption)
@@ -169,34 +164,23 @@ public class HolographicRC : core.System
         var device = Renderer.Device;
         var size = CascadeSizes[0];
 
-        device.SetRenderTarget(Vrays[frustum, 0]);
+        // Set MRT: COLOR0 = Radiance, COLOR1 = Transmit
+        MRT2[0] = VraysRadiance[frustum, 0];
+        MRT2[1] = VraysTransmit[frustum, 0];
+        device.SetRenderTargets(MRT2);
         device.Clear(Color.Black);
 
-        device.BlendState = BlendState.Opaque;
-        device.DepthStencilState = DepthStencilState.None;
-        device.RasterizerState = RasterizerState.CullNone;
+        FrustumSeedShader.Parameters["Emissivity"]?.SetValue(emissive);
+        FrustumSeedShader.Parameters["Absorption"]?.SetValue(absorption);
+        FrustumSeedShader.Parameters["WorldSize"]?.SetValue(WorldSize);
+        FrustumSeedShader.Parameters["CascadeSize"]?.SetValue(size);
+        FrustumSeedShader.Parameters["FrustumIndex"]?.SetValue((float)frustum);
 
-        device.Textures[1] = emissive;
-        device.Textures[2] = absorption;
-        // Use PointClamp to prevent light leaking between angular probes
-        device.SamplerStates[0] = SamplerState.PointClamp;
+        ShaderBatch.Begin(SpriteSortMode.Immediate, BlendState.Opaque, SamplerState.PointClamp, null, null, FrustumSeedShader);
         device.SamplerStates[1] = SamplerState.PointClamp;
         device.SamplerStates[2] = SamplerState.PointClamp;
-
-        Renderer.SetParameter(FrustumSeedShader, "Emissivity", emissive);
-        Renderer.SetParameter(FrustumSeedShader, "Absorption", absorption);
-        Renderer.SetParameter(FrustumSeedShader, "WorldSize", WorldSize);
-        Renderer.SetParameter(FrustumSeedShader, "CascadeSize", size);
-        Renderer.SetParameter(FrustumSeedShader, "FrustumIndex", (float)frustum);
-
-        FrustumSeedShader.CurrentTechnique = FrustumSeedShader.Techniques["GenerateOutputTexture"];
-        ShaderBatch.Begin(SpriteSortMode.Immediate, BlendState.Opaque, SamplerState.PointClamp, null, null, FrustumSeedShader);
         ShaderBatch.Draw(PixelTexture, new Rectangle(0, 0, (int)size.X, (int)size.Y), Color.White);
         ShaderBatch.End();
-
-        device.SetRenderTarget(null);
-        device.Textures[1] = null;
-        device.Textures[2] = null;
     }
 
     private void RenderExtensions(int frustum, int cascade)
@@ -205,69 +189,81 @@ public class HolographicRC : core.System
         var size = CascadeSizes[cascade];
         var prevSize = CascadeSizes[cascade - 1];
 
-        device.SetRenderTarget(Vrays[frustum, cascade]);
-        device.Clear(Color.Transparent);
+        // Set MRT
+        MRT2[0] = VraysRadiance[frustum, cascade];
+        MRT2[1] = VraysTransmit[frustum, cascade];
+        device.SetRenderTargets(MRT2);
+        device.Clear(Color.Black);
 
-        device.BlendState = BlendState.Opaque;
-        device.DepthStencilState = DepthStencilState.None;
-        device.RasterizerState = RasterizerState.CullNone;
-
-        // Use PointClamp to prevent light leaking between angular probes
-        device.SamplerStates[1] = SamplerState.PointClamp;
-
-        // Set parameters before Begin
         ExtensionsShader.Parameters["PrevSize"]?.SetValue(prevSize);
         ExtensionsShader.Parameters["CascadeSize"]?.SetValue(size);
         ExtensionsShader.Parameters["CascadeIndex"]?.SetValue(new Vector2(cascade, CascadeCount));
-        ExtensionsShader.Parameters["PrevCascade"]?.SetValue(Vrays[frustum, cascade - 1]);
+        ExtensionsShader.Parameters["PrevRadiance"]?.SetValue(VraysRadiance[frustum, cascade - 1]);
+        ExtensionsShader.Parameters["PrevTransmit"]?.SetValue(VraysTransmit[frustum, cascade - 1]);
 
-        ExtensionsShader.CurrentTechnique = ExtensionsShader.Techniques["GenerateOutputTexture"];
         ShaderBatch.Begin(SpriteSortMode.Immediate, BlendState.Opaque, SamplerState.PointClamp, null, null, ExtensionsShader);
+        device.SamplerStates[1] = SamplerState.PointClamp;
+        device.SamplerStates[2] = SamplerState.PointClamp;
         ShaderBatch.Draw(PixelTexture, new Rectangle(0, 0, (int)size.X, (int)size.Y), Color.White);
         ShaderBatch.End();
-
-        device.SetRenderTarget(null);
-        device.Textures[1] = null;
     }
 
     private void RenderMerging(int frustum, int cascade)
     {
         var device = Renderer.Device;
-        var vraysSize = CascadeSizes[cascade];
         var mergeSize = MergeSizes[cascade];
+        var vraysSize = CascadeSizes[cascade];
 
-        // For cascade N-1 (highest), there's no "previous" merge, use empty/default
-        // For lower cascades, use the merged result from cascade+1
-        int nextCascade = (cascade + 1) % CascadeCount;
-        var prevMergeSize = MergeSizes[nextCascade];
+        int nextCascade = cascade + 1;
 
-        device.SetRenderTarget(Merge[frustum, cascade]);
-        device.Clear(Color.Transparent);
+        Texture2D prevMergeR = (nextCascade < CascadeCount) ? MergeRadiance[frustum, nextCascade] : BlackTexture;
+        Texture2D prevMergeT = (nextCascade < CascadeCount) ? MergeTransmit[frustum, nextCascade] : WhiteTexture;
+        Vector2 prevMergeSize = (nextCascade < CascadeCount) ? MergeSizes[nextCascade] : Vector2.One;
 
-        device.BlendState = BlendState.Opaque;
-        device.DepthStencilState = DepthStencilState.None;
-        device.RasterizerState = RasterizerState.CullNone;
+        // Set MRT
+        MRT2[0] = MergeRadiance[frustum, cascade];
+        MRT2[1] = MergeTransmit[frustum, cascade];
+        device.SetRenderTargets(MRT2);
+        device.Clear(Color.Black);
 
-        // Use PointClamp to prevent light leaking between angular probes
-        device.SamplerStates[1] = SamplerState.PointClamp;
-        device.SamplerStates[2] = SamplerState.PointClamp;
-
-        // Set parameters via shader - same pattern that works for Extensions
-        MergingConesShader.Parameters["VraysCascade"]?.SetValue(Vrays[frustum, cascade]);
-        MergingConesShader.Parameters["PrevMerge"]?.SetValue(Merge[frustum, nextCascade]);
+        MergingConesShader.Parameters["VraysRadiance"]?.SetValue(VraysRadiance[frustum, cascade]);
+        MergingConesShader.Parameters["VraysTransmit"]?.SetValue(VraysTransmit[frustum, cascade]);
+        MergingConesShader.Parameters["PrevRadiance"]?.SetValue(prevMergeR);
+        MergingConesShader.Parameters["PrevTransmit"]?.SetValue(prevMergeT);
         MergingConesShader.Parameters["VraysSize"]?.SetValue(vraysSize);
         MergingConesShader.Parameters["PrevSize"]?.SetValue(prevMergeSize);
         MergingConesShader.Parameters["CascadeSize"]?.SetValue(mergeSize);
         MergingConesShader.Parameters["CascadeIndex"]?.SetValue(new Vector2(cascade, CascadeCount));
 
-        MergingConesShader.CurrentTechnique = MergingConesShader.Techniques["GenerateOutputTexture"];
         ShaderBatch.Begin(SpriteSortMode.Immediate, BlendState.Opaque, SamplerState.PointClamp, null, null, MergingConesShader);
+        device.SamplerStates[1] = SamplerState.PointClamp;
+        device.SamplerStates[2] = SamplerState.PointClamp;
+        device.SamplerStates[3] = SamplerState.PointClamp;
+        device.SamplerStates[4] = SamplerState.PointClamp;
         ShaderBatch.Draw(PixelTexture, new Rectangle(0, 0, (int)mergeSize.X, (int)mergeSize.Y), Color.White);
         ShaderBatch.End();
+    }
 
-        device.SetRenderTarget(null);
-        device.Textures[1] = null;
-        device.Textures[2] = null;
+    private void Compose()
+    {
+        var device = Renderer.Device;
+        device.SetRenderTarget(FinalTexture);
+        device.Clear(Color.Black);
+
+        // Pass MergeRadiance[f, 0] directly - skip FrustumOutput intermediate
+        FluenceSumShader.Parameters["FrustumIndex0"]?.SetValue(MergeRadiance[0, 0]);
+        FluenceSumShader.Parameters["FrustumIndex1"]?.SetValue(MergeRadiance[1, 0]);
+        FluenceSumShader.Parameters["FrustumIndex2"]?.SetValue(MergeRadiance[2, 0]);
+        FluenceSumShader.Parameters["FrustumIndex3"]?.SetValue(MergeRadiance[3, 0]);
+        FluenceSumShader.Parameters["WorldSize"]?.SetValue(WorldSize);
+
+        ShaderBatch.Begin(SpriteSortMode.Immediate, BlendState.Opaque, SamplerState.PointClamp, null, null, FluenceSumShader);
+        device.SamplerStates[1] = SamplerState.PointClamp;
+        device.SamplerStates[2] = SamplerState.PointClamp;
+        device.SamplerStates[3] = SamplerState.PointClamp;
+        device.SamplerStates[4] = SamplerState.PointClamp;
+        ShaderBatch.Draw(PixelTexture, new Rectangle(0, 0, (int)WorldSize.X, (int)WorldSize.Y), Color.White);
+        ShaderBatch.End();
     }
 
     private void CopyTexture(RenderTarget2D source, RenderTarget2D destination)
@@ -278,51 +274,38 @@ public class HolographicRC : core.System
         ShaderBatch.Begin(SpriteSortMode.Immediate, BlendState.Opaque, SamplerState.PointClamp);
         ShaderBatch.Draw(source, new Rectangle(0, 0, destination.Width, destination.Height), Color.White);
         ShaderBatch.End();
-        device.SetRenderTarget(null);
     }
 
-    private void Compose()
+    private void HandleDebugInput()
     {
-        var device = Renderer.Device;
-        device.SetRenderTarget(FinalTexture);
-        device.Clear(Color.Black);
+        var keyboard = Keyboard.GetState();
+        if (keyboard.IsKeyDown(Keys.F3) && !PrevKeyState.IsKeyDown(Keys.F3))
+            DebugIndex = (DebugIndex + 1) % DebugNames.Length;
+        PrevKeyState = keyboard;
+    }
 
-        device.BlendState = BlendState.Opaque;
-        device.DepthStencilState = DepthStencilState.None;
-        device.RasterizerState = RasterizerState.CullNone;
+    private void BuildDebugNames()
+    {
+        var names = new System.Collections.Generic.List<string> { "Final" };
 
-        device.Textures[1] = FrustumOutput[0];
-        device.Textures[2] = FrustumOutput[1];
-        device.Textures[3] = FrustumOutput[2];
-        device.Textures[4] = FrustumOutput[3];
-        // Use PointClamp to prevent light leaking between angular probes
-        device.SamplerStates[0] = SamplerState.PointClamp;
-        device.SamplerStates[1] = SamplerState.PointClamp;
-        device.SamplerStates[2] = SamplerState.PointClamp;
-        device.SamplerStates[3] = SamplerState.PointClamp;
-        device.SamplerStates[4] = SamplerState.PointClamp;
+        for (int f = 0; f < FrustumCount; f++)
+        {
+            for (int c = 0; c < CascadeCount; c++) names.Add($"VraysR F{f} C{c}");
+            for (int c = 0; c < CascadeCount; c++) names.Add($"VraysT F{f} C{c}");
+            for (int c = 0; c < CascadeCount; c++) names.Add($"MergeR F{f} C{c}");
+            for (int c = 0; c < CascadeCount; c++) names.Add($"MergeT F{f} C{c}");
+        }
 
-        Renderer.SetParameter(FluenceSumShader, "FrustumIndex0", FrustumOutput[0]);
-        Renderer.SetParameter(FluenceSumShader, "FrustumIndex1", FrustumOutput[1]);
-        Renderer.SetParameter(FluenceSumShader, "FrustumIndex2", FrustumOutput[2]);
-        Renderer.SetParameter(FluenceSumShader, "FrustumIndex3", FrustumOutput[3]);
-        Renderer.SetParameter(FluenceSumShader, "WorldSize", WorldSize);
-
-        FluenceSumShader.CurrentTechnique = FluenceSumShader.Techniques["GenerateOutputTexture"];
-        ShaderBatch.Begin(SpriteSortMode.Immediate, BlendState.Opaque, SamplerState.PointClamp, null, null, FluenceSumShader);
-        ShaderBatch.Draw(PixelTexture, new Rectangle(0, 0, (int)WorldSize.X, (int)WorldSize.Y), Color.White);
-        ShaderBatch.End();
-        device.SetRenderTarget(null);
-        device.Textures[1] = null;
-        device.Textures[2] = null;
-        device.Textures[3] = null;
-        device.Textures[4] = null;
+        for (int f = 0; f < FrustumCount; f++) names.Add($"Frustum {f} Output");
+        names.Add("Emissive Input");
+        names.Add("Absorption Input");
+        DebugNames = names.ToArray();
     }
 
     public override void Render()
     {
         Texture2D texture = GetDebugTexture();
-        Renderer.SpriteBatch.Begin(SpriteSortMode.Immediate, BlendState.AlphaBlend, SamplerState.LinearClamp);
+        Renderer.SpriteBatch.Begin(SpriteSortMode.Immediate, BlendState.AlphaBlend, SamplerState.PointClamp);
         Renderer.SpriteBatch.Draw(texture, Renderer.Device.Viewport.Bounds, Color.White);
         Renderer.SpriteBatch.End();
     }
@@ -330,33 +313,35 @@ public class HolographicRC : core.System
     private Texture2D GetDebugTexture()
     {
         if (DebugIndex == 0) return FinalTexture;
+        int idx = DebugIndex - 1;
 
-        int index = DebugIndex - 1;
+        int texturesPerFrustum = CascadeCount * 4;
 
-        // Vrays: C0 for all frustums first, then C1, etc.
-        if (index < FrustumCount * CascadeCount)
+        if (idx < FrustumCount * texturesPerFrustum)
         {
-            int c = index / FrustumCount;
-            int f = index % FrustumCount;
-            return Vrays[f, c];
+            int f = idx / texturesPerFrustum;
+            int localIdx = idx % texturesPerFrustum;
+
+            if (localIdx < CascadeCount)
+                return VraysRadiance[f, localIdx];
+            localIdx -= CascadeCount;
+
+            if (localIdx < CascadeCount)
+                return VraysTransmit[f, localIdx];
+            localIdx -= CascadeCount;
+
+            if (localIdx < CascadeCount)
+                return MergeRadiance[f, localIdx];
+            localIdx -= CascadeCount;
+
+            return MergeTransmit[f, localIdx];
         }
-        index -= FrustumCount * CascadeCount;
+        idx -= FrustumCount * texturesPerFrustum;
 
-        // Merge: C0 for all frustums first, then C1, etc.
-        if (index < FrustumCount * CascadeCount)
-        {
-            int c = index / FrustumCount;
-            int f = index % FrustumCount;
-            return Merge[f, c];
-        }
-        index -= FrustumCount * CascadeCount;
+        if (idx < FrustumCount) return FrustumOutput[idx];
+        idx -= FrustumCount;
 
-        // Frustum outputs
-        if (index < FrustumCount) return FrustumOutput[index];
-        index -= FrustumCount;
-
-        // Emissive and Absorption
-        if (index == 0) return SDFSystem.GetEmissiveTexture();
+        if (idx == 0) return SDFSystem.GetEmissiveTexture();
         return SDFSystem.GetAbsorptionTexture();
     }
 
@@ -365,14 +350,18 @@ public class HolographicRC : core.System
     public override void Dispose()
     {
         FinalTexture?.Dispose();
+        BlackTexture?.Dispose();
+        WhiteTexture?.Dispose();
 
         for (int f = 0; f < FrustumCount; f++)
         {
             FrustumOutput[f]?.Dispose();
             for (int c = 0; c < CascadeCount; c++)
             {
-                Vrays[f, c]?.Dispose();
-                Merge[f, c]?.Dispose();
+                VraysRadiance[f, c]?.Dispose();
+                VraysTransmit[f, c]?.Dispose();
+                MergeRadiance[f, c]?.Dispose();
+                MergeTransmit[f, c]?.Dispose();
             }
         }
     }
