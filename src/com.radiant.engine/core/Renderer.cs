@@ -114,7 +114,6 @@ public class Renderer : IDisposable
     }
 
     // Shader
-
     public Renderer SetShader(string name)
     {
         if (!ShaderCache.TryGetValue(name, out var shader))
@@ -162,7 +161,6 @@ public class Renderer : IDisposable
     }
 
     // Configure
-
     public Renderer Configure(BlendState state)
     {
         BlendState = state;
@@ -568,7 +566,6 @@ public class Renderer : IDisposable
     }
 
     // Control
-
     public Renderer Begin()
     {
         IsDrawing = true;
