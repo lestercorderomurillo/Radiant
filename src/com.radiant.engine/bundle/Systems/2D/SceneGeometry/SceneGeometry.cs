@@ -1,4 +1,5 @@
 using System;
+using com.radiant.engine.core;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
@@ -61,7 +62,7 @@ public class SceneGeometry : core.System
         base.Initialize();
 
         SceneGeometryShader = RenderPipeline.Window.Content.Load<Effect>("shaders/SceneGeometry");
-        GeometryBatch = new SpriteBatch(RenderPipeline.GraphicsDevice);
+        GeometryBatch = new SpriteBatch(RenderPipeline.Device);
 
         ParamEmissiveTexture = SceneGeometryShader.Parameters["EmissiveTexture"];
         ParamJFATexture = SceneGeometryShader.Parameters["JFATexture"];
@@ -70,12 +71,12 @@ public class SceneGeometry : core.System
         ParamJumpDistance = SceneGeometryShader.Parameters["JumpDistance"];
 
         // Create 1x1 white pixel texture for drawing colored rectangles
-        PixelTexture = new Texture2D(RenderPipeline.GraphicsDevice, 1, 1);
+        PixelTexture = new Texture2D(RenderPipeline.Device, 1, 1);
         PixelTexture.SetData([Color.White]);
 
         WorldBounds = new Vector2(
-            RenderPipeline.GraphicsDevice.Viewport.Width,
-            RenderPipeline.GraphicsDevice.Viewport.Height);
+            RenderPipeline.Device.Viewport.Width,
+            RenderPipeline.Device.Viewport.Height);
 
         SDFBounds = new Vector2(
             (int)(WorldBounds.X * SDFScale),
@@ -98,7 +99,7 @@ public class SceneGeometry : core.System
 
     private void CreateGeometryBuffers()
     {
-        var device = RenderPipeline.GraphicsDevice;
+        var device = RenderPipeline.Device;
 
         // Full-resolution buffers
         EmissiveBuffer = new RenderTarget2D(
@@ -156,18 +157,18 @@ public class SceneGeometry : core.System
 
     public void SetEmissiveFromExternal(Action<SpriteBatch> callback)
     {
-        RenderPipeline.GraphicsDevice.SetRenderTarget(EmissiveBuffer);
-        RenderPipeline.GraphicsDevice.Clear(Color.Transparent);
+        RenderPipeline.Device.SetRenderTarget(EmissiveBuffer);
+        RenderPipeline.Device.Clear(Color.Transparent);
         callback.Invoke(GeometryBatch);
-        RenderPipeline.GraphicsDevice.SetRenderTarget(null);
+        RenderPipeline.Device.SetRenderTarget(null);
         UseExternalEmissive = true;
         GeometryDirty = true;
     }
 
     private void RenderEmissiveBuffer()
     {
-        RenderPipeline.GraphicsDevice.SetRenderTarget(EmissiveBuffer);
-        RenderPipeline.GraphicsDevice.Clear(Color.Transparent);
+        RenderPipeline.Device.SetRenderTarget(EmissiveBuffer);
+        RenderPipeline.Device.Clear(Color.Transparent);
 
         GeometryBatch.Begin(SpriteSortMode.Immediate, BlendState.AlphaBlend, SamplerState.PointClamp);
 
@@ -201,7 +202,7 @@ public class SceneGeometry : core.System
         }
 
         GeometryBatch.End();
-        RenderPipeline.GraphicsDevice.SetRenderTarget(null);
+        RenderPipeline.Device.SetRenderTarget(null);
 
         EmissiveCount = count;
         GeometryDirty = true;
@@ -209,8 +210,8 @@ public class SceneGeometry : core.System
 
     private void RenderAbsorptionBuffer()
     {
-        RenderPipeline.GraphicsDevice.SetRenderTarget(AbsorptionBuffer);
-        RenderPipeline.GraphicsDevice.Clear(Color.Transparent);
+        RenderPipeline.Device.SetRenderTarget(AbsorptionBuffer);
+        RenderPipeline.Device.Clear(Color.Transparent);
 
         GeometryBatch.Begin(SpriteSortMode.Immediate, BlendState.AlphaBlend, SamplerState.PointClamp);
 
@@ -240,7 +241,7 @@ public class SceneGeometry : core.System
         }
 
         GeometryBatch.End();
-        RenderPipeline.GraphicsDevice.SetRenderTarget(null);
+        RenderPipeline.Device.SetRenderTarget(null);
 
         AbsorptionCount = count;
     }
@@ -314,7 +315,7 @@ public class SceneGeometry : core.System
                 break;
             case DebugMode.Absorption:
                 GeometryBatch.Begin(SpriteSortMode.Immediate, BlendState.AlphaBlend, SamplerState.LinearClamp);
-                GeometryBatch.Draw(AbsorptionBuffer, RenderPipeline.GraphicsDevice.Viewport.Bounds, Color.White);
+                GeometryBatch.Draw(AbsorptionBuffer, RenderPipeline.Device.Viewport.Bounds, Color.White);
                 GeometryBatch.End();
                 break;
             case DebugMode.SDF:
