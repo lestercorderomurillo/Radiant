@@ -8,37 +8,43 @@ namespace com.radiant.engine.core;
 
 public class MegaLightsScene : Scene
 {
-    private int mouseEmitterEntityId;
-    private MouseState previousMouseState;
-    private int[] boxEntityIds; // Track box entities
-    private int[] occluderEntityIds; // Track scattered occluder entities
-    private float rotationSpeed = 0.40f; // Rotation speed in radians per second
-    private float currentRotation = 0f; // Current rotation angle
-    private Vector2 screenCenter; // Center point for rotation
-    private float boxRadius = 300; // Radius of the ring
-    private Random random = new Random(); // Random number generator for occluder placement
-    private bool isMoving = true; // Toggle for box movement
-    private KeyboardState previousKeyboardState; // Track keyboard state for toggle
+    private int MouseEmitterEntityId;
+    private MouseState PreviousMouseState;
+    private int[] BoxEntityIds; // Track box entities
+    private int[] OccluderEntityIds; // Track scattered occluder entities
+    private float RotationSpeed = 0.40f; // Rotation speed in radians per second
+    private float CurrentRotation = 0f; // Current rotation angle
+    private Vector2 ScreenCenter; // Center point for rotation
+    private float BoxRadius = 300; // Radius of the ring
+    private Random Random = new Random(); // Random number generator for occluder placement
+    private bool IsMoving = true; // Toggle for box movement
+    private KeyboardState PreviousKeyboardState; // Track keyboard state for toggle
+    private bool UseHolographic = true; // Toggle for rendering mode
+    private HolographicRC HolographicSystem;
+    private RCGI RCGISystem;
+    private GizmosRenderer Gizmos;
 
     // Personalizable sizes
-    private float boxSize = 75; // Size for rotating light boxes
-    private float occluderSize = 75; // Size for occluders
-    private float centerExclusionRadius = 400; // Radius around center to keep clear of occluders
+    private float BoxSize = 75; // Size for rotating light boxes
+    private float OccluderSize = 75; // Size for occluders
+    private float CenterExclusionRadius = 400; // Radius around center to keep clear of occluders
 
     public override void SetupECS()
     {
         // Add systems
         ECS.AddSystem<PerformanceMonitor>();
-        ECS.AddSystem<GizmosRenderer>();
+        Gizmos = ECS.AddSystem<GizmosRenderer>();
         ECS.AddSystem<SceneGeometry>();
-        ECS.AddSystem<HolographicRC>();
+        HolographicSystem = ECS.AddSystem<HolographicRC>();
+        RCGISystem = ECS.AddSystem<RCGI>();
+        RCGISystem.Enabled = false; // Start with Holographic enabled
 
         base.SetupECS();
     }
 
     public override void SetupScene()
     {
-        screenCenter = Renderer.Window.GetScreenCenter();
+        ScreenCenter = Renderer.Window.GetScreenCenter();
 
         // Create ring of boxes
         CreateRotatingBoxes();
@@ -56,20 +62,20 @@ public class MegaLightsScene : Scene
     {
         int boxCount = 12;
 
-        boxEntityIds = new int[boxCount]; // Initialize array to track box entities
+        BoxEntityIds = new int[boxCount]; // Initialize array to track box entities
 
         for (int i = 0; i < boxCount; i++)
         {
             int boxEntity = ECS.CreateEntity(); // Now returns int
-            boxEntityIds[i] = boxEntity; // Store entity ID
+            BoxEntityIds[i] = boxEntity; // Store entity ID
 
             ref var transform = ref ECS.AddComponent<Transform>(boxEntity);
             ref var rect = ref ECS.AddComponent<Rectangle2D>(boxEntity);
             ref var material = ref ECS.AddComponent<Material>(boxEntity);
 
             float angle = (float)i / boxCount * MathHelper.TwoPi;
-            float x = screenCenter.X + boxRadius * (float)Math.Cos(angle);
-            float y = screenCenter.Y + boxRadius * (float)Math.Sin(angle);
+            float x = ScreenCenter.X + BoxRadius * (float)Math.Cos(angle);
+            float y = ScreenCenter.Y + BoxRadius * (float)Math.Sin(angle);
 
             byte r = (byte)(Math.Sin(angle) * 127 + 128);
             byte g = (byte)(Math.Sin(angle + MathHelper.TwoPi / 3) * 127 + 128);
@@ -78,7 +84,7 @@ public class MegaLightsScene : Scene
             transform.Position = new Vector3(x, y, 0);
             transform.Rotation = new Vector3((float)Math.Cos(angle), (float)Math.Sin(angle), 0);
 
-            rect.Size = new Vector2(boxSize, boxSize);
+            rect.Size = new Vector2(BoxSize, BoxSize);
 
             material.Albedo = new Color(r, g, b);
             material.Emissive = new Color(r, g, b);
@@ -90,7 +96,7 @@ public class MegaLightsScene : Scene
         int targetOccluderCount = 100;
         int maxAttempts = 100; // Allow more attempts to find valid positions
 
-        occluderEntityIds = new int[targetOccluderCount];
+        OccluderEntityIds = new int[targetOccluderCount];
 
         // Get screen bounds for scattering
         Vector2 screenSize = Renderer.Window.GetScreenSize();
@@ -104,20 +110,20 @@ public class MegaLightsScene : Scene
             attempts++;
 
             // Generate random position within screen bounds (with margin)
-            float x = margin + (float)random.NextDouble() * (screenSize.X - 2 * margin);
-            float y = margin + (float)random.NextDouble() * (screenSize.Y - 2 * margin);
+            float x = margin + (float)Random.NextDouble() * (screenSize.X - 2 * margin);
+            float y = margin + (float)Random.NextDouble() * (screenSize.Y - 2 * margin);
             var position = new Vector3(x, y, 0);
 
             // Check if position is far enough from center
-            float distanceFromCenter = Vector2.Distance(new Vector2(position.X, position.Y), screenCenter);
-            if (distanceFromCenter < centerExclusionRadius)
+            float distanceFromCenter = Vector2.Distance(new Vector2(position.X, position.Y), ScreenCenter);
+            if (distanceFromCenter < CenterExclusionRadius)
             {
                 continue; // Skip this position, too close to center
             }
 
             // Position is valid, create occluder
             int occluderId = ECS.CreateEntity();
-            occluderEntityIds[occluderIndex] = occluderId;
+            OccluderEntityIds[occluderIndex] = occluderId;
 
             ref var transform = ref ECS.AddComponent<Transform>(occluderId);
             ref var rect = ref ECS.AddComponent<Rectangle2D>(occluderId);
@@ -127,7 +133,7 @@ public class MegaLightsScene : Scene
             transform.Rotation = new Vector3(1, 0, 0);
 
             // Same size for all occluders
-            rect.Size = new Vector2(occluderSize, occluderSize);
+            rect.Size = new Vector2(OccluderSize, OccluderSize);
 
             // Dark gray occluders with no emission
             material.Albedo = new Color(40, 40, 40); // Dark gray for visibility
@@ -139,17 +145,17 @@ public class MegaLightsScene : Scene
         // Resize array to actual number of created occluders (in case we couldn't place all 100)
         if (occluderIndex < targetOccluderCount)
         {
-            Array.Resize(ref occluderEntityIds, occluderIndex);
+            Array.Resize(ref OccluderEntityIds, occluderIndex);
         }
     }
 
     private void CreateMouseEmitter()
     {
-        mouseEmitterEntityId = ECS.CreateEntity(); // Now returns int
+        MouseEmitterEntityId = ECS.CreateEntity(); // Now returns int
 
-        ref var emitterTransform = ref ECS.AddComponent<Transform>(mouseEmitterEntityId);
-        ref var emitterRect = ref ECS.AddComponent<Rectangle2D>(mouseEmitterEntityId);
-        ref var emitterMaterial = ref ECS.AddComponent<Material>(mouseEmitterEntityId);
+        ref var emitterTransform = ref ECS.AddComponent<Transform>(MouseEmitterEntityId);
+        ref var emitterRect = ref ECS.AddComponent<Rectangle2D>(MouseEmitterEntityId);
+        ref var emitterMaterial = ref ECS.AddComponent<Material>(MouseEmitterEntityId);
 
         // Initialize emitter
         MouseState mouse = Mouse.GetState();
@@ -163,36 +169,45 @@ public class MegaLightsScene : Scene
         emitterMaterial.Emissive = new Color(255, 255, 100); // Bright yellow
 
         // Initialize mouse state
-        previousMouseState = mouse;
+        PreviousMouseState = mouse;
     }
 
     public override void Update()
     {
         // Check for Space key to toggle movement
         KeyboardState currentKeyboardState = Keyboard.GetState();
-        if (currentKeyboardState.IsKeyDown(Keys.Space) && previousKeyboardState.IsKeyUp(Keys.Space))
+        if (currentKeyboardState.IsKeyDown(Keys.Space) && PreviousKeyboardState.IsKeyUp(Keys.Space))
         {
-            isMoving = !isMoving;
+            IsMoving = !IsMoving;
         }
-        previousKeyboardState = currentKeyboardState;
+
+        // Check for Tab key to toggle between Holographic and RCGI
+        if (currentKeyboardState.IsKeyDown(Keys.Tab) && PreviousKeyboardState.IsKeyUp(Keys.Tab))
+        {
+            UseHolographic = !UseHolographic;
+            HolographicSystem.Enabled = UseHolographic;
+            RCGISystem.Enabled = !UseHolographic;
+        }
+
+        PreviousKeyboardState = currentKeyboardState;
 
         // Update rotation angle only if moving
-        if (isMoving)
+        if (IsMoving)
         {
-            currentRotation += rotationSpeed * DeltaTime;
+            CurrentRotation += RotationSpeed * DeltaTime;
         }
 
         // Update box positions
-        for (int i = 0; i < boxEntityIds.Length; i++)
+        for (int i = 0; i < BoxEntityIds.Length; i++)
         {
-            ref var transform = ref ECS.GetComponent<Transform>(boxEntityIds[i]);
+            ref var transform = ref ECS.GetComponent<Transform>(BoxEntityIds[i]);
 
-            float originalAngle = (float)i / boxEntityIds.Length * MathHelper.TwoPi;
-            float newAngle = originalAngle + currentRotation;
+            float originalAngle = (float)i / BoxEntityIds.Length * MathHelper.TwoPi;
+            float newAngle = originalAngle + CurrentRotation;
 
             // Calculate new position
-            float x = screenCenter.X + boxRadius * (float)Math.Cos(newAngle);
-            float y = screenCenter.Y + boxRadius * (float)Math.Sin(newAngle);
+            float x = ScreenCenter.X + BoxRadius * (float)Math.Cos(newAngle);
+            float y = ScreenCenter.Y + BoxRadius * (float)Math.Sin(newAngle);
 
             transform.Position = new Vector3(x, y, 0);
             transform.Rotation = new Vector3((float)Math.Cos(newAngle), (float)Math.Sin(newAngle), 0);
@@ -203,26 +218,30 @@ public class MegaLightsScene : Scene
         Vector2 mousePosition = new Vector2(currentMouseState.X, currentMouseState.Y);
 
         // Update mouse emitter position
-        ref var emitterTransform = ref ECS.GetComponent<Transform>(mouseEmitterEntityId);
+        ref var emitterTransform = ref ECS.GetComponent<Transform>(MouseEmitterEntityId);
 
         emitterTransform.Position = new Vector3(mousePosition.X, mousePosition.Y, 0);
 
         // Create new emitter on left click
         if (currentMouseState.LeftButton == ButtonState.Pressed &&
-            previousMouseState.LeftButton == ButtonState.Released)
+            PreviousMouseState.LeftButton == ButtonState.Released)
         {
             SpawnEmitter(mousePosition);
         }
 
         // Create new occluder on right click
         if (currentMouseState.RightButton == ButtonState.Pressed &&
-            previousMouseState.RightButton == ButtonState.Released)
+            PreviousMouseState.RightButton == ButtonState.Released)
         {
             SpawnOccluder(mousePosition);
         }
 
         // Store mouse state for next frame
-        previousMouseState = currentMouseState;
+        PreviousMouseState = currentMouseState;
+
+        // Display current rendering mode
+        string mode = UseHolographic ? "HolographicRC" : "RCGI";
+        Gizmos.Set("Renderer", $"Mode: {mode} (Tab to toggle)");
     }
 
     private void SpawnEmitter(Vector2 position)

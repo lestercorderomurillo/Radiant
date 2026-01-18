@@ -413,6 +413,7 @@ public class ECS : IGameObject
     {
         for (int i = 0; i < Systems.Count; i++)
         {
+            if (!Systems[i].Enabled) continue;
             Systems[i].GameTime = Scene.GameTime;
             Systems[i].Update();
         }
@@ -422,6 +423,7 @@ public class ECS : IGameObject
     {
         for (int i = 0; i < Systems.Count; i++)
         {
+            if (!Systems[i].Enabled) continue;
             Systems[i].GameTime = Scene.GameTime;
             Systems[i].FixedUpdate();
         }
@@ -431,6 +433,7 @@ public class ECS : IGameObject
     {
         for (int i = 0; i < Systems.Count; i++)
         {
+            if (!Systems[i].Enabled) continue;
             Systems[i].GameTime = Scene.GameTime;
             Systems[i].Render();
         }
@@ -440,6 +443,7 @@ public class ECS : IGameObject
     {
         for (int i = 0; i < Systems.Count; i++)
         {
+            if (!Systems[i].Enabled) continue;
             Systems[i].GameTime = Scene.GameTime;
             Systems[i].LateRender();
         }

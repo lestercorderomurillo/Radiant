@@ -13,6 +13,8 @@ public abstract class System
 
     public Renderer Renderer;
 
+    public bool Enabled = true;
+
     public virtual void Initialize() {}
 
     public virtual void Dispose() {}
