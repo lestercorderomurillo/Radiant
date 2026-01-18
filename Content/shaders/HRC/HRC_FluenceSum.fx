@@ -1,18 +1,31 @@
-Texture2D FrustumIndex0 : register(t1);
-Texture2D FrustumIndex1 : register(t2);
-Texture2D FrustumIndex2 : register(t3);
-Texture2D FrustumIndex3 : register(t4);
+Texture2D FrustumIndex0 : register(t0);
+Texture2D FrustumIndex1 : register(t1);
+Texture2D FrustumIndex2 : register(t2);
+Texture2D FrustumIndex3 : register(t3);
 
-SamplerState Sampler : register(s1);
+SamplerState Sampler : register(s0);
 
 float2 WorldSize;
+
+struct VertexShaderInput
+{
+    float3 Position : POSITION0;
+    float2 TexCoord : TEXCOORD0;
+};
 
 struct PixelShaderInput
 {
     float4 Position : SV_POSITION;
-    float4 Color    : COLOR0;
     float2 UV       : TEXCOORD0;
 };
+
+PixelShaderInput MainVS(VertexShaderInput input)
+{
+    PixelShaderInput output;
+    output.Position = float4(input.Position, 1.0);
+    output.UV = input.TexCoord;
+    return output;
+}
 
 float3 ToSRGB(float3 linearColor) { return pow(abs(linearColor), 1.0 / 2.2); }
 
@@ -40,5 +53,9 @@ float4 MainPS(PixelShaderInput input) : SV_Target0
 
 technique GenerateOutputTexture
 {
-    pass P0 { PixelShader = compile ps_5_0 MainPS(); }
+    pass P0
+    {
+        VertexShader = compile vs_5_0 MainVS();
+        PixelShader = compile ps_5_0 MainPS();
+    }
 }

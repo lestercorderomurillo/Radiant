@@ -1,25 +1,35 @@
 /* HRC_Extensions.fx - MRT Output
    Ray extension combines chained rays from cascade N-1 to form rays of cascade N. */
 
-Texture2D PrevRadiance : register(t1);
-Texture2D PrevTransmit : register(t2);
+Texture2D PrevRadiance : register(t0);
+Texture2D PrevTransmit : register(t1);
 
-SamplerState SamplerPrevR : register(s1);
-SamplerState SamplerPrevT : register(s2);
+SamplerState SamplerPrevR : register(s0);
+SamplerState SamplerPrevT : register(s1);
 
-cbuffer CascadeParams : register(b0)
+float2 PrevSize;
+float2 CascadeSize;
+float2 CascadeIndex;
+
+struct VertexShaderInput
 {
-    float2 PrevSize;
-    float2 CascadeSize;
-    float2 CascadeIndex;
+    float3 Position : POSITION0;
+    float2 TexCoord : TEXCOORD0;
 };
 
 struct PixelShaderInput
 {
     float4 Position : SV_POSITION;
-    float4 Color    : COLOR0;
     float2 UV       : TEXCOORD0;
 };
+
+PixelShaderInput MainVS(VertexShaderInput input)
+{
+    PixelShaderInput output;
+    output.Position = float4(input.Position, 1.0);
+    output.UV = input.TexCoord;
+    return output;
+}
 
 struct PixelShaderOutput
 {
@@ -95,5 +105,9 @@ PixelShaderOutput MainPS(PixelShaderInput input)
 
 technique GenerateOutputTexture
 {
-    pass P0 { PixelShader = compile ps_5_0 MainPS(); }
+    pass P0
+    {
+        VertexShader = compile vs_5_0 MainVS();
+        PixelShader = compile ps_5_0 MainPS();
+    }
 }

@@ -25,8 +25,6 @@ public class HolographicRC : core.System
     private RenderTarget2D[,] MergeRadiance;
     private RenderTarget2D[,] MergeTransmit;
 
-    private RenderTargetBinding[] MRT2;
-
     private RenderTarget2D[] FrustumOutput;
     private RenderTarget2D FinalTexture;
 
@@ -42,8 +40,6 @@ public class HolographicRC : core.System
     {
         SDFSystem = Scene.ECS.GetSystem<SceneGeometry>();
         Gizmos = Scene.ECS.GetSystem<GizmosRenderer>();
-
-        MRT2 = new RenderTargetBinding[2];
 
         WorldSize = new Vector2(Renderer.ScreenWidth, Renderer.ScreenHeight);
 
@@ -123,108 +119,84 @@ public class HolographicRC : core.System
 
     private void RenderFrustumSeed(int frustum, Texture2D emissive, Texture2D absorption)
     {
-        var size = CascadeSizes[0];
-        var shader = Renderer.GetShaderEffect("HRC/HRC_FrustumSeed");
-
-        MRT2[0] = VraysRadiance[frustum, 0];
-        MRT2[1] = VraysTransmit[frustum, 0];
-        Renderer.Device.SetRenderTargets(MRT2);
-        Renderer.Device.Clear(Color.Black);
-
         Renderer
-            .SetParameter("Emissivity", emissive, shader)
-            .SetParameter("Absorption", absorption, shader)
-            .SetParameter("WorldSize", WorldSize, shader)
-            .SetParameter("CascadeSize", size, shader)
-            .SetParameter("FrustumIndex", (float)frustum, shader);
-
-        Renderer.SpriteBatch.Begin(SpriteSortMode.Immediate, BlendState.Opaque, SamplerState.LinearClamp, null, null, shader);
-        Renderer.Device.SamplerStates[1] = SamplerState.LinearClamp;
-        Renderer.Device.SamplerStates[2] = SamplerState.LinearClamp;
-        Renderer.SpriteBatch.Draw(Renderer.GetSolidTexture(Color.White), new Rectangle(0, 0, (int)size.X, (int)size.Y), Color.White);
-        Renderer.SpriteBatch.End();
+            .Reset()
+            .SetShader("HRC/HRC_FrustumSeed")
+            .Configure((0, SamplerState.LinearClamp), (1, SamplerState.LinearClamp))
+            .SetTargets(VraysRadiance[frustum, 0], VraysTransmit[frustum, 0])
+            .Clear(Color.Black)
+            .SetParameter("Emissivity", emissive)
+            .SetParameter("Absorption", absorption)
+            .SetParameter("WorldSize", WorldSize)
+            .SetParameter("CascadeSize", CascadeSizes[0])
+            .SetParameter("FrustumIndex", (float)frustum)
+            .Draw()
+            .Commit();
     }
 
     private void RenderExtensions(int frustum, int cascade)
     {
-        var size = CascadeSizes[cascade];
-        var prevSize = CascadeSizes[cascade - 1];
-        var shader = Renderer.GetShaderEffect("HRC/HRC_Extensions");
-
-        MRT2[0] = VraysRadiance[frustum, cascade];
-        MRT2[1] = VraysTransmit[frustum, cascade];
-        Renderer.Device.SetRenderTargets(MRT2);
-        Renderer.Device.Clear(Color.Black);
-
         Renderer
-            .SetParameter("PrevSize", prevSize, shader)
-            .SetParameter("CascadeSize", size, shader)
-            .SetParameter("CascadeIndex", new Vector2(cascade, CascadeCount), shader)
-            .SetParameter("PrevRadiance", VraysRadiance[frustum, cascade - 1], shader)
-            .SetParameter("PrevTransmit", VraysTransmit[frustum, cascade - 1], shader);
-
-        Renderer.SpriteBatch.Begin(SpriteSortMode.Immediate, BlendState.Opaque, SamplerState.PointClamp, null, null, shader);
-        Renderer.Device.SamplerStates[1] = SamplerState.PointClamp;
-        Renderer.Device.SamplerStates[2] = SamplerState.PointClamp;
-        Renderer.SpriteBatch.Draw(Renderer.GetSolidTexture(Color.White), new Rectangle(0, 0, (int)size.X, (int)size.Y), Color.White);
-        Renderer.SpriteBatch.End();
+            .Reset()
+            .SetShader("HRC/HRC_Extensions")
+            .Configure((0, SamplerState.PointClamp), (1, SamplerState.PointClamp))
+            .SetTargets(VraysRadiance[frustum, cascade], VraysTransmit[frustum, cascade])
+            .Clear(Color.Black)
+            .SetParameter("PrevSize", CascadeSizes[cascade - 1])
+            .SetParameter("CascadeSize", CascadeSizes[cascade])
+            .SetParameter("CascadeIndex", new Vector2(cascade, CascadeCount))
+            .SetParameter("PrevRadiance", VraysRadiance[frustum, cascade - 1])
+            .SetParameter("PrevTransmit", VraysTransmit[frustum, cascade - 1])
+            .Draw()
+            .Commit();
     }
 
     private void RenderMerging(int frustum, int cascade)
     {
-        var mergeSize = MergeSizes[cascade];
-        var shader = Renderer.GetShaderEffect("HRC/HRC_MergingCones");
         int nextCascade = cascade + 1;
-
-        Texture2D prevMergeR = (nextCascade < CascadeCount) ? MergeRadiance[frustum, nextCascade] : Renderer.GetSolidTexture(Color.Black);
-        Texture2D prevMergeT = (nextCascade < CascadeCount) ? MergeTransmit[frustum, nextCascade] : Renderer.GetSolidTexture(Color.White);
-        Vector2 prevMergeSize = (nextCascade < CascadeCount) ? MergeSizes[nextCascade] : Vector2.One;
-
-        MRT2[0] = MergeRadiance[frustum, cascade];
-        MRT2[1] = MergeTransmit[frustum, cascade];
-        Renderer.Device.SetRenderTargets(MRT2);
-        Renderer.Device.Clear(Color.Black);
+        bool hasNext = nextCascade < CascadeCount;
 
         Renderer
-            .SetParameter("VraysRadiance", VraysRadiance[frustum, cascade], shader)
-            .SetParameter("VraysTransmit", VraysTransmit[frustum, cascade], shader)
-            .SetParameter("PrevRadiance", prevMergeR, shader)
-            .SetParameter("PrevTransmit", prevMergeT, shader)
-            .SetParameter("VraysSize", CascadeSizes[cascade], shader)
-            .SetParameter("PrevSize", prevMergeSize, shader)
-            .SetParameter("CascadeSize", mergeSize, shader)
-            .SetParameter("CascadeIndex", new Vector2(cascade, CascadeCount), shader);
-
-        Renderer.SpriteBatch.Begin(SpriteSortMode.Immediate, BlendState.Opaque, SamplerState.PointClamp, null, null, shader);
-        Renderer.Device.SamplerStates[1] = SamplerState.PointClamp;
-        Renderer.Device.SamplerStates[2] = SamplerState.PointClamp;
-        Renderer.Device.SamplerStates[3] = SamplerState.PointClamp;
-        Renderer.Device.SamplerStates[4] = SamplerState.PointClamp;
-        Renderer.SpriteBatch.Draw(Renderer.GetSolidTexture(Color.White), new Rectangle(0, 0, (int)mergeSize.X, (int)mergeSize.Y), Color.White);
-        Renderer.SpriteBatch.End();
+            .Reset()
+            .SetShader("HRC/HRC_MergingCones")
+            .Configure(
+                (0, SamplerState.PointClamp),
+                (1, SamplerState.PointClamp),
+                (2, SamplerState.PointClamp),
+                (3, SamplerState.PointClamp))
+            .SetTargets(MergeRadiance[frustum, cascade], MergeTransmit[frustum, cascade])
+            .Clear(Color.Black)
+            .SetParameter("VraysRadiance", VraysRadiance[frustum, cascade])
+            .SetParameter("VraysTransmit", VraysTransmit[frustum, cascade])
+            .SetParameter("PrevRadiance", hasNext ? MergeRadiance[frustum, nextCascade] : Renderer.GetSolidTexture(Color.Black))
+            .SetParameter("PrevTransmit", hasNext ? MergeTransmit[frustum, nextCascade] : Renderer.GetSolidTexture(Color.White))
+            .SetParameter("VraysSize", CascadeSizes[cascade])
+            .SetParameter("PrevSize", hasNext ? MergeSizes[nextCascade] : Vector2.One)
+            .SetParameter("CascadeSize", MergeSizes[cascade])
+            .SetParameter("CascadeIndex", new Vector2(cascade, CascadeCount))
+            .Draw()
+            .Commit();
     }
 
     private void Compose()
     {
-        var shader = Renderer.GetShaderEffect("HRC/HRC_FluenceSum");
-
-        Renderer.Device.SetRenderTarget(FinalTexture);
-        Renderer.Device.Clear(Color.Black);
-
         Renderer
-            .SetParameter("FrustumIndex0", MergeRadiance[0, 0], shader)
-            .SetParameter("FrustumIndex1", MergeRadiance[1, 0], shader)
-            .SetParameter("FrustumIndex2", MergeRadiance[2, 0], shader)
-            .SetParameter("FrustumIndex3", MergeRadiance[3, 0], shader)
-            .SetParameter("WorldSize", WorldSize, shader);
-
-        Renderer.SpriteBatch.Begin(SpriteSortMode.Immediate, BlendState.Opaque, SamplerState.LinearClamp, null, null, shader);
-        Renderer.Device.SamplerStates[1] = SamplerState.LinearClamp;
-        Renderer.Device.SamplerStates[2] = SamplerState.LinearClamp;
-        Renderer.Device.SamplerStates[3] = SamplerState.LinearClamp;
-        Renderer.Device.SamplerStates[4] = SamplerState.LinearClamp;
-        Renderer.SpriteBatch.Draw(Renderer.GetSolidTexture(Color.White), new Rectangle(0, 0, (int)WorldSize.X, (int)WorldSize.Y), Color.White);
-        Renderer.SpriteBatch.End();
+            .Reset()
+            .SetShader("HRC/HRC_FluenceSum")
+            .Configure(
+                (0, SamplerState.LinearClamp),
+                (1, SamplerState.LinearClamp),
+                (2, SamplerState.LinearClamp),
+                (3, SamplerState.LinearClamp))
+            .SetTarget(FinalTexture)
+            .Clear(Color.Black)
+            .SetParameter("FrustumIndex0", MergeRadiance[0, 0])
+            .SetParameter("FrustumIndex1", MergeRadiance[1, 0])
+            .SetParameter("FrustumIndex2", MergeRadiance[2, 0])
+            .SetParameter("FrustumIndex3", MergeRadiance[3, 0])
+            .SetParameter("WorldSize", WorldSize)
+            .Draw()
+            .Commit();
     }
 
     private void HandleDebugInput()

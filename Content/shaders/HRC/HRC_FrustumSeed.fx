@@ -1,24 +1,35 @@
 /* HRC_FrustumSeed.fx - MRT Output
    Seeds cascade 0 with emissivity/absorption from scene textures. */
 
-Texture2D SpriteBatchTexture : register(t0);
-Texture2D Emissivity : register(t1);
-Texture2D Absorption : register(t2);
+Texture2D Emissivity : register(t0);
+Texture2D Absorption : register(t1);
 
-SamplerState SpriteBatchSampler : register(s0);
-SamplerState EmissiveSampler : register(s1);
-SamplerState AbsorptionSampler : register(s2);
+SamplerState EmissiveSampler : register(s0);
+SamplerState AbsorptionSampler : register(s1);
 
 float2 WorldSize;
 float2 CascadeSize;
 float FrustumIndex;
 
+struct VertexShaderInput
+{
+    float3 Position : POSITION0;
+    float2 TexCoord : TEXCOORD0;
+};
+
 struct PixelShaderInput
 {
     float4 Position : SV_POSITION;
-    float4 Color    : COLOR0;
     float2 UV       : TEXCOORD0;
 };
+
+PixelShaderInput MainVS(VertexShaderInput input)
+{
+    PixelShaderInput output;
+    output.Position = float4(input.Position, 1.0);
+    output.UV = input.TexCoord;
+    return output;
+}
 
 struct PixelShaderOutput
 {
@@ -73,5 +84,9 @@ PixelShaderOutput MainPS(PixelShaderInput input)
 
 technique GenerateOutputTexture
 {
-    pass P0 { PixelShader = compile ps_5_0 MainPS(); }
+    pass P0
+    {
+        VertexShader = compile vs_5_0 MainVS();
+        PixelShader = compile ps_5_0 MainPS();
+    }
 }

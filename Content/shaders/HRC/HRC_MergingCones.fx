@@ -1,27 +1,37 @@
-Texture2D VraysRadiance : register(t1);
-Texture2D VraysTransmit : register(t2);
-Texture2D PrevRadiance : register(t3);
-Texture2D PrevTransmit : register(t4);
+Texture2D VraysRadiance : register(t0);
+Texture2D VraysTransmit : register(t1);
+Texture2D PrevRadiance : register(t2);
+Texture2D PrevTransmit : register(t3);
 
-SamplerState SamplerVraysR : register(s1);
-SamplerState SamplerVraysT : register(s2);
-SamplerState SamplerPrevR : register(s3);
-SamplerState SamplerPrevT : register(s4);
+SamplerState SamplerVraysR : register(s0);
+SamplerState SamplerVraysT : register(s1);
+SamplerState SamplerPrevR : register(s2);
+SamplerState SamplerPrevT : register(s3);
 
-cbuffer CascadeParams : register(b0)
+float2 VraysSize;
+float2 PrevSize;
+float2 CascadeSize;
+float2 CascadeIndex;
+
+struct VertexShaderInput
 {
-    float2 VraysSize;
-    float2 PrevSize;
-    float2 CascadeSize;
-    float2 CascadeIndex;
+    float3 Position : POSITION0;
+    float2 TexCoord : TEXCOORD0;
 };
 
 struct PixelShaderInput
 {
     float4 Position : SV_POSITION;
-    float4 Color    : COLOR0;
     float2 UV       : TEXCOORD0;
 };
+
+PixelShaderInput MainVS(VertexShaderInput input)
+{
+    PixelShaderInput output;
+    output.Position = float4(input.Position, 1.0);
+    output.UV = input.TexCoord;
+    return output;
+}
 
 struct PixelShaderOutput
 {
@@ -145,5 +155,9 @@ PixelShaderOutput MainPS(PixelShaderInput input)
 
 technique GenerateOutputTexture
 {
-    pass P0 { PixelShader = compile ps_5_0 MainPS(); }
+    pass P0
+    {
+        VertexShader = compile vs_5_0 MainVS();
+        PixelShader = compile ps_5_0 MainPS();
+    }
 }
