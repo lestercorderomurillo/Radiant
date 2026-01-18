@@ -31,7 +31,7 @@ public class MegaLightsScene : Scene
         ECS.AddSystem<PerformanceMonitor>();
         ECS.AddSystem<GizmosRenderer>();
         ECS.AddSystem<SceneGeometry>();
-        ECS.AddSystem<RCGI>();
+        ECS.AddSystem<HolographicRC>();
 
         base.SetupECS();
     }

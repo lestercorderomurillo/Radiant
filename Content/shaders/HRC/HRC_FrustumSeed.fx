@@ -50,7 +50,7 @@ PixelShaderOutput MainPS(PixelShaderInput input)
 
     int fIdx = int(FrustumIndex + 0.1);
     float2 sampleCoord = TransformProbeToFrustum(probe, fIdx);
-    sampleCoord.y = 1.0 - sampleCoord.y;
+    //sampleCoord.y = 1.0 - sampleCoord.y;
 
     if (sampleCoord.x < 0.0 || sampleCoord.x > 1.0 || sampleCoord.y < 0.0 || sampleCoord.y > 1.0)
     {

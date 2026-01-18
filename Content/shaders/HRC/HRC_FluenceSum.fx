@@ -18,7 +18,9 @@ float3 ToSRGB(float3 linearColor) { return pow(abs(linearColor), 1.0 / 2.2); }
 
 float4 MainPS(PixelShaderInput input) : SV_Target0
 {
-    float2 uv = float2(input.UV.x, 1.0 - input.UV.y);
+    //float2 uv = float2(input.UV.x, 1.0 - input.UV.y);
+    float2 uv = float2(input.UV.x, input.UV.y);
+    
     float2 pixel = float2(1.0, 0.0) / WorldSize;
 
     float2 offset0 = uv + pixel.xy;

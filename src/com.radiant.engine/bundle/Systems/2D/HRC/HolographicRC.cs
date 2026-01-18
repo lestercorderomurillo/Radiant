@@ -45,7 +45,7 @@ public class HolographicRC : core.System
 
         MRT2 = new RenderTargetBinding[2];
 
-        WorldSize = new Vector2(Renderer.ScreenHigherPowerOfTwo, Renderer.ScreenHigherPowerOfTwo);
+        WorldSize = new Vector2(Renderer.ScreenWidth, Renderer.ScreenHeight);
 
         CalculateCascadeSizes();
         CreateRenderTargets();
