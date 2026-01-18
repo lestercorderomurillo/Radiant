@@ -6,7 +6,7 @@ using Microsoft.Xna.Framework;
 
 namespace com.radiant.engine.core;
 
-public class ECS : GameObject
+public class ECS : IGameObject
 {
     private readonly HashSet<int> ActiveEntities;
     private readonly Stack<int> RecycledIds;
@@ -70,16 +70,17 @@ public class ECS : GameObject
         );
     }
 
-    public override void Initialize()
+    public void Initialize()
     {
         for (int i = 0; i < Systems.Count; i++)
             Systems[i].Initialize();
     }
 
-    public override void Dispose()
+    public void Dispose()
     {
         for (int i = 0; i < Systems.Count; i++)
             Systems[i].Dispose();
+        GC.SuppressFinalize(this);
     }
 
     public T AddSystem<T>() where T : System, new() => AddSystem(new T());
@@ -408,7 +409,7 @@ public class ECS : GameObject
 
         return QueryResult;
     }
-    public override void Update()
+    public void Update()
     {
         for (int i = 0; i < Systems.Count; i++)
         {
@@ -417,7 +418,7 @@ public class ECS : GameObject
         }
     }
 
-    public override void FixedUpdate()
+    public void FixedUpdate()
     {
         for (int i = 0; i < Systems.Count; i++)
         {
@@ -426,7 +427,7 @@ public class ECS : GameObject
         }
     }
 
-    public override void Render()
+    public void Render()
     {
         for (int i = 0; i < Systems.Count; i++)
         {
@@ -435,7 +436,7 @@ public class ECS : GameObject
         }
     }
 
-    public override void LateRender()
+    public void LateRender()
     {
         for (int i = 0; i < Systems.Count; i++)
         {

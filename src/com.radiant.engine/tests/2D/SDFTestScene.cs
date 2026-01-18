@@ -71,7 +71,6 @@ public class SDFTestScene : Scene
             SpawnOccluder(pos);
 
         PrevMouse = mouse;
-        base.Update();
     }
 
     private void SpawnLight(Vector2 pos, Color color)

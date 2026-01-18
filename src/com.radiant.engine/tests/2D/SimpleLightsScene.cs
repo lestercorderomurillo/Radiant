@@ -87,7 +87,5 @@ public class SimpleLightsScene : Scene
         MouseState mouse = Mouse.GetState();
         ref var transform = ref ECS.GetComponent<Transform>(mouseEmitterEntityId);
         transform.Position = new Vector3(mouse.X, mouse.Y, 0);
-
-        base.Update();
     }
 }

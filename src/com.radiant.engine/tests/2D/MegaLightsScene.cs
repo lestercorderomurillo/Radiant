@@ -223,8 +223,6 @@ public class MegaLightsScene : Scene
 
         // Store mouse state for next frame
         previousMouseState = currentMouseState;
-
-        base.Update();
     }
 
     private void SpawnEmitter(Vector2 position)

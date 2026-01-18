@@ -10,7 +10,7 @@ using System.Threading;
 
 namespace com.radiant.engine.runtime;
 
-public class GameLoop : GameObject
+public class GameLoop : IGameObject
 {
     private const int NO_SCENE = -1;
 
@@ -57,7 +57,7 @@ public class GameLoop : GameObject
         Initialize();
     }
 
-    public override void Initialize()
+    public void Initialize()
     {
         UpdateInterval = 1.0 / TargetUpdatesPerSecond;
         FrameInterval = 1.0 / TargetFramesPerSecond;
@@ -68,8 +68,9 @@ public class GameLoop : GameObject
         LastFpsUpdate = GlobalTimer.Elapsed.TotalSeconds;
     }
 
-    public override void Dispose()
+    public void Dispose()
     {
+        GC.SuppressFinalize(this);
     }
 
     public void AddScene(Scene scene) => Scenes = [.. Scenes, scene];
@@ -94,7 +95,7 @@ public class GameLoop : GameObject
 
     public void SetActiveSceneId(int id) => NextSceneId = id;
 
-    public override void Update()
+    public void Update()
     {
         // Auto-start first scene if no active scene
         if (SceneId == NO_SCENE && Scenes.Length > 0)
@@ -117,7 +118,7 @@ public class GameLoop : GameObject
             {
                 Scenes[SceneId].GameTime = GameTime;
                 Scenes[SceneId].DeltaTime = (float)(1.0f / TargetUpdatesPerSecond);
-                Scenes[SceneId].FixedUpdate();
+                Scenes[SceneId].InternalFixedUpdate();
             }
 
             FixedUpdateAccumulator -= UpdateInterval;
@@ -127,13 +128,13 @@ public class GameLoop : GameObject
         if (SceneId != NO_SCENE)
             Scenes[SceneId].GameTime = GameTime;
         Scenes[SceneId].DeltaTime = (float)deltaTime;
-        Scenes[SceneId].Update();
+        Scenes[SceneId].InternalUpdate();
 
         if (NextSceneId != NO_SCENE && NextSceneId != SceneId)
             TransitionScene(NextSceneId);
     }
 
-    public override void Render()
+    public void Render()
     {
         // Frame pacing with hybrid sleep/spin-wait
         if (TargetFramesPerSecond > 0)
@@ -181,8 +182,11 @@ public class GameLoop : GameObject
         {
             Scenes[SceneId].Renderer.Window.GraphicsDevice.Clear(Color.Black);
             Scenes[SceneId].GameTime = GameTime;
-            Scenes[SceneId].Render();
-            Scenes[SceneId].LateRender();
+            Scenes[SceneId].InternalRender();
+            Scenes[SceneId].InternalLateRender();
         }
     }
+
+    public void FixedUpdate() { }
+    public void LateRender() { }
 }

@@ -2,17 +2,11 @@ using System;
 
 namespace com.radiant.engine.core;
 
-public class GameObject : IDisposable
+public interface IGameObject : IDisposable
 {
-    public virtual void Initialize() { }
-
-    public virtual void Dispose() { }
-
-    public virtual void Update(){ }
-
-    public virtual void FixedUpdate(){ }
-
-    public virtual void Render() { }
-    
-    public virtual void LateRender() { }
+    void Initialize();
+    void Update();
+    void FixedUpdate();
+    void Render();
+    void LateRender();
 }

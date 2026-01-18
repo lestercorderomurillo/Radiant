@@ -4,10 +4,10 @@ using Microsoft.Xna.Framework;
 
 namespace com.radiant.engine.core;
 
-public class Scene : GameObject
+public class Scene : IGameObject
 {
     public int Id { get; private set; }
-    
+
     public ECS ECS { get; private set; }
 
     public GameTime GameTime { get; set; }
@@ -16,14 +16,14 @@ public class Scene : GameObject
 
     public Renderer Renderer { get; set; }
 
-    public override void Initialize()
+    public void Initialize()
     {
         ECS = new ECS(this, Renderer);
     }
 
-    public override void Dispose()
+    public void Dispose()
     {
-        
+        GC.SuppressFinalize(this);
     }
 
     public virtual void SetupECS()
@@ -35,29 +35,38 @@ public class Scene : GameObject
     {
     }
 
-    public override void Update()
+    public virtual void Update() { }
+    public virtual void FixedUpdate() { }
+    public virtual void Render() { }
+    public virtual void LateRender() { }
+
+    internal void InternalUpdate()
     {
+        Update();
         ECS.Update();
     }
 
-    public override void FixedUpdate()
+    internal void InternalFixedUpdate()
     {
+        FixedUpdate();
         ECS.FixedUpdate();
     }
-    
-    public override void Render()
+
+    internal void InternalRender()
     {
         if (!Renderer.Window.IsActive)
             return;
 
+        Render();
         ECS.Render();
     }
 
-    public override void LateRender()
+    internal void InternalLateRender()
     {
         if (!Renderer.Window.IsActive)
             return;
 
+        LateRender();
         ECS.LateRender();
     }
 }
