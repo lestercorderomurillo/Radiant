@@ -44,6 +44,11 @@ public class Renderer : IDisposable
     private SpriteSortMode SpriteSortMode = SpriteSortMode.Immediate;
     private SamplerState[] SamplerStates = new SamplerState[8];
 
+    // Cached MRT binding arrays (allocation-free)
+    private readonly RenderTargetBinding[] _twoTargetBindings = new RenderTargetBinding[2];
+    private readonly RenderTargetBinding[] _threeTargetBindings = new RenderTargetBinding[3];
+    private readonly RenderTargetBinding[] _fourTargetBindings = new RenderTargetBinding[4];
+
     public Renderer(Window window)
     {
         Window = window;
@@ -192,6 +197,39 @@ public class Renderer : IDisposable
         return this;
     }
 
+    public Renderer Configure((int slot, SamplerState state) s0, (int slot, SamplerState state) s1)
+    {
+        if (s0.slot >= 0 && s0.slot < SamplerStates.Length)
+            SamplerStates[s0.slot] = s0.state;
+        if (s1.slot >= 0 && s1.slot < SamplerStates.Length)
+            SamplerStates[s1.slot] = s1.state;
+        return this;
+    }
+
+    public Renderer Configure((int slot, SamplerState state) s0, (int slot, SamplerState state) s1, (int slot, SamplerState state) s2)
+    {
+        if (s0.slot >= 0 && s0.slot < SamplerStates.Length)
+            SamplerStates[s0.slot] = s0.state;
+        if (s1.slot >= 0 && s1.slot < SamplerStates.Length)
+            SamplerStates[s1.slot] = s1.state;
+        if (s2.slot >= 0 && s2.slot < SamplerStates.Length)
+            SamplerStates[s2.slot] = s2.state;
+        return this;
+    }
+
+    public Renderer Configure((int slot, SamplerState state) s0, (int slot, SamplerState state) s1, (int slot, SamplerState state) s2, (int slot, SamplerState state) s3)
+    {
+        if (s0.slot >= 0 && s0.slot < SamplerStates.Length)
+            SamplerStates[s0.slot] = s0.state;
+        if (s1.slot >= 0 && s1.slot < SamplerStates.Length)
+            SamplerStates[s1.slot] = s1.state;
+        if (s2.slot >= 0 && s2.slot < SamplerStates.Length)
+            SamplerStates[s2.slot] = s2.state;
+        if (s3.slot >= 0 && s3.slot < SamplerStates.Length)
+            SamplerStates[s3.slot] = s3.state;
+        return this;
+    }
+
     public Renderer Configure(params (int slot, SamplerState state)[] samplers)
     {
         foreach (var (slot, state) in samplers)
@@ -224,6 +262,36 @@ public class Renderer : IDisposable
     {
         CommitTextures();
         Device.SetRenderTarget(target);
+        return this;
+    }
+
+    public Renderer SetTargets(RenderTarget2D target0, RenderTarget2D target1)
+    {
+        CommitTextures();
+        _twoTargetBindings[0] = new RenderTargetBinding(target0);
+        _twoTargetBindings[1] = new RenderTargetBinding(target1);
+        Device.SetRenderTargets(_twoTargetBindings);
+        return this;
+    }
+
+    public Renderer SetTargets(RenderTarget2D target0, RenderTarget2D target1, RenderTarget2D target2)
+    {
+        CommitTextures();
+        _threeTargetBindings[0] = new RenderTargetBinding(target0);
+        _threeTargetBindings[1] = new RenderTargetBinding(target1);
+        _threeTargetBindings[2] = new RenderTargetBinding(target2);
+        Device.SetRenderTargets(_threeTargetBindings);
+        return this;
+    }
+
+    public Renderer SetTargets(RenderTarget2D target0, RenderTarget2D target1, RenderTarget2D target2, RenderTarget2D target3)
+    {
+        CommitTextures();
+        _fourTargetBindings[0] = new RenderTargetBinding(target0);
+        _fourTargetBindings[1] = new RenderTargetBinding(target1);
+        _fourTargetBindings[2] = new RenderTargetBinding(target2);
+        _fourTargetBindings[3] = new RenderTargetBinding(target3);
+        Device.SetRenderTargets(_fourTargetBindings);
         return this;
     }
 
