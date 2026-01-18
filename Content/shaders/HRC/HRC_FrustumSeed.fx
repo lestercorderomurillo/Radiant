@@ -27,11 +27,7 @@ struct PixelShaderOutput
     float4 Transmit : COLOR1;
 };
 
-// GLSL reference transforms EXACTLY as written:
-// offsets[0] = probe;           // Right
-// offsets[1] = 1.0 - probe.yx;  // Down (in GLSL coords)
-// offsets[2] = 1.0 - probe;     // Left
-// offsets[3] = probe.yx;        // Up (in GLSL coords)
+
 float2 TransformProbeToFrustum(float2 probe, int index)
 {
     if (index == 0) return probe;
@@ -47,21 +43,15 @@ PixelShaderOutput MainPS(PixelShaderInput input)
 {
     PixelShaderOutput output;
 
-    // Match GLSL reference EXACTLY:
-    // vec2 texel = in_TexelCoord * cascade_size;
-    // float intrv = 1.0;
-    // float vrays = 2.0;
-    // float plane = floor(texel.x / vrays);
-    // vec2 probe = vec2((plane * intrv) + 0.5, texel.y) / world_size;
     float2 texel = input.UV * CascadeSize;
     float intrv = 1.0;
     float vrays = 2.0;
     float plane = floor(texel.x / vrays);
     float2 probe = float2((plane * intrv) + 0.5, texel.y) / WorldSize;
 
-    // Apply frustum transform to probe (matches GLSL: offsets[int(frustum_index)])
     int fIdx = int(FrustumIndex + 0.1);
     float2 sampleCoord = TransformProbeToFrustum(probe, fIdx);
+    sampleCoord.y = 1.0 - sampleCoord.y;  // DX scene → GL cascade space
 
     // Bounds check
     if (sampleCoord.x < 0.0 || sampleCoord.x > 1.0 || sampleCoord.y < 0.0 || sampleCoord.y > 1.0)

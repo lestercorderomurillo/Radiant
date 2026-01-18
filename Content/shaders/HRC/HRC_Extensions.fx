@@ -8,9 +8,12 @@ Texture2D PrevTransmit : register(t2);
 SamplerState SamplerPrevR : register(s1);
 SamplerState SamplerPrevT : register(s2);
 
-float2 PrevSize;
-float2 CascadeSize;
-float2 CascadeIndex;
+cbuffer CascadeParams : register(b0)
+{
+    float2 PrevSize;
+    float2 CascadeSize;
+    float2 CascadeIndex;
+};
 
 struct PixelShaderInput
 {
@@ -21,8 +24,8 @@ struct PixelShaderInput
 
 struct PixelShaderOutput
 {
-    float4 Radiance : COLOR0;
-    float4 Transmit : COLOR1;
+    float4 Radiance : SV_Target0;
+    float4 Transmit : SV_Target1;
 };
 
 void MergeRadiance(float4 nearR, float4 nearT, float4 farR, float4 farT,
@@ -33,20 +36,17 @@ void MergeRadiance(float4 nearR, float4 nearT, float4 farR, float4 farT,
 }
 
 void GetVolume(float2 probe, float index, float interval, float lookupWidth,
-               float2 resolution, Texture2D txtR, SamplerState sampR,
-               Texture2D txtT, SamplerState sampT,
-               float4 defValR, float4 defValT,
+               float2 resolution, float4 defValR, float4 defValT,
                out float4 rad, out float4 trn)
 {
     float2 samplePos = float2(floor(probe.x / interval) * lookupWidth, probe.y) + float2(0.5, 0.0);
     samplePos = float2(samplePos.x + index, samplePos.y) / resolution;
 
-    // GLSL: float weight = float(floor(samplePos) != vec2(0.0));
-    float weight = (samplePos.x < 0.0 || samplePos.x > 1.0 ||
-                    samplePos.y < 0.0 || samplePos.y > 1.0) ? 1.0 : 0.0;
+    float weight = (samplePos.x < 0.0 || samplePos.x >= 1.0 ||
+                    samplePos.y < 0.0 || samplePos.y >= 1.0) ? 1.0 : 0.0;
 
-    rad = lerp(txtR.Sample(sampR, samplePos), defValR, weight);
-    trn = lerp(txtT.Sample(sampT, samplePos), defValT, weight);
+    rad = lerp(PrevRadiance.Sample(SamplerPrevR, samplePos), defValR, weight);
+    trn = lerp(PrevTransmit.Sample(SamplerPrevT, samplePos), defValT, weight);
 }
 
 void ExtendRay(float2 probe, float lo_index, float hi_index,
@@ -58,12 +58,10 @@ void ExtendRay(float2 probe, float lo_index, float hi_index,
     float4 radiance_near, transmit_near, radiance_far, transmit_far;
 
     GetVolume(probe, lo_index, prev_intrv, prev_vrays, PrevSize,
-              PrevRadiance, SamplerPrevR, PrevTransmit, SamplerPrevT,
               float4(0.0, 0.0, 0.0, 0.0), float4(1.0, 1.0, 1.0, 1.0),
               radiance_near, transmit_near);
 
     GetVolume(merge, hi_index, prev_intrv, prev_vrays, PrevSize,
-              PrevRadiance, SamplerPrevR, PrevTransmit, SamplerPrevT,
               float4(0.0, 0.0, 0.0, 0.0), float4(1.0, 1.0, 1.0, 1.0),
               radiance_far, transmit_far);
 

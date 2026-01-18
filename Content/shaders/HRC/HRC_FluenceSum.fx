@@ -1,19 +1,3 @@
-/* HRC_FluenceSum.fx
-   Matches GLSL reference EXACTLY.
-
-   GLSL Reference Implementation:
-   vec2 pixel = vec2(1.0, 0.0) / world_size;
-   offsets[0] = in_TexelCoord + pixel.xy;
-   offsets[1] = in_TexelCoord - pixel.yx;
-   offsets[2] = in_TexelCoord - pixel.xy;
-   offsets[3] = in_TexelCoord + pixel.yx;
-
-   radiance += texture2D(frustum_index0, offsets[0]).rgb;
-   radiance += texture2D(frustum_index1, 1.0 - offsets[1].yx).rgb;
-   radiance += texture2D(frustum_index2, 1.0 - offsets[2]).rgb;
-   radiance += texture2D(frustum_index3, offsets[3].yx).rgb;
-*/
-
 Texture2D FrustumIndex0 : register(t1);
 Texture2D FrustumIndex1 : register(t2);
 Texture2D FrustumIndex2 : register(t3);
@@ -34,14 +18,16 @@ float3 ToSRGB(float3 linearColor) { return pow(abs(linearColor), 1.0 / 2.2); }
 
 float4 MainPS(PixelShaderInput input) : SV_Target0
 {
-    // Match GLSL reference EXACTLY
+    // Convert DX screen UV → GL cascade UV
+    float2 uv = float2(input.UV.x, 1.0 - input.UV.y);
+    
     float2 pixel = float2(1.0, 0.0) / WorldSize;
 
     // Compute offsets for each frustum
-    float2 offset0 = input.UV + pixel.xy;  // Right
-    float2 offset1 = input.UV - pixel.yx;  // Up (in GLSL coords, but HLSL Y is flipped)
-    float2 offset2 = input.UV - pixel.xy;  // Left
-    float2 offset3 = input.UV + pixel.yx;  // Down (in GLSL coords, but HLSL Y is flipped)
+    float2 offset0 = uv + pixel.xy;  // Right
+    float2 offset1 = uv - pixel.yx;  // Up
+    float2 offset2 = uv - pixel.xy;  // Left
+    float2 offset3 = uv + pixel.yx;  // Down 
 
     // Sample each frustum with its transform
     // GLSL: texture2D(frustum_index0, offsets[0]).rgb
