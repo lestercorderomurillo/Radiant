@@ -43,6 +43,7 @@ public class Renderer : IDisposable
     private RasterizerState RasterizerState = RasterizerState.CullNone;
     private SpriteSortMode SpriteSortMode = SpriteSortMode.Immediate;
     private SamplerState[] SamplerStates = new SamplerState[8];
+    private int SamplerDirtyMask = 0; // Bitmask tracking which samplers need to be applied
 
     // Cached MRT binding arrays (allocation-free)
     private readonly RenderTargetBinding[] _twoTargetBindings = new RenderTargetBinding[2];
@@ -187,7 +188,10 @@ public class Renderer : IDisposable
     public Renderer Configure(SamplerState state, int slot = 0)
     {
         if (slot >= 0 && slot < SamplerStates.Length)
+        {
             SamplerStates[slot] = state;
+            SamplerDirtyMask |= 1 << slot;
+        }
         return this;
     }
 
@@ -200,33 +204,60 @@ public class Renderer : IDisposable
     public Renderer Configure((int slot, SamplerState state) s0, (int slot, SamplerState state) s1)
     {
         if (s0.slot >= 0 && s0.slot < SamplerStates.Length)
+        {
             SamplerStates[s0.slot] = s0.state;
+            SamplerDirtyMask |= 1 << s0.slot;
+        }
         if (s1.slot >= 0 && s1.slot < SamplerStates.Length)
+        {
             SamplerStates[s1.slot] = s1.state;
+            SamplerDirtyMask |= 1 << s1.slot;
+        }
         return this;
     }
 
     public Renderer Configure((int slot, SamplerState state) s0, (int slot, SamplerState state) s1, (int slot, SamplerState state) s2)
     {
         if (s0.slot >= 0 && s0.slot < SamplerStates.Length)
+        {
             SamplerStates[s0.slot] = s0.state;
+            SamplerDirtyMask |= 1 << s0.slot;
+        }
         if (s1.slot >= 0 && s1.slot < SamplerStates.Length)
+        {
             SamplerStates[s1.slot] = s1.state;
+            SamplerDirtyMask |= 1 << s1.slot;
+        }
         if (s2.slot >= 0 && s2.slot < SamplerStates.Length)
+        {
             SamplerStates[s2.slot] = s2.state;
+            SamplerDirtyMask |= 1 << s2.slot;
+        }
         return this;
     }
 
     public Renderer Configure((int slot, SamplerState state) s0, (int slot, SamplerState state) s1, (int slot, SamplerState state) s2, (int slot, SamplerState state) s3)
     {
         if (s0.slot >= 0 && s0.slot < SamplerStates.Length)
+        {
             SamplerStates[s0.slot] = s0.state;
+            SamplerDirtyMask |= 1 << s0.slot;
+        }
         if (s1.slot >= 0 && s1.slot < SamplerStates.Length)
+        {
             SamplerStates[s1.slot] = s1.state;
+            SamplerDirtyMask |= 1 << s1.slot;
+        }
         if (s2.slot >= 0 && s2.slot < SamplerStates.Length)
+        {
             SamplerStates[s2.slot] = s2.state;
+            SamplerDirtyMask |= 1 << s2.slot;
+        }
         if (s3.slot >= 0 && s3.slot < SamplerStates.Length)
+        {
             SamplerStates[s3.slot] = s3.state;
+            SamplerDirtyMask |= 1 << s3.slot;
+        }
         return this;
     }
 
@@ -235,7 +266,10 @@ public class Renderer : IDisposable
         foreach (var (slot, state) in samplers)
         {
             if (slot >= 0 && slot < SamplerStates.Length)
+            {
                 SamplerStates[slot] = state;
+                SamplerDirtyMask |= 1 << slot;
+            }
         }
         return this;
     }
@@ -250,7 +284,10 @@ public class Renderer : IDisposable
                 case DepthStencilState ds: DepthStencilState = ds; break;
                 case RasterizerState rs: RasterizerState = rs; break;
                 case SpriteSortMode sm: SpriteSortMode = sm; break;
-                case SamplerState ss: SamplerStates[0] = ss; break;
+                case SamplerState ss:
+                    SamplerStates[0] = ss;
+                    SamplerDirtyMask |= 1;
+                    break;
             }
         }
         return this;
@@ -497,8 +534,13 @@ public class Renderer : IDisposable
         Device.DepthStencilState = DepthStencilState;
         Device.RasterizerState = RasterizerState;
 
+        // Only apply samplers that were explicitly configured via Configure()
+        // The mask persists until Reset() is called
         for (int i = 0; i < SamplerStates.Length; i++)
-            Device.SamplerStates[i] = SamplerStates[i];
+        {
+            if ((SamplerDirtyMask & (1 << i)) != 0)
+                Device.SamplerStates[i] = SamplerStates[i];
+        }
 
         Device.SetVertexBuffer(QuadVertexBuffer);
         Device.Indices = QuadIndexBuffer;
@@ -604,8 +646,12 @@ public class Renderer : IDisposable
             Device.DepthStencilState = DepthStencilState;
             Device.RasterizerState = RasterizerState;
 
+            // Only apply samplers that were explicitly configured via Configure()
             for (int s = 0; s < SamplerStates.Length; s++)
-                Device.SamplerStates[s] = SamplerStates[s];
+            {
+                if ((SamplerDirtyMask & (1 << s)) != 0)
+                    Device.SamplerStates[s] = SamplerStates[s];
+            }
 
             Device.SetVertexBuffer(QuadVertexBuffer);
             Device.Indices = QuadIndexBuffer;
@@ -650,9 +696,7 @@ public class Renderer : IDisposable
         DepthStencilState = DepthStencilState.None;
         RasterizerState = RasterizerState.CullNone;
         SpriteSortMode = SpriteSortMode.Immediate;
-
-        for (int i = 0; i < SamplerStates.Length; i++)
-            SamplerStates[i] = SamplerState.LinearClamp;
+        SamplerDirtyMask = 0; // Clear dirty mask, no samplers need applying until configured
 
         CurrentShader = null;
         CurrentShaderName = null;
