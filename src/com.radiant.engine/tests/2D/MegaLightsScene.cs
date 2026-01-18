@@ -20,7 +20,7 @@ public class MegaLightsScene : Scene
     private bool IsMoving = true; // Toggle for box movement
     private KeyboardState PreviousKeyboardState; // Track keyboard state for toggle
     private bool UseHolographic = true; // Toggle for rendering mode
-    private HolographicRC HolographicSystem;
+    private HRCGI HolographicSystem;
     private RCGI RCGISystem;
     private GizmosRenderer Gizmos;
 
@@ -35,9 +35,8 @@ public class MegaLightsScene : Scene
         ECS.AddSystem<PerformanceMonitor>();
         Gizmos = ECS.AddSystem<GizmosRenderer>();
         ECS.AddSystem<SceneGeometry>();
-        HolographicSystem = ECS.AddSystem<HolographicRC>();
-        RCGISystem = ECS.AddSystem<RCGI>();
-        RCGISystem.Enabled = false; // Start with Holographic enabled
+        HolographicSystem = ECS.AddSystem<HRCGI>();
+        RCGISystem = ECS.AddSystem<RCGI>(enabled: false);
 
         base.SetupECS();
     }
@@ -185,8 +184,20 @@ public class MegaLightsScene : Scene
         if (currentKeyboardState.IsKeyDown(Keys.Tab) && PreviousKeyboardState.IsKeyUp(Keys.Tab))
         {
             UseHolographic = !UseHolographic;
-            HolographicSystem.Enabled = UseHolographic;
-            RCGISystem.Enabled = !UseHolographic;
+            if (UseHolographic)
+            {
+                RCGISystem.Dispose();
+                RCGISystem.Enabled = false;
+                HolographicSystem.Initialize();
+                HolographicSystem.Enabled = true;
+            }
+            else
+            {
+                HolographicSystem.Dispose();
+                HolographicSystem.Enabled = false;
+                RCGISystem.Initialize();
+                RCGISystem.Enabled = true;
+            }
         }
 
         PreviousKeyboardState = currentKeyboardState;
@@ -240,7 +251,7 @@ public class MegaLightsScene : Scene
         PreviousMouseState = currentMouseState;
 
         // Display current rendering mode
-        string mode = UseHolographic ? "HolographicRC" : "RCGI";
+        string mode = UseHolographic ? "HRCGI" : "RCGI";
         Gizmos.Set("Renderer", $"Mode: {mode} (Tab to toggle)");
     }
 

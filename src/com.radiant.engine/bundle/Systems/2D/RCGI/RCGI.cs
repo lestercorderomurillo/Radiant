@@ -287,12 +287,16 @@ public class RCGI : core.System
     {
         // Note: RCShader, ShaderSpriteBatch are managed by Renderer
         FinalTexture?.Dispose();
+        FinalTexture = null;
+
         CachedRasterizerState?.Dispose();
+        CachedRasterizerState = null;
 
         if (CascadeLayers != null)
         {
             foreach (var layer in CascadeLayers)
                 layer?.Dispose();
+            CascadeLayers = null;
         }
     }
 }

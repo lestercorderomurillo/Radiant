@@ -12,7 +12,7 @@ namespace com.radiant.engine.bundle;
 ///
 /// Uses MRT (Multiple Render Targets) for single-pass radiance+transmittance output.
 /// </summary>
-public class HolographicRC : core.System
+public class HRCGI : core.System
 {
     private const int FrustumCount = 4;
     private int CascadeCount;
@@ -270,17 +270,26 @@ public class HolographicRC : core.System
     public override void Dispose()
     {
         FinalTexture?.Dispose();
+        FinalTexture = null;
 
-        for (int frustum = 0; frustum < FrustumCount; frustum++)
+        if (FrustumOutput != null)
         {
-            FrustumOutput[frustum]?.Dispose();
-            for (int cascade = 0; cascade < CascadeCount; cascade++)
+            for (int frustum = 0; frustum < FrustumCount; frustum++)
             {
-                VraysRadiance[frustum, cascade]?.Dispose();
-                VraysTransmit[frustum, cascade]?.Dispose();
-                MergeRadiance[frustum, cascade]?.Dispose();
-                MergeTransmit[frustum, cascade]?.Dispose();
+                FrustumOutput[frustum]?.Dispose();
+                for (int cascade = 0; cascade < CascadeCount; cascade++)
+                {
+                    VraysRadiance[frustum, cascade]?.Dispose();
+                    VraysTransmit[frustum, cascade]?.Dispose();
+                    MergeRadiance[frustum, cascade]?.Dispose();
+                    MergeTransmit[frustum, cascade]?.Dispose();
+                }
             }
+            FrustumOutput = null;
+            VraysRadiance = null;
+            VraysTransmit = null;
+            MergeRadiance = null;
+            MergeTransmit = null;
         }
     }
 }

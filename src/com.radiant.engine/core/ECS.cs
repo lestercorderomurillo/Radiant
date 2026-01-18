@@ -73,7 +73,8 @@ public class ECS : IGameObject
     public void Initialize()
     {
         for (int i = 0; i < Systems.Count; i++)
-            Systems[i].Initialize();
+            if (Systems[i].Enabled)
+                Systems[i].Initialize();
     }
 
     public void Dispose()
@@ -83,15 +84,16 @@ public class ECS : IGameObject
         GC.SuppressFinalize(this);
     }
 
-    public T AddSystem<T>() where T : System, new() => AddSystem(new T());
+    public T AddSystem<T>(bool enabled = true) where T : System, new() => AddSystem(new T(), enabled);
 
-    public T AddSystem<T>(T system) where T : System
+    public T AddSystem<T>(T system, bool enabled = true) where T : System
     {
         system.Scene = Scene;
         system.Renderer = Scene.Renderer;
         system.GameTime = Scene.GameTime;
+        system.Enabled = enabled;
         Systems.Add(system);
-        
+
         return system;
     }
 
