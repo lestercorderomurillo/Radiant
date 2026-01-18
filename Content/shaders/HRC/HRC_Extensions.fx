@@ -1,6 +1,5 @@
 /* HRC_Extensions.fx - MRT Output
-   Matches GLSL reference implementation EXACTLY.
-   Ray extension combines chained rays from cN-1 to form rays of cN */
+   Ray extension combines chained rays from cascade N-1 to form rays of cascade N. */
 
 Texture2D PrevRadiance : register(t1);
 Texture2D PrevTransmit : register(t2);

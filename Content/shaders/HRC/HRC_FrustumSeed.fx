@@ -1,6 +1,5 @@
 /* HRC_FrustumSeed.fx - MRT Output
-   Matches GLSL reference implementation exactly.
-   Frustum transforms are identical to reference. */
+   Seeds cascade 0 with emissivity/absorption from scene textures. */
 
 Texture2D SpriteBatchTexture : register(t0);
 Texture2D Emissivity : register(t1);
@@ -51,9 +50,8 @@ PixelShaderOutput MainPS(PixelShaderInput input)
 
     int fIdx = int(FrustumIndex + 0.1);
     float2 sampleCoord = TransformProbeToFrustum(probe, fIdx);
-    sampleCoord.y = 1.0 - sampleCoord.y;  // DX scene → GL cascade space
+    sampleCoord.y = 1.0 - sampleCoord.y;
 
-    // Bounds check
     if (sampleCoord.x < 0.0 || sampleCoord.x > 1.0 || sampleCoord.y < 0.0 || sampleCoord.y > 1.0)
     {
         output.Radiance = float4(0.0, 0.0, 0.0, 1.0);
@@ -61,7 +59,6 @@ PixelShaderOutput MainPS(PixelShaderInput input)
         return output;
     }
 
-    // Sample scene data
     float3 emiss = ToLinear(Emissivity.Sample(EmissiveSampler, sampleCoord).rgb);
     float3 absrp = ToLinear(Absorption.Sample(AbsorptionSampler, sampleCoord).rgb);
 

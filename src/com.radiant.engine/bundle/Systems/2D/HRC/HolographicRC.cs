@@ -15,18 +15,16 @@ namespace com.radiant.engine.bundle;
 public class HolographicRC : core.System
 {
     private const int FrustumCount = 4;
-    private const int CascadeCount = 6;
+    private int CascadeCount;
 
     private SceneGeometry SDFSystem;
     private GizmosRenderer Gizmos;
 
-    // Dual textures: [frustum, cascade]
     private RenderTarget2D[,] VraysRadiance;
     private RenderTarget2D[,] VraysTransmit;
     private RenderTarget2D[,] MergeRadiance;
     private RenderTarget2D[,] MergeTransmit;
 
-    // MRT binding arrays (reusable to avoid GC)
     private RenderTargetBinding[] MRT2;
 
     private RenderTarget2D[] FrustumOutput;
@@ -45,15 +43,13 @@ public class HolographicRC : core.System
         SDFSystem = Scene.ECS.GetSystem<SceneGeometry>();
         Gizmos = Scene.ECS.GetSystem<GizmosRenderer>();
 
-        // MRT binding array
         MRT2 = new RenderTargetBinding[2];
 
-        WorldSize = new Vector2(Renderer.Device.Viewport.Width, Renderer.Device.Viewport.Height);
+        WorldSize = new Vector2(Renderer.ScreenHigherPowerOfTwo, Renderer.ScreenHigherPowerOfTwo);
 
         CalculateCascadeSizes();
         CreateRenderTargets();
 
-        // Debug index layout: 0=Final, then per frustum (VraysR, VraysT, MergeR, MergeT) x cascades, then FrustumOutputs, Emissive, Absorption
         DebugTextureCount = 1 + FrustumCount * CascadeCount * 4 + FrustumCount + 2;
 
         PrevKeyState = Keyboard.GetState();
@@ -61,6 +57,7 @@ public class HolographicRC : core.System
 
     private void CalculateCascadeSizes()
     {
+        CascadeCount = (int)MathF.Ceiling(MathF.Log2(WorldSize.X));
         CascadeSizes = new Vector2[CascadeCount];
         MergeSizes = new Vector2[CascadeCount];
 
@@ -68,7 +65,7 @@ public class HolographicRC : core.System
         {
             float interval = MathF.Pow(2, cascade);
             float virtualRays = interval + 1;
-            int numProbes = (int)MathF.Ceiling(WorldSize.X / interval);
+            int numProbes = (int)MathF.Floor(WorldSize.X / interval);
 
             CascadeSizes[cascade] = new Vector2(numProbes * virtualRays, WorldSize.Y);
             MergeSizes[cascade] = new Vector2(numProbes * interval, WorldSize.Y);
@@ -129,7 +126,6 @@ public class HolographicRC : core.System
         var size = CascadeSizes[0];
         var shader = Renderer.GetShaderEffect("HRC/HRC_FrustumSeed");
 
-        // Set MRT: COLOR0 = Radiance, COLOR1 = Transmit
         MRT2[0] = VraysRadiance[frustum, 0];
         MRT2[1] = VraysTransmit[frustum, 0];
         Renderer.Device.SetRenderTargets(MRT2);
@@ -244,15 +240,12 @@ public class HolographicRC : core.System
         Texture2D texture = GetDebugTexture();
         Renderer.SpriteBatch.Begin(SpriteSortMode.Immediate, BlendState.AlphaBlend, SamplerState.PointClamp);
 
-        // For debug textures, preserve aspect ratio instead of stretching
         if (DebugIndex == 0)
         {
-            // Final output - fill viewport
             Renderer.SpriteBatch.Draw(texture, Renderer.Device.Viewport.Bounds, Color.White);
         }
         else
         {
-            // Intermediate textures - draw at actual size (or scaled to fit)
             float scale = MathF.Min(
                 (float)Renderer.Device.Viewport.Width / texture.Width,
                 (float)Renderer.Device.Viewport.Height / texture.Height
