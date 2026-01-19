@@ -44,7 +44,7 @@ public class HRCGI : core.System
         SDFSystem = Scene.ECS.GetSystem<SceneGeometry>();
         Gizmos = Scene.ECS.GetSystem<GizmosRenderer>();
 
-        WorldSize = new Vector2(Renderer.ScreenWidth, Renderer.ScreenHeight);
+        WorldSize = new Vector2(Renderer.ScreenHigherPowerOfTwo, Renderer.ScreenHigherPowerOfTwo);
 
         CalculateCascadeSizes();
         CreateRenderTargets();
