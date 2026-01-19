@@ -133,10 +133,11 @@ public class HRCGI : core.System
 
     private void RenderFrustumSeed(int frustum, Texture2D emissive, Texture2D absorption)
     {
+        // GameMaker uses gpu_set_tex_filter(false) = PointClamp for all HRC passes
         Renderer
             .Reset()
             .SetShader("HRC/HRC_FrustumSeed")
-            .Configure((0, SamplerState.LinearClamp), (1, SamplerState.LinearClamp))
+            .Configure((0, SamplerState.PointClamp), (1, SamplerState.PointClamp))
             .SetTargets(VraysRadiance[0], VraysTransmit[0])
             .Clear(Color.Black)
             .SetParameter("Emissivity", emissive)
@@ -203,14 +204,15 @@ public class HRCGI : core.System
 
     private void Compose()
     {
+        // GameMaker uses gpu_set_tex_filter(false) = PointClamp for all HRC passes
         Renderer
             .Reset()
             .SetShader("HRC/HRC_FluenceSum")
             .Configure(
-                (0, SamplerState.LinearClamp),
-                (1, SamplerState.LinearClamp),
-                (2, SamplerState.LinearClamp),
-                (3, SamplerState.LinearClamp))
+                (0, SamplerState.PointClamp),
+                (1, SamplerState.PointClamp),
+                (2, SamplerState.PointClamp),
+                (3, SamplerState.PointClamp))
             .SetTarget(FinalTexture)
             .Clear(Color.Black)
             .SetParameter("FrustumIndex0", FrustumOutput[0])

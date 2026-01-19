@@ -53,8 +53,8 @@ void GetVolumeVrays(float2 probe, float index, float interval, float lookupWidth
     float2 samplePos = float2(floor(probe.x / interval) * lookupWidth, probe.y) + float2(0.5, 0.0);
     samplePos = float2(samplePos.x + index, samplePos.y) / VraysSize;
 
-    float weight = (samplePos.x < 0.0 || samplePos.x >= 1.0 ||
-                    samplePos.y < 0.0 || samplePos.y >= 1.0) ? 1.0 : 0.0;
+    float2 floorPos = floor(samplePos);
+    float weight = (floorPos.x != 0.0 || floorPos.y != 0.0) ? 1.0 : 0.0;
 
     rad = lerp(VraysRadiance.Sample(SamplerVraysR, samplePos), defValR, weight);
     trn = lerp(VraysTransmit.Sample(SamplerVraysT, samplePos), defValT, weight);
@@ -67,8 +67,8 @@ void GetVolumePrev(float2 probe, float index, float interval, float lookupWidth,
     float2 samplePos = float2(floor(probe.x / interval) * lookupWidth, probe.y) + float2(0.5, 0.0);
     samplePos = float2(samplePos.x + index, samplePos.y) / PrevSize;
 
-    float weight = (samplePos.x < 0.0 || samplePos.x >= 1.0 ||
-                    samplePos.y < 0.0 || samplePos.y >= 1.0) ? 1.0 : 0.0;
+    float2 floorPos = floor(samplePos);
+    float weight = (floorPos.x != 0.0 || floorPos.y != 0.0) ? 1.0 : 0.0;
 
     rad = lerp(PrevRadiance.Sample(SamplerPrevR, samplePos), defValR, weight);
     trn = lerp(PrevTransmit.Sample(SamplerPrevT, samplePos), defValT, weight);
