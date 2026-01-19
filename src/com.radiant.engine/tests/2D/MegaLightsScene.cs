@@ -69,20 +69,21 @@ public class MegaLightsScene : Scene
             BoxEntityIds[i] = boxEntity;
 
             ref var transform = ref ECS.AddComponent<Transform>(boxEntity);
-            ref var rect = ref ECS.AddComponent<Rectangle2D>(boxEntity);
+            ref var circle = ref ECS.AddComponent<Circle2D>(boxEntity);
             ref var material = ref ECS.AddComponent<Material>(boxEntity);
 
             float angle = (float)i / boxCount * MathHelper.TwoPi;
             float x = ScreenCenter.X + BoxRadius * (float)Math.Cos(angle);
             float y = ScreenCenter.Y + BoxRadius * (float)Math.Sin(angle);
 
+            // Different colors per circle
             byte r = (byte)(Math.Sin(angle) * 127 + 128);
             byte g = (byte)(Math.Sin(angle + MathHelper.TwoPi / 3) * 127 + 128);
             byte b = (byte)(Math.Sin(angle + MathHelper.TwoPi * 2 / 3) * 127 + 128);
 
             transform.Position = new Vector3(x, y, 0);
             transform.Rotation = new Vector3((float)Math.Cos(angle), (float)Math.Sin(angle), 0);
-            rect.Size = new Vector2(BoxSize, BoxSize);
+            circle.Radius = BoxSize / 2;
 
             material.Albedo = new Color(r, g, b);
             material.Emissive = new Color(r, g, b);
