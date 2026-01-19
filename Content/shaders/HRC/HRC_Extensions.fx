@@ -95,6 +95,7 @@ PixelShaderOutput MainPS(PixelShaderInput input)
     float upper = ceil(index * 0.5);
 
     float4 radianceL, radianceU, transmitL, transmitU;
+    
     ExtendRay(probe, lower, upper, prev_intrv, prev_vrays, radianceL, transmitL);
     ExtendRay(probe, upper, lower, prev_intrv, prev_vrays, radianceU, transmitU);
 
@@ -112,7 +113,6 @@ technique GenerateOutputTexture
         PixelShader = compile ps_5_0 MainPS();
     }
 }
-
 
 float2 FlipX(float2 uv)
 {
