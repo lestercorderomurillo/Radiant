@@ -26,4 +26,6 @@ public abstract class System
     public virtual void Render() {}
 
     public virtual void LateRender() {}
+
+    public virtual void OnResize() {}
 }

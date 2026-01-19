@@ -383,6 +383,30 @@ public class SceneGeometry : core.System
         }
     }
 
+    public override void OnResize()
+    {
+        // Dispose old render targets
+        EmissiveTexture?.Dispose();
+        AbsorptionTexture?.Dispose();
+        SDFTexture?.Dispose();
+        JFATexture1?.Dispose();
+        JFATexture2?.Dispose();
+
+        // Recalculate bounds
+        WorldBounds = Renderer.ScreenSize;
+        SDFBounds = new Vector2(
+            (int)(WorldBounds.X * SDFScale),
+            (int)(WorldBounds.Y * SDFScale));
+        ScreenDiagonal = Renderer.ScreenDiagonal;
+
+        float sdfDiagonal = SDFBounds.Length();
+        JFAPassCount = (int)Math.Ceiling(Math.Log(sdfDiagonal, 2)) + 1;
+
+        // Recreate buffers
+        InitializeGeometryBuffers();
+        JFAResult = JFATexture1;
+    }
+
     public override void Dispose()
     {
         EmissiveTexture?.Dispose();

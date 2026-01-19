@@ -286,6 +286,47 @@ public class HRCGI : core.System
 
     public RenderTarget2D GetOutput() => FinalTexture;
 
+    public override void OnResize()
+    {
+        // Dispose existing render targets
+        DisposeRenderTargets();
+
+        // Recalculate sizes
+        WorldSize = new Vector2(Renderer.ScreenHigherPowerOfTwo, Renderer.ScreenHigherPowerOfTwo);
+        CalculateCascadeSizes();
+        CreateRenderTargets();
+
+        DebugTextureCount = 1 + CascadeCount * 4 + FrustumCount + 2;
+    }
+
+    private void DisposeRenderTargets()
+    {
+        FinalTexture?.Dispose();
+        FinalTexture = null;
+
+        if (VraysRadiance != null)
+        {
+            for (int cascade = 0; cascade < VraysRadiance.Length; cascade++)
+            {
+                VraysRadiance[cascade]?.Dispose();
+                VraysTransmit[cascade]?.Dispose();
+                MergeRadiance[cascade]?.Dispose();
+                MergeTransmit[cascade]?.Dispose();
+            }
+            VraysRadiance = null;
+            VraysTransmit = null;
+            MergeRadiance = null;
+            MergeTransmit = null;
+        }
+
+        if (FrustumOutput != null)
+        {
+            for (int frustum = 0; frustum < FrustumCount; frustum++)
+                FrustumOutput[frustum]?.Dispose();
+            FrustumOutput = null;
+        }
+    }
+
     public override void Dispose()
     {
         FinalTexture?.Dispose();
