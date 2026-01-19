@@ -133,7 +133,6 @@ public class HRCGI : core.System
 
     private void RenderFrustumSeed(int frustum, Texture2D emissive, Texture2D absorption)
     {
-        // GameMaker uses gpu_set_tex_filter(false) = PointClamp for all HRC passes
         Renderer
             .Reset()
             .SetShader("HRC/HRC_FrustumSeed")
