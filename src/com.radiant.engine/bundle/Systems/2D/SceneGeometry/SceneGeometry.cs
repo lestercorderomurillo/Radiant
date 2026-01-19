@@ -161,7 +161,7 @@ public class SceneGeometry : core.System
             if (mat.Emissive.A == 0) continue;
 
             float diameter = circle.Radius * 2;
-            Vector2 position = new Vector2(transform.Position.X - circle.Radius, transform.Position.Y - circle.Radius);
+            Vector2 position = new Vector2(MathF.Round(transform.Position.X - circle.Radius), MathF.Round(transform.Position.Y - circle.Radius));
 
             if (position.X + diameter >= 0 && position.X < WorldBounds.X &&
                 position.Y + diameter >= 0 && position.Y < WorldBounds.Y)
@@ -233,8 +233,8 @@ public class SceneGeometry : core.System
             if (mat.Albedo.A == 0) continue;
 
             int diameter = Math.Max(1, (int)(circle.Radius * 2));
-            int x = (int)(transform.Position.X - circle.Radius);
-            int y = (int)(transform.Position.Y - circle.Radius);
+            int x = (int)MathF.Round(transform.Position.X - circle.Radius);
+            int y = (int)MathF.Round(transform.Position.Y - circle.Radius);
 
             BufferBounds.X = x;
             BufferBounds.Y = y;

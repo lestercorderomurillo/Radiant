@@ -71,7 +71,7 @@ PixelShaderOutput MainPS(PixelShaderInput input)
     }
 
     float3 emiss = ToLinear(Emissivity.Sample(EmissiveSampler, sampleCoord).rgb);
-    float3 absrp = Absorption.Sample(AbsorptionSampler, sampleCoord).rgb;
+    float3 absrp = Absorption.Sample(AbsorptionSampler, sampleCoord).rgb * 5.0;
 
     // Beer's Law
     float3 transmit = exp(-absrp);

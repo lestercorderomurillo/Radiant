@@ -12,7 +12,7 @@ public class MegaLightsScene : Scene
     private MouseState PreviousMouseState;
     private int[] BoxEntityIds; // Track box entities
     private int[] OccluderEntityIds; // Track scattered occluder entities
-    private float RotationSpeed = 0.40f; // Rotation speed in radians per second
+    private float RotationSpeed = 0.10f; // Rotation speed in radians per second
     private float CurrentRotation = 0f; // Current rotation angle
     private Vector2 ScreenCenter; // Center point for rotation
     private float BoxRadius = 300; // Radius of the ring
@@ -266,8 +266,15 @@ public class MegaLightsScene : Scene
         transform.Position = new Vector3(position.X, position.Y, 0);
         transform.Rotation = new Vector3(1, 0, 0);
         circle.Radius = 50;
-        material.Albedo = new Color(255, 255, 255);
-        material.Emissive = new Color(255, 255, 255); // Bright white
+
+        // Random color for the light
+        byte r = (byte)Random.Next(128, 256);
+        byte g = (byte)Random.Next(128, 256);
+        byte b = (byte)Random.Next(128, 256);
+        var color = new Color(r, g, b);
+
+        material.Albedo = color;
+        material.Emissive = color;
     }
 
     private void SpawnOccluder(Vector2 position)
