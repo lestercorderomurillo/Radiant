@@ -123,6 +123,7 @@ public class SceneGeometry : core.System
 
         int count = 0;
 
+        // Render rectangles
         foreach (var id in Scene.ECS.Query<Transform, Rectangle2D, Material>(culling: false))
         {
             ref var transform = ref Scene.ECS.GetComponent<Transform>(id);
@@ -150,6 +151,38 @@ public class SceneGeometry : core.System
             }
         }
 
+        // Render circles
+        foreach (var id in Scene.ECS.Query<Transform, Circle2D, Material>(culling: false))
+        {
+            ref var transform = ref Scene.ECS.GetComponent<Transform>(id);
+            ref var circle = ref Scene.ECS.GetComponent<Circle2D>(id);
+            ref var mat = ref Scene.ECS.GetComponent<Material>(id);
+
+            if (mat.Emissive.A == 0) continue;
+
+            float diameter = circle.Radius * 2;
+            Vector2 position = new Vector2(transform.Position.X - circle.Radius, transform.Position.Y - circle.Radius);
+
+            if (position.X + diameter >= 0 && position.X < WorldBounds.X &&
+                position.Y + diameter >= 0 && position.Y < WorldBounds.Y)
+            {
+                int texDiameter = Math.Max(1, (int)diameter);
+                var circleTexture = Renderer.GetCircleTexture(texDiameter);
+
+                Renderer.DrawTexture(
+                    circleTexture,
+                    position,
+                    null,
+                    mat.Emissive,
+                    0f,
+                    Vector2.Zero,
+                    Vector2.One,
+                    SpriteEffects.None,
+                    0f);
+                count++;
+            }
+        }
+
         Renderer
             .Commit()
             .SetTarget(null);
@@ -169,6 +202,7 @@ public class SceneGeometry : core.System
         int count = 0;
         Rectangle screen = new Rectangle(0, 0, (int)WorldBounds.X, (int)WorldBounds.Y);
 
+        // Render rectangles
         foreach (var id in Scene.ECS.Query<Transform, Rectangle2D, Material>(culling: false))
         {
             ref var transform = ref Scene.ECS.GetComponent<Transform>(id);
@@ -185,6 +219,32 @@ public class SceneGeometry : core.System
             if (BufferBounds.Intersects(screen))
             {
                 Renderer.DrawTexture(Renderer.GetSolidTexture(Color.White), BufferBounds, mat.Albedo);
+                count++;
+            }
+        }
+
+        // Render circles
+        foreach (var id in Scene.ECS.Query<Transform, Circle2D, Material>(culling: false))
+        {
+            ref var transform = ref Scene.ECS.GetComponent<Transform>(id);
+            ref var circle = ref Scene.ECS.GetComponent<Circle2D>(id);
+            ref var mat = ref Scene.ECS.GetComponent<Material>(id);
+
+            if (mat.Albedo.A == 0) continue;
+
+            int diameter = Math.Max(1, (int)(circle.Radius * 2));
+            int x = (int)(transform.Position.X - circle.Radius);
+            int y = (int)(transform.Position.Y - circle.Radius);
+
+            BufferBounds.X = x;
+            BufferBounds.Y = y;
+            BufferBounds.Width = diameter;
+            BufferBounds.Height = diameter;
+
+            if (BufferBounds.Intersects(screen))
+            {
+                var circleTexture = Renderer.GetCircleTexture(diameter);
+                Renderer.DrawTexture(circleTexture, new Rectangle(x, y, diameter, diameter), mat.Albedo);
                 count++;
             }
         }

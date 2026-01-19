@@ -65,8 +65,8 @@ public class MegaLightsScene : Scene
 
         for (int i = 0; i < boxCount; i++)
         {
-            int boxEntity = ECS.CreateEntity(); // Now returns int
-            BoxEntityIds[i] = boxEntity; // Store entity ID
+            int boxEntity = ECS.CreateEntity();
+            BoxEntityIds[i] = boxEntity;
 
             ref var transform = ref ECS.AddComponent<Transform>(boxEntity);
             ref var rect = ref ECS.AddComponent<Rectangle2D>(boxEntity);
@@ -82,7 +82,6 @@ public class MegaLightsScene : Scene
 
             transform.Position = new Vector3(x, y, 0);
             transform.Rotation = new Vector3((float)Math.Cos(angle), (float)Math.Sin(angle), 0);
-
             rect.Size = new Vector2(BoxSize, BoxSize);
 
             material.Albedo = new Color(r, g, b);
@@ -150,20 +149,19 @@ public class MegaLightsScene : Scene
 
     private void CreateMouseEmitter()
     {
-        MouseEmitterEntityId = ECS.CreateEntity(); // Now returns int
+        MouseEmitterEntityId = ECS.CreateEntity();
 
         ref var emitterTransform = ref ECS.AddComponent<Transform>(MouseEmitterEntityId);
-        ref var emitterRect = ref ECS.AddComponent<Rectangle2D>(MouseEmitterEntityId);
+        ref var emitterCircle = ref ECS.AddComponent<Circle2D>(MouseEmitterEntityId);
         ref var emitterMaterial = ref ECS.AddComponent<Material>(MouseEmitterEntityId);
 
         // Initialize emitter
         MouseState mouse = Mouse.GetState();
         Vector2 mousePos = new Vector2(mouse.X, mouse.Y);
 
-        // Default rotation (facing right)
         emitterTransform.Position = new Vector3(mousePos.X, mousePos.Y, 0);
         emitterTransform.Rotation = new Vector3(1, 0, 0);
-        emitterRect.Size = new Vector2(100, 100);
+        emitterCircle.Radius = 50;
         emitterMaterial.Albedo = new Color(255, 255, 100);
         emitterMaterial.Emissive = new Color(255, 255, 100); // Bright yellow
 
@@ -257,35 +255,35 @@ public class MegaLightsScene : Scene
 
     private void SpawnEmitter(Vector2 position)
     {
-        // Create a new emitter entity
+        // Create a new circle emitter entity
         int lightId = ECS.CreateEntity();
 
         ref var transform = ref ECS.AddComponent<Transform>(lightId);
-        ref var rect = ref ECS.AddComponent<Rectangle2D>(lightId);
+        ref var circle = ref ECS.AddComponent<Circle2D>(lightId);
         ref var material = ref ECS.AddComponent<Material>(lightId);
 
         transform.Position = new Vector3(position.X, position.Y, 0);
         transform.Rotation = new Vector3(1, 0, 0);
-        rect.Size = new Vector2(100, 100);
+        circle.Radius = 50;
         material.Albedo = new Color(255, 255, 255);
         material.Emissive = new Color(255, 255, 255); // Bright white
     }
 
     private void SpawnOccluder(Vector2 position)
     {
-        // Create a new occluder entity
+        // Create a new circle occluder entity
         int occluderId = ECS.CreateEntity();
 
         ref var transform = ref ECS.AddComponent<Transform>(occluderId);
-        ref var rect = ref ECS.AddComponent<Rectangle2D>(occluderId);
+        ref var circle = ref ECS.AddComponent<Circle2D>(occluderId);
         ref var material = ref ECS.AddComponent<Material>(occluderId);
 
         transform.Position = new Vector3(position.X, position.Y, 0);
         transform.Rotation = new Vector3(1, 0, 0);
-        rect.Size = new Vector2(40, 40); // Larger size for occluders
+        circle.Radius = 20;
 
         // Non-emissive material (black emissive = no light emission)
-        material.Albedo = Color.Red; // Gray color for visibility
-        material.Emissive = Color.Black; // No light emission
+        material.Albedo = Color.Red;
+        material.Emissive = Color.Red;
     }
 }

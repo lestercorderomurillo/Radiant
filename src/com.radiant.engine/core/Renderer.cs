@@ -32,6 +32,7 @@ public class Renderer : IDisposable
     // Internal
     private Dictionary<string, Effect> ShaderCache = new();
     private Dictionary<(Color, int, int), Texture2D> SolidTextureCache = new();
+    private Dictionary<int, Texture2D> CircleTextureCache = new();
     private VertexBuffer QuadVertexBuffer;
     private IndexBuffer QuadIndexBuffer;
     private Effect CurrentShader;
@@ -487,6 +488,42 @@ public class Renderer : IDisposable
         return texture;
     }
 
+    // Circle Textures (cached by diameter)
+    public Texture2D GetCircleTexture(int diameter)
+    {
+        if (diameter < 1) diameter = 1;
+
+        if (!CircleTextureCache.TryGetValue(diameter, out var texture))
+        {
+            texture = new Texture2D(Device, diameter, diameter);
+            var data = new Color[diameter * diameter];
+
+            float radius = diameter / 2f;
+            float centerX = radius - 0.5f;
+            float centerY = radius - 0.5f;
+            float radiusSq = radius * radius;
+
+            for (int y = 0; y < diameter; y++)
+            {
+                for (int x = 0; x < diameter; x++)
+                {
+                    float dx = x - centerX;
+                    float dy = y - centerY;
+                    float distSq = dx * dx + dy * dy;
+
+                    if (distSq <= radiusSq)
+                        data[y * diameter + x] = Color.White;
+                    else
+                        data[y * diameter + x] = Color.Transparent;
+                }
+            }
+
+            texture.SetData(data);
+            CircleTextureCache[diameter] = texture;
+        }
+        return texture;
+    }
+
     // Textures
     public Renderer SetTexture(int slot, Texture2D texture)
     {
@@ -714,6 +751,10 @@ public class Renderer : IDisposable
         foreach (var texture in SolidTextureCache.Values)
             texture?.Dispose();
         SolidTextureCache.Clear();
+
+        foreach (var texture in CircleTextureCache.Values)
+            texture?.Dispose();
+        CircleTextureCache.Clear();
 
         foreach (var shader in ShaderCache.Values)
             shader?.Dispose();
