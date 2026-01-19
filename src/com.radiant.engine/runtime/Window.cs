@@ -27,8 +27,8 @@ public class Window : Game
 
         GraphicsDeviceManager.SynchronizeWithVerticalRetrace = false;
         GraphicsDeviceManager.PreferredDepthStencilFormat = DepthFormat.None;
-        GraphicsDeviceManager.PreferredBackBufferWidth = 2048;
-        GraphicsDeviceManager.PreferredBackBufferHeight = 2048;
+        GraphicsDeviceManager.PreferredBackBufferWidth = 3840;
+        GraphicsDeviceManager.PreferredBackBufferHeight = 2160;
         GraphicsDeviceManager.GraphicsProfile = GraphicsProfile.HiDef;
         GraphicsDeviceManager.IsFullScreen = false;
         GraphicsDeviceManager.HardwareModeSwitch = true;

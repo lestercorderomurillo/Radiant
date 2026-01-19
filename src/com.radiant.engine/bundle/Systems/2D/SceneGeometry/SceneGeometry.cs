@@ -132,7 +132,7 @@ public class SceneGeometry : core.System
 
             if (mat.Emissive.A == 0) continue;
 
-            Vector2 position = new Vector2(transform.Position.X, transform.Position.Y);
+            Vector2 position = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
 
             if (position.X + rect.Size.X >= 0 && position.X < WorldBounds.X &&
                 position.Y + rect.Size.Y >= 0 && position.Y < WorldBounds.Y)
@@ -211,8 +211,8 @@ public class SceneGeometry : core.System
 
             if (mat.Albedo.A == 0) continue;
 
-            BufferBounds.X = (int)transform.Position.X;
-            BufferBounds.Y = (int)transform.Position.Y;
+            BufferBounds.X = (int)MathF.Round(transform.Position.X);
+            BufferBounds.Y = (int)MathF.Round(transform.Position.Y);
             BufferBounds.Width = (int)rect.Size.X;
             BufferBounds.Height = (int)rect.Size.Y;
 
