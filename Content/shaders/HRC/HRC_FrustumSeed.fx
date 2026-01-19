@@ -37,13 +37,13 @@ struct PixelShaderOutput
     float4 Transmit : COLOR1;
 };
 
-
 float2 TransformProbeToFrustum(float2 probe, int index)
 {
     if (index == 0) return probe;
     if (index == 1) return 1.0 - probe.yx;
     if (index == 2) return 1.0 - probe;
     if (index == 3) return probe.yx;
+
     return probe;
 }
 
@@ -61,12 +61,12 @@ PixelShaderOutput MainPS(PixelShaderInput input)
 
     int fIdx = int(FrustumIndex + 0.1);
     float2 sampleCoord = TransformProbeToFrustum(probe, fIdx);
-    //sampleCoord.y = 1.0 - sampleCoord.y;
 
     if (sampleCoord.x < 0.0 || sampleCoord.x > 1.0 || sampleCoord.y < 0.0 || sampleCoord.y > 1.0)
     {
         output.Radiance = float4(0.0, 0.0, 0.0, 1.0);
         output.Transmit = float4(1.0, 1.0, 1.0, 1.0);
+
         return output;
     }
 
@@ -79,6 +79,7 @@ PixelShaderOutput MainPS(PixelShaderInput input)
 
     output.Radiance = float4(radiance, 1.0);
     output.Transmit = float4(transmit, 1.0);
+
     return output;
 }
 

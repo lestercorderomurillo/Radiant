@@ -100,6 +100,7 @@ PixelShaderOutput MainPS(PixelShaderInput input)
 
     output.Radiance = lerp(radianceL, radianceU, 0.5);
     output.Transmit = lerp(transmitL, transmitU, 0.5);
+
     return output;
 }
 
@@ -110,4 +111,15 @@ technique GenerateOutputTexture
         VertexShader = compile vs_5_0 MainVS();
         PixelShader = compile ps_5_0 MainPS();
     }
+}
+
+
+float2 FlipX(float2 uv)
+{
+    return float2(1.0 - uv.x, uv.y);
+}
+
+float2 FlipY(float2 uv)
+{
+    return float2(uv.x, 1.0 - uv.y);
 }
