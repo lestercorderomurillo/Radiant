@@ -385,6 +385,11 @@ public class SceneGeometry : core.System
 
     public override void OnResize()
     {
+        // Lazy resize - only rebuild if screen size actually changed
+        Vector2 newSize = Renderer.ScreenSize;
+        if (WorldBounds == newSize)
+            return;
+
         // Dispose old render targets
         EmissiveTexture?.Dispose();
         AbsorptionTexture?.Dispose();
@@ -393,7 +398,7 @@ public class SceneGeometry : core.System
         JFATexture2?.Dispose();
 
         // Recalculate bounds
-        WorldBounds = Renderer.ScreenSize;
+        WorldBounds = newSize;
         SDFBounds = new Vector2(
             (int)(WorldBounds.X * SDFScale),
             (int)(WorldBounds.Y * SDFScale));

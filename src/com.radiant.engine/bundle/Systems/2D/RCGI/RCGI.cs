@@ -283,6 +283,40 @@ public class RCGI : core.System
         Renderer.SpriteBatch.End();
     }
 
+    public override void OnResize()
+    {
+        // Lazy resize - only rebuild if screen size actually changed
+        Vector2 newSize = new Vector2(Renderer.Device.Viewport.Width, Renderer.Device.Viewport.Height);
+        if (ScreenSize == newSize)
+            return;
+
+        // Dispose existing render targets
+        DisposeRenderTargets();
+
+        // Recalculate sizes
+        ScreenSize = newSize;
+        CascadeSize = ScreenSize / CascadeLinear;
+        InvScreenSize = new Vector2(1f / ScreenSize.X, 1f / ScreenSize.Y);
+        InvCascadeSize = new Vector2(1f / CascadeSize.X, 1f / CascadeSize.Y);
+
+        CalculateActiveCascades();
+        PreCalculateCascadeParameters();
+        InitializeRenderTargets();
+    }
+
+    private void DisposeRenderTargets()
+    {
+        FinalTexture?.Dispose();
+        FinalTexture = null;
+
+        if (CascadeLayers != null)
+        {
+            foreach (var layer in CascadeLayers)
+                layer?.Dispose();
+            CascadeLayers = null;
+        }
+    }
+
     public override void Dispose()
     {
         // Note: RCShader, ShaderSpriteBatch are managed by Renderer

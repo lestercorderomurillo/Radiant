@@ -128,7 +128,7 @@ public class HRCGI : core.System
         Compose();
         Renderer.Device.SetRenderTargets(originalTargets);
 
-        Gizmos.Set("HRC", $"Debug: {DebugIndex} (F3)");
+        Gizmos.Set("HRCGI", $"World: {(int)WorldSize.X} | Cascades: {CascadeCount} | Frustums: {FrustumCount}");
     }
 
     private void RenderFrustumSeed(int frustum, Texture2D emissive, Texture2D absorption)
@@ -288,11 +288,16 @@ public class HRCGI : core.System
 
     public override void OnResize()
     {
+        // Lazy resize - only rebuild if power-of-two size actually changed
+        int newSize = Renderer.ScreenHigherPowerOfTwo;
+        if ((int)WorldSize.X == newSize)
+            return;
+
         // Dispose existing render targets
         DisposeRenderTargets();
 
         // Recalculate sizes
-        WorldSize = new Vector2(Renderer.ScreenHigherPowerOfTwo, Renderer.ScreenHigherPowerOfTwo);
+        WorldSize = new Vector2(newSize, newSize);
         CalculateCascadeSizes();
         CreateRenderTargets();
 

@@ -18,6 +18,7 @@ public class ECS : IGameObject
     private Vector2 ViewportCenter;
     private Vector2 ViewportSize;
 
+
     public int EntityCount => ActiveEntities.Count;
     public Scene Scene { get; set; }
     public Renderer Renderer { get; private set; }
@@ -413,6 +414,19 @@ public class ECS : IGameObject
     }
     public void Update()
     {
+        // Handle resize - each system decides if it needs to rebuild
+        if (Renderer.Window.ResizePending)
+        {
+            Renderer.Window.ClearResizePending();
+            Renderer.UpdateScreenInfo();
+            ViewportSize = Renderer.Window.GetScreenSize();
+            ViewportCenter = Renderer.Window.GetScreenCenter();
+
+            for (int i = 0; i < Systems.Count; i++)
+                if (Systems[i].Enabled)
+                    Systems[i].OnResize();
+        }
+
         for (int i = 0; i < Systems.Count; i++)
         {
             if (!Systems[i].Enabled) continue;
