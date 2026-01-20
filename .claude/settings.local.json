@@ -4,7 +4,9 @@
       "WebFetch(domain:github.com)",
       "Bash(curl:*)",
       "WebFetch(domain:api.github.com)",
-      "Bash(dotnet build:*)"
+      "Bash(dotnet build:*)",
+      "Bash(dotnet run)",
+      "Bash(dotnet msbuild:*)"
     ]
   }
 }

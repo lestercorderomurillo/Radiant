@@ -35,8 +35,7 @@ PixelShaderInput MainVS(VertexShaderInput input)
 
 struct PixelShaderOutput
 {
-    float4 Radiance : COLOR0;
-    float4 Transmit : COLOR1;
+    float4 Radiance : COLOR0;  // RGB = radiance, A = transmittance
 };
 
 float2 TransformProbeToFrustum(float2 probe)
@@ -63,22 +62,19 @@ PixelShaderOutput MainPS(PixelShaderInput input)
 
     if (sampleCoord.x < 0.0 || sampleCoord.x > 1.0 || sampleCoord.y < 0.0 || sampleCoord.y > 1.0)
     {
-        output.Radiance = float4(0.0, 0.0, 0.0, 1.0);
-        output.Transmit = float4(1.0, 1.0, 1.0, 1.0);
-
+        output.Radiance = float4(0.0, 0.0, 0.0, 1.0);  // full transmittance
         return output;
     }
 
     float3 emiss = ToLinear(Emissivity.Sample(EmissiveSampler, sampleCoord).rgb);
     float3 absrp = Absorption.Sample(AbsorptionSampler, sampleCoord).rgb * 5.0;
 
-    // Beer's Law
-    float3 transmit = exp(-absrp);
+    // Beer's Law with luminance-weighted single-channel transmittance
+    float absrpLum = dot(absrp, float3(0.299, 0.587, 0.114));
+    float transmit = exp(-absrpLum);
     float3 radiance = (1.0 - transmit) * emiss;
 
-    output.Radiance = float4(radiance, 1.0);
-    output.Transmit = float4(transmit, 1.0);
-
+    output.Radiance = float4(radiance, transmit);
     return output;
 }
 
