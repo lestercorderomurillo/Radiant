@@ -60,17 +60,7 @@ public class FSR : core.System
             DepthFormat.None);
     }
 
-    private float GetScaleFactor()
-    {
-        return Quality switch
-        {
-            FSRQuality.Quality => 0.77f,
-            FSRQuality.Balanced => 0.67f,
-            FSRQuality.Performance => 0.50f,
-            FSRQuality.Ultra => 0.33f,
-            _ => 0.67f
-        };
-    }
+    private float GetScaleFactor() => (int)Quality / 100f;
 
     private void ApplyRenderScale()
     {
@@ -79,10 +69,17 @@ public class FSR : core.System
 
     public override void Update()
     {
-        if (!Enabled || InputSource == null)
+        if (InputSource == null)
             return;
 
         HandleInput();
+
+        // Skip FSR processing when Off (native resolution)
+        if (Quality == FSRQuality.Off)
+        {
+            Gizmos?.Set("FSR", "Quality: Off (Native) [F4]");
+            return;
+        }
 
         var input = InputSource();
         if (input == null)
@@ -104,7 +101,7 @@ public class FSR : core.System
             .Commit()
             .SetTarget(null);
 
-        Gizmos?.Set("FSR", $"Quality: {Quality} ({GetScaleFactor():P0}) [F5/F6]");
+        Gizmos?.Set("FSR", $"Quality: {Quality} ({GetScaleFactor():P0}) [F4]");
         Gizmos?.Set("FSR", $"Input: {input.Width}x{input.Height}");
         Gizmos?.Set("FSR", $"Output: {OutputSize.X}x{OutputSize.Y}");
         Gizmos?.Set("FSR", $"Sharpness: {Sharpness:F2} [F7/F8]");
@@ -113,18 +110,6 @@ public class FSR : core.System
     private void HandleInput()
     {
         var key = Keyboard.GetState();
-
-        // F5/F6 to cycle quality
-        if (key.IsKeyDown(Keys.F5) && !PrevKeyState.IsKeyDown(Keys.F5))
-        {
-            int count = Enum.GetValues<FSRQuality>().Length;
-            Quality = (FSRQuality)(((int)Quality + count - 1) % count);
-        }
-        if (key.IsKeyDown(Keys.F6) && !PrevKeyState.IsKeyDown(Keys.F6))
-        {
-            int count = Enum.GetValues<FSRQuality>().Length;
-            Quality = (FSRQuality)(((int)Quality + 1) % count);
-        }
 
         // F7/F8 to adjust sharpness
         if (key.IsKeyDown(Keys.F7) && !PrevKeyState.IsKeyDown(Keys.F7))
@@ -141,7 +126,7 @@ public class FSR : core.System
 
     public override void Render()
     {
-        if (!Enabled || InputSource == null)
+        if (InputSource == null || Quality == FSRQuality.Off)
             return;
 
         Renderer.SpriteBatch.Begin(SpriteSortMode.Immediate, BlendState.AlphaBlend, SamplerState.LinearClamp);

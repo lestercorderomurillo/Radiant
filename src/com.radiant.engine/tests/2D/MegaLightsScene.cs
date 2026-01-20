@@ -20,7 +20,6 @@ public class MegaLightsScene : Scene
     private bool IsMoving = true; // Toggle for box movement
     private KeyboardState PreviousKeyboardState; // Track keyboard state for toggle
     private bool UseHolographic = true; // Toggle for rendering mode
-    private bool UseFSR = false; // Toggle for FSR upscaling
     private HRCGI HolographicSystem;
     private RCGI RCGISystem;
     private FSR FSRSystem;
@@ -39,7 +38,7 @@ public class MegaLightsScene : Scene
         GeometrySystem = ECS.AddSystem<SceneGeometry>();
         HolographicSystem = ECS.AddSystem<HRCGI>();
         RCGISystem = ECS.AddSystem<RCGI>(enabled: false);
-        FSRSystem = ECS.AddSystem<FSR>(enabled: false);
+        FSRSystem = ECS.AddSystem<FSR>();
         Gizmos = ECS.AddSystem<GizmosRenderer>();
 
         // HRCGI doesn't need SDF, RCGI does
@@ -60,6 +59,9 @@ public class MegaLightsScene : Scene
 
         // Create mouse-following emitter
         CreateMouseEmitter();
+
+        // Setup FSR input source
+        UpdateFSRInputSource();
 
         base.SetupScene();
     }
@@ -209,20 +211,11 @@ public class MegaLightsScene : Scene
             UpdateFSRInputSource();
         }
 
-        // Check for F4 key to toggle FSR
+        // Check for F4 key to cycle FSR quality modes
         if (currentKeyboardState.IsKeyDown(Keys.F4) && PreviousKeyboardState.IsKeyUp(Keys.F4))
         {
-            UseFSR = !UseFSR;
-            FSRSystem.Enabled = UseFSR;
-            if (UseFSR)
-            {
-                FSRSystem.Initialize();
-                UpdateFSRInputSource();
-            }
-            else
-            {
-                FSRSystem.Dispose();
-            }
+            int count = Enum.GetValues<FSRQuality>().Length;
+            FSRSystem.Quality = (FSRQuality)(((int)FSRSystem.Quality + 1) % count);
         }
 
         PreviousKeyboardState = currentKeyboardState;
@@ -277,9 +270,7 @@ public class MegaLightsScene : Scene
 
         // Display current rendering mode
         string mode = UseHolographic ? "HRCGI" : "RCGI";
-        string fsr = UseFSR ? "ON" : "OFF";
         Gizmos.Set("Renderer", $"Mode: {mode} (Tab to toggle)");
-        Gizmos.Set("Renderer", $"FSR: {fsr} (F4 to toggle)");
     }
 
     private void UpdateFSRInputSource()
