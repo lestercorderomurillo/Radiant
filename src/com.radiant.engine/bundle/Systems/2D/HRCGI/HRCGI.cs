@@ -44,7 +44,7 @@ public class HRCGI : core.System
         SDFSystem = Scene.ECS.GetSystem<SceneGeometry>();
         Gizmos = Scene.ECS.GetSystem<GizmosRenderer>();
 
-        WorldSize = new Vector2(Renderer.ScreenHigherPowerOfTwo, Renderer.ScreenHigherPowerOfTwo);
+        WorldSize = new Vector2(Renderer.ScaledHigherPowerOfTwo, Renderer.ScaledHigherPowerOfTwo);
 
         CalculateCascadeSizes();
         CreateRenderTargets();
@@ -53,6 +53,22 @@ public class HRCGI : core.System
         DebugTextureCount = 1 + CascadeCount * 4 + FrustumCount + 2;
 
         PrevKeyState = Keyboard.GetState();
+
+        // Subscribe to render scale changes
+        Renderer.RenderScaleChanged += OnRenderScaleChanged;
+    }
+
+    private void OnRenderScaleChanged(float newScale)
+    {
+        int newSize = Renderer.ScaledHigherPowerOfTwo;
+        if ((int)WorldSize.X == newSize)
+            return;
+
+        DisposeRenderTargets();
+        WorldSize = new Vector2(newSize, newSize);
+        CalculateCascadeSizes();
+        CreateRenderTargets();
+        DebugTextureCount = 1 + CascadeCount * 4 + FrustumCount + 2;
     }
 
     private void CalculateCascadeSizes()
@@ -288,8 +304,8 @@ public class HRCGI : core.System
 
     public override void OnResize()
     {
-        // Lazy resize - only rebuild if power-of-two size actually changed
-        int newSize = Renderer.ScreenHigherPowerOfTwo;
+        // Lazy resize - only rebuild if scaled power-of-two size actually changed
+        int newSize = Renderer.ScaledHigherPowerOfTwo;
         if ((int)WorldSize.X == newSize)
             return;
 
@@ -334,6 +350,8 @@ public class HRCGI : core.System
 
     public override void Dispose()
     {
+        Renderer.RenderScaleChanged -= OnRenderScaleChanged;
+
         FinalTexture?.Dispose();
         FinalTexture = null;
 

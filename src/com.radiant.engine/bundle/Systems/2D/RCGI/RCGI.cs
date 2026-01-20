@@ -58,7 +58,7 @@ public class RCGI : core.System
         ShaderSpriteBatch = Renderer.SpriteBatch;
         SDFSystem = Scene.ECS.GetSystem<SceneGeometry>();
 
-        ScreenSize = new Vector2(Renderer.Device.Viewport.Width, Renderer.Device.Viewport.Height);
+        ScreenSize = Renderer.ScaledSize;
         CascadeSize = ScreenSize / CascadeLinear;
         InvScreenSize = new Vector2(1f / ScreenSize.X, 1f / ScreenSize.Y);
         InvCascadeSize = new Vector2(1f / CascadeSize.X, 1f / CascadeSize.Y);
@@ -72,6 +72,27 @@ public class RCGI : core.System
             MultiSampleAntiAlias = false,
             CullMode = CullMode.None
         };
+
+        // Subscribe to render scale changes
+        Renderer.RenderScaleChanged += OnRenderScaleChanged;
+    }
+
+    private void OnRenderScaleChanged(float newScale)
+    {
+        Vector2 newSize = Renderer.ScaledSize;
+        if (ScreenSize == newSize)
+            return;
+
+        DisposeRenderTargets();
+
+        ScreenSize = newSize;
+        CascadeSize = ScreenSize / CascadeLinear;
+        InvScreenSize = new Vector2(1f / ScreenSize.X, 1f / ScreenSize.Y);
+        InvCascadeSize = new Vector2(1f / CascadeSize.X, 1f / CascadeSize.Y);
+
+        CalculateActiveCascades();
+        PreCalculateCascadeParameters();
+        InitializeRenderTargets();
     }
 
     private void CalculateActiveCascades()
@@ -283,10 +304,12 @@ public class RCGI : core.System
         Renderer.SpriteBatch.End();
     }
 
+    public RenderTarget2D GetOutput() => FinalTexture;
+
     public override void OnResize()
     {
-        // Lazy resize - only rebuild if screen size actually changed
-        Vector2 newSize = new Vector2(Renderer.Device.Viewport.Width, Renderer.Device.Viewport.Height);
+        // Lazy resize - only rebuild if scaled screen size actually changed
+        Vector2 newSize = Renderer.ScaledSize;
         if (ScreenSize == newSize)
             return;
 
@@ -319,6 +342,8 @@ public class RCGI : core.System
 
     public override void Dispose()
     {
+        Renderer.RenderScaleChanged -= OnRenderScaleChanged;
+
         // Note: RCShader, ShaderSpriteBatch are managed by Renderer
         FinalTexture?.Dispose();
         FinalTexture = null;

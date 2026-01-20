@@ -29,6 +29,29 @@ public class Renderer : IDisposable
     public Vector2 ScreenSizeLowerPowerOfTwo { get; private set; }
     public Vector2 ScreenSizeHigherPowerOfTwo { get; private set; }
 
+    // Render Scale (for FSR/upscaling)
+    private float _renderScale = 1.0f;
+    public float RenderScale
+    {
+        get => _renderScale;
+        set
+        {
+            if (Math.Abs(_renderScale - value) > 0.001f)
+            {
+                _renderScale = Math.Clamp(value, 0.25f, 1.0f);
+                UpdateScaledScreenInfo();
+                RenderScaleChanged?.Invoke(_renderScale);
+            }
+        }
+    }
+    public event Action<float> RenderScaleChanged;
+
+    // Scaled Screen Info (for systems that respect RenderScale)
+    public int ScaledWidth { get; private set; }
+    public int ScaledHeight { get; private set; }
+    public Vector2 ScaledSize { get; private set; }
+    public int ScaledHigherPowerOfTwo { get; private set; }
+
     // Internal
     private Dictionary<string, Effect> ShaderCache = new();
     private Dictionary<(Color, int, int), Texture2D> SolidTextureCache = new();
@@ -62,8 +85,13 @@ public class Renderer : IDisposable
 
         InitializeQuad();
         UpdateScreenInfo();
+        UpdateScaledScreenInfo();
 
-        NativeWindow.ClientSizeChanged += (_, _) => UpdateScreenInfo();
+        NativeWindow.ClientSizeChanged += (_, _) =>
+        {
+            UpdateScreenInfo();
+            UpdateScaledScreenInfo();
+        };
     }
 
     public void UpdateScreenInfo()
@@ -82,6 +110,16 @@ public class Renderer : IDisposable
         ScreenHigherPowerOfTwo = GetHigherPowerOfTwo(maxDimension);
         ScreenSizeLowerPowerOfTwo = new Vector2(ScreenLowerPowerOfTwo, ScreenLowerPowerOfTwo);
         ScreenSizeHigherPowerOfTwo = new Vector2(ScreenHigherPowerOfTwo, ScreenHigherPowerOfTwo);
+    }
+
+    private void UpdateScaledScreenInfo()
+    {
+        ScaledWidth = Math.Max(1, (int)(ScreenWidth * _renderScale));
+        ScaledHeight = Math.Max(1, (int)(ScreenHeight * _renderScale));
+        ScaledSize = new Vector2(ScaledWidth, ScaledHeight);
+
+        int scaledMax = Math.Max(ScaledWidth, ScaledHeight);
+        ScaledHigherPowerOfTwo = GetHigherPowerOfTwo(scaledMax);
     }
 
     private static int GetLowerPowerOfTwo(int value)

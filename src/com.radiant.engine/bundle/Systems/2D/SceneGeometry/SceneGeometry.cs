@@ -9,6 +9,7 @@ namespace com.radiant.engine.bundle;
 public class SceneGeometry : core.System
 {
     public float SDFScale = 0.25f;
+    public bool EnableSDF = false;
 
     private RenderTarget2D JFATexture1;
     private RenderTarget2D JFATexture2;
@@ -107,7 +108,9 @@ public class SceneGeometry : core.System
 
         RenderEmissiveTexture();
         RenderAbsorptionTexture();
-        RenderSDFTexture();
+
+        if (EnableSDF)
+            RenderSDFTexture();
 
         UpdateGizmos();
     }
@@ -307,9 +310,17 @@ public class SceneGeometry : core.System
         Gizmos.Set("Geometry", $"Debug: {CurrentDebug} (F2)");
         Gizmos.Set("Geometry", $"Emissive Objects: {EmissiveCount}");
         Gizmos.Set("Geometry", $"Absorption Objects: {AbsorptionCount}");
-        Gizmos.Set("Geometry", $"JFA Passes: {JFAPassCount}");
         Gizmos.Set("Geometry", $"Buffers: {WorldBounds.X}x{WorldBounds.Y}");
-        Gizmos.Set("Geometry", $"SDF: {SDFBounds.X}x{SDFBounds.Y} ({SDFScale:P0})");
+
+        if (EnableSDF)
+        {
+            Gizmos.Set("Geometry", $"SDF: {SDFBounds.X}x{SDFBounds.Y} ({SDFScale:P0})");
+            Gizmos.Set("Geometry", $"JFA Passes: {JFAPassCount}");
+        }
+        else
+        {
+            Gizmos.Set("Geometry", "SDF: Disabled");
+        }
     }
 
     public override void LateRender()

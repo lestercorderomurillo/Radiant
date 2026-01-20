@@ -20,8 +20,11 @@ public class MegaLightsScene : Scene
     private bool IsMoving = true; // Toggle for box movement
     private KeyboardState PreviousKeyboardState; // Track keyboard state for toggle
     private bool UseHolographic = true; // Toggle for rendering mode
+    private bool UseFSR = false; // Toggle for FSR upscaling
     private HRCGI HolographicSystem;
     private RCGI RCGISystem;
+    private FSR FSRSystem;
+    private SceneGeometry GeometrySystem;
     private GizmosRenderer Gizmos;
 
     // Personalizable sizes
@@ -33,10 +36,14 @@ public class MegaLightsScene : Scene
     {
         // Add systems
         ECS.AddSystem<PerformanceMonitor>();
-        ECS.AddSystem<SceneGeometry>();
+        GeometrySystem = ECS.AddSystem<SceneGeometry>();
         HolographicSystem = ECS.AddSystem<HRCGI>();
         RCGISystem = ECS.AddSystem<RCGI>(enabled: false);
+        FSRSystem = ECS.AddSystem<FSR>(enabled: false);
         Gizmos = ECS.AddSystem<GizmosRenderer>();
+
+        // HRCGI doesn't need SDF, RCGI does
+        GeometrySystem.EnableSDF = false;
 
         base.SetupECS();
     }
@@ -189,6 +196,7 @@ public class MegaLightsScene : Scene
                 RCGISystem.Enabled = false;
                 HolographicSystem.Initialize();
                 HolographicSystem.Enabled = true;
+                GeometrySystem.EnableSDF = false; // HRCGI doesn't need SDF
             }
             else
             {
@@ -196,6 +204,24 @@ public class MegaLightsScene : Scene
                 HolographicSystem.Enabled = false;
                 RCGISystem.Initialize();
                 RCGISystem.Enabled = true;
+                GeometrySystem.EnableSDF = true; // RCGI needs SDF
+            }
+            UpdateFSRInputSource();
+        }
+
+        // Check for F4 key to toggle FSR
+        if (currentKeyboardState.IsKeyDown(Keys.F4) && PreviousKeyboardState.IsKeyUp(Keys.F4))
+        {
+            UseFSR = !UseFSR;
+            FSRSystem.Enabled = UseFSR;
+            if (UseFSR)
+            {
+                FSRSystem.Initialize();
+                UpdateFSRInputSource();
+            }
+            else
+            {
+                FSRSystem.Dispose();
             }
         }
 
@@ -251,7 +277,17 @@ public class MegaLightsScene : Scene
 
         // Display current rendering mode
         string mode = UseHolographic ? "HRCGI" : "RCGI";
+        string fsr = UseFSR ? "ON" : "OFF";
         Gizmos.Set("Renderer", $"Mode: {mode} (Tab to toggle)");
+        Gizmos.Set("Renderer", $"FSR: {fsr} (F4 to toggle)");
+    }
+
+    private void UpdateFSRInputSource()
+    {
+        if (UseHolographic)
+            FSRSystem.SetInputSource(() => HolographicSystem.GetOutput());
+        else
+            FSRSystem.SetInputSource(() => RCGISystem.GetOutput());
     }
 
     private void SpawnEmitter(Vector2 position)
