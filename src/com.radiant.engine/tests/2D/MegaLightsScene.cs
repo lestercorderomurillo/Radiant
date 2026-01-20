@@ -214,8 +214,9 @@ public class MegaLightsScene : Scene
         // Check for F4 key to cycle FSR quality modes
         if (currentKeyboardState.IsKeyDown(Keys.F4) && PreviousKeyboardState.IsKeyUp(Keys.F4))
         {
-            int count = Enum.GetValues<FSRQuality>().Length;
-            FSRSystem.Quality = (FSRQuality)(((int)FSRSystem.Quality + 1) % count);
+            var qualities = Enum.GetValues<FSRQuality>();
+            int currentIndex = Array.IndexOf(qualities, FSRSystem.Quality);
+            FSRSystem.Quality = qualities[(currentIndex + 1) % qualities.Length];
         }
 
         PreviousKeyboardState = currentKeyboardState;
