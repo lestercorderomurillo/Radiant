@@ -44,6 +44,9 @@ public class GameLoop : IGameObject
 
     private double FixedUpdateAccumulator;
 
+    // Maximum fixed updates per frame to prevent spiral of death
+    private const int MaxFixedUpdatesPerFrame = 8;
+
     // FPS tracking
     public float FramesPerSecond { get; private set; }
 
@@ -109,10 +112,11 @@ public class GameLoop : IGameObject
 
         LastUpdateTicks = currentTicks;
 
-        // Process fixed updates
+        // Process fixed updates with cap to prevent spiral of death
         FixedUpdateAccumulator += deltaTime;
 
-        while (FixedUpdateAccumulator >= UpdateInterval)
+        int iterations = 0;
+        while (FixedUpdateAccumulator >= UpdateInterval && iterations++ < MaxFixedUpdatesPerFrame)
         {
             if (SceneId != NO_SCENE)
             {
@@ -123,6 +127,10 @@ public class GameLoop : IGameObject
 
             FixedUpdateAccumulator -= UpdateInterval;
         }
+
+        // Discard excess accumulated time to prevent catch-up attempts
+        if (FixedUpdateAccumulator > UpdateInterval)
+            FixedUpdateAccumulator = UpdateInterval;
 
         // Variable update with precise delta time
         if (SceneId != NO_SCENE)
