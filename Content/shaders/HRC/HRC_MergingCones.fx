@@ -13,6 +13,7 @@ float2 PrevSize;
 float2 CascadeSize;
 float2 CascadeIndex;
 
+
 struct VertexShaderInput
 {
     float3 Position : POSITION0;
@@ -138,7 +139,7 @@ PixelShaderOutput MainPS(PixelShaderInput input)
     PixelShaderOutput output;
 
     float2 texel = input.UV * CascadeSize;
-    float intrv = pow(2.0, CascadeIndex.x);
+    float intrv = exp2(CascadeIndex.x);
     float vrays = intrv + 1.0;
     float plane = floor(texel.x / intrv);
     float index = floor(texel.x - (plane * intrv));

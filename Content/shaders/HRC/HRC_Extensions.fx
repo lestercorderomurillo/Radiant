@@ -82,13 +82,13 @@ PixelShaderOutput MainPS(PixelShaderInput input)
     PixelShaderOutput output;
 
     float2 texel = input.UV * CascadeSize;
-    float intrv = pow(2.0, CascadeIndex.x);
+    float intrv = exp2(CascadeIndex.x);
     float vrays = intrv + 1.0;
     float plane = floor(texel.x / vrays);
     float index = floor(texel.x - (plane * vrays));
     float2 probe = float2(plane * intrv, texel.y) + float2(0.5, 0.0);
 
-    float prev_intrv = pow(2.0, CascadeIndex.x - 1.0);
+    float prev_intrv = exp2(CascadeIndex.x - 1.0);
     float prev_vrays = prev_intrv + 1.0;
 
     float lower = floor(index * 0.5);

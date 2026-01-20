@@ -35,6 +35,24 @@ public class HRCGI : core.System
     private Vector2[] CascadeSizes;
     private Vector2[] MergeSizes;
 
+    // Precomputed frustum transforms: 2x2 matrix as Vector4(m00, m01, m10, m11)
+    // frustum 0: probe            -> (1,0,0,1) + (0,0)
+    // frustum 1: 1.0 - probe.yx   -> (0,-1,-1,0) + (1,1)
+    // frustum 2: 1.0 - probe      -> (-1,0,0,-1) + (1,1)
+    // frustum 3: probe.yx         -> (0,1,1,0) + (0,0)
+    private static readonly Vector4[] FrustumMatrices = {
+        new Vector4(1, 0, 0, 1),    // identity
+        new Vector4(0, -1, -1, 0),  // swap & negate
+        new Vector4(-1, 0, 0, -1),  // negate both
+        new Vector4(0, 1, 1, 0)     // swap
+    };
+    private static readonly Vector2[] FrustumOffsets = {
+        new Vector2(0, 0),
+        new Vector2(1, 1),
+        new Vector2(1, 1),
+        new Vector2(0, 0)
+    };
+
     private KeyboardState PrevKeyState;
     private int DebugIndex = 0;
     private int DebugTextureCount;
@@ -159,7 +177,8 @@ public class HRCGI : core.System
             .SetParameter("Absorption", absorption)
             .SetParameter("WorldSize", WorldSize)
             .SetParameter("CascadeSize", CascadeSizes[0])
-            .SetParameter("FrustumIndex", (float)frustum)
+            .SetParameter("FrustumMatrix", FrustumMatrices[frustum])
+            .SetParameter("FrustumOffset", FrustumOffsets[frustum])
             .Draw()
             .Commit();
     }

@@ -9,7 +9,8 @@ SamplerState AbsorptionSampler : register(s1);
 
 float2 WorldSize;
 float2 CascadeSize;
-float FrustumIndex;
+float4 FrustumMatrix;  // (m00, m01, m10, m11)
+float2 FrustumOffset;
 
 struct VertexShaderInput
 {
@@ -37,14 +38,12 @@ struct PixelShaderOutput
     float4 Transmit : COLOR1;
 };
 
-float2 TransformProbeToFrustum(float2 probe, int index)
+float2 TransformProbeToFrustum(float2 probe)
 {
-    if (index == 0) return probe;
-    if (index == 1) return 1.0 - probe.yx;
-    if (index == 2) return 1.0 - probe;
-    if (index == 3) return probe.yx;
-
-    return probe;
+    return float2(
+        probe.x * FrustumMatrix.x + probe.y * FrustumMatrix.y,
+        probe.x * FrustumMatrix.z + probe.y * FrustumMatrix.w
+    ) + FrustumOffset;
 }
 
 float3 ToLinear(float3 srgb) { return pow(abs(srgb), 2.2); }
@@ -59,8 +58,7 @@ PixelShaderOutput MainPS(PixelShaderInput input)
     float plane = floor(texel.x / vrays);
     float2 probe = float2((plane * intrv) + 0.5, texel.y) / WorldSize;
 
-    int fIdx = int(FrustumIndex + 0.1);
-    float2 sampleCoord = TransformProbeToFrustum(probe, fIdx);
+    float2 sampleCoord = TransformProbeToFrustum(probe);
 
     if (sampleCoord.x < 0.0 || sampleCoord.x > 1.0 || sampleCoord.y < 0.0 || sampleCoord.y > 1.0)
     {
