@@ -16,6 +16,7 @@ namespace com.radiant.engine.bundle;
 public class HRCGI : core.System
 {
     private const int FrustumCount = 4;
+    private const int ProbeScale = 2;  // 1 = full resolution, 2 = half probes
     private int CascadeCount;
 
     private SceneGeometry SDFSystem;
@@ -101,8 +102,8 @@ public class HRCGI : core.System
             float virtualRays = interval + 1;
             int numProbes = (int)MathF.Floor(WorldSize.X / interval);
 
-            CascadeSizes[cascade] = new Vector2(numProbes * virtualRays, WorldSize.Y);
-            MergeSizes[cascade] = new Vector2(numProbes * interval, WorldSize.Y);
+            CascadeSizes[cascade] = new Vector2(numProbes * virtualRays, WorldSize.Y / ProbeScale);
+            MergeSizes[cascade] = new Vector2(numProbes * interval, WorldSize.Y / ProbeScale);
         }
     }
 
@@ -124,11 +125,11 @@ public class HRCGI : core.System
             MergeTransmit[cascade] = new RenderTarget2D(Renderer.Device, (int)MergeSizes[cascade].X, (int)MergeSizes[cascade].Y, false, format, DepthFormat.None);
         }
 
-        // Per-frustum output surfaces
+        // Per-frustum output surfaces (half height to match cascade probes)
         FrustumOutput = new RenderTarget2D[FrustumCount];
         for (int frustum = 0; frustum < FrustumCount; frustum++)
         {
-            FrustumOutput[frustum] = new RenderTarget2D(Renderer.Device, (int)WorldSize.X, (int)WorldSize.Y, false, format, DepthFormat.None);
+            FrustumOutput[frustum] = new RenderTarget2D(Renderer.Device, (int)WorldSize.X, (int)(WorldSize.Y / ProbeScale), false, format, DepthFormat.None);
         }
 
         FinalTexture = new RenderTarget2D(Renderer.Device, (int)WorldSize.X, (int)WorldSize.Y, false, format, DepthFormat.None);
@@ -179,6 +180,7 @@ public class HRCGI : core.System
             .SetParameter("CascadeSize", CascadeSizes[0])
             .SetParameter("FrustumMatrix", FrustumMatrices[frustum])
             .SetParameter("FrustumOffset", FrustumOffsets[frustum])
+            .SetParameter("ProbeScale", (float)ProbeScale)
             .Draw()
             .Commit();
     }
@@ -188,12 +190,13 @@ public class HRCGI : core.System
         Renderer
             .Reset()
             .SetShader("HRC/HRC_Extensions")
-            .Configure((0, SamplerState.PointClamp), (1, SamplerState.PointClamp))
+            .Configure((0, SamplerState.LinearClamp), (1, SamplerState.LinearClamp))
             .SetTargets(VraysRadiance[cascade], VraysTransmit[cascade])
             .Clear(Color.Black)
             .SetParameter("PrevSize", CascadeSizes[cascade - 1])
             .SetParameter("CascadeSize", CascadeSizes[cascade])
             .SetParameter("CascadeIndex", new Vector2(cascade, CascadeCount))
+            .SetParameter("ProbeScale", (float)ProbeScale)
             .SetParameter("PrevRadiance", VraysRadiance[cascade - 1])
             .SetParameter("PrevTransmit", VraysTransmit[cascade - 1])
             .Draw()
@@ -209,10 +212,10 @@ public class HRCGI : core.System
             .Reset()
             .SetShader("HRC/HRC_MergingCones")
             .Configure(
-                (0, SamplerState.PointClamp),
-                (1, SamplerState.PointClamp),
-                (2, SamplerState.PointClamp),
-                (3, SamplerState.PointClamp))
+                (0, SamplerState.LinearClamp),
+                (1, SamplerState.LinearClamp),
+                (2, SamplerState.LinearClamp),
+                (3, SamplerState.LinearClamp))
             .SetTargets(MergeRadiance[cascade], MergeTransmit[cascade])
             .Clear(Color.Black)
             .SetParameter("VraysRadiance", VraysRadiance[cascade])
@@ -223,6 +226,7 @@ public class HRCGI : core.System
             .SetParameter("PrevSize", hasNext ? MergeSizes[nextCascade] : Vector2.One)
             .SetParameter("CascadeSize", MergeSizes[cascade])
             .SetParameter("CascadeIndex", new Vector2(cascade, CascadeCount))
+            .SetParameter("ProbeScale", (float)ProbeScale)
             .Draw()
             .Commit();
     }
@@ -243,10 +247,10 @@ public class HRCGI : core.System
             .Reset()
             .SetShader("HRC/HRC_FluenceSum")
             .Configure(
-                (0, SamplerState.PointClamp),
-                (1, SamplerState.PointClamp),
-                (2, SamplerState.PointClamp),
-                (3, SamplerState.PointClamp))
+                (0, SamplerState.LinearClamp),
+                (1, SamplerState.LinearClamp),
+                (2, SamplerState.LinearClamp),
+                (3, SamplerState.LinearClamp))
             .SetTarget(FinalTexture)
             .Clear(Color.Black)
             .SetParameter("FrustumIndex0", FrustumOutput[0])

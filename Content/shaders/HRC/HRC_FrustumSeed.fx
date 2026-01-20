@@ -11,6 +11,7 @@ float2 WorldSize;
 float2 CascadeSize;
 float4 FrustumMatrix;  // (m00, m01, m10, m11)
 float2 FrustumOffset;
+float ProbeScale;      // 1 = full res, 2 = half probes
 
 struct VertexShaderInput
 {
@@ -56,7 +57,7 @@ PixelShaderOutput MainPS(PixelShaderInput input)
     float intrv = 1.0;
     float vrays = 2.0;
     float plane = floor(texel.x / vrays);
-    float2 probe = float2((plane * intrv) + 0.5, texel.y) / WorldSize;
+    float2 probe = float2((plane * intrv) + 0.5, texel.y * ProbeScale) / WorldSize;
 
     float2 sampleCoord = TransformProbeToFrustum(probe);
 

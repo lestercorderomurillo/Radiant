@@ -8,7 +8,7 @@ namespace com.radiant.engine.bundle;
 
 public class FSR : core.System
 {
-    private FSRQuality _quality = FSRQuality.Balanced;
+    private FSRQuality _quality = FSRQuality.Off;
     public FSRQuality Quality
     {
         get => _quality;

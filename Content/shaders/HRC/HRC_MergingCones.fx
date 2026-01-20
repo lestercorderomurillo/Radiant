@@ -12,6 +12,7 @@ float2 VraysSize;
 float2 PrevSize;
 float2 CascadeSize;
 float2 CascadeIndex;
+float ProbeScale;
 
 
 struct VertexShaderInput
@@ -51,7 +52,8 @@ void GetVolumeVrays(float2 probe, float index, float interval, float lookupWidth
                     float4 defValR, float4 defValT,
                     out float4 rad, out float4 trn)
 {
-    float2 samplePos = float2(floor(probe.x / interval) * lookupWidth, probe.y) + float2(0.5, 0.0);
+    // probe.y is in world space, scale down for half-height texture
+    float2 samplePos = float2(floor(probe.x / interval) * lookupWidth, probe.y / ProbeScale) + float2(0.5, 0.0);
     samplePos = float2(samplePos.x + index, samplePos.y) / VraysSize;
 
     float2 floorPos = floor(samplePos);
@@ -65,7 +67,8 @@ void GetVolumePrev(float2 probe, float index, float interval, float lookupWidth,
                    float4 defValR, float4 defValT,
                    out float4 rad, out float4 trn)
 {
-    float2 samplePos = float2(floor(probe.x / interval) * lookupWidth, probe.y) + float2(0.5, 0.0);
+    // probe.y is in world space, scale down for half-height texture
+    float2 samplePos = float2(floor(probe.x / interval) * lookupWidth, probe.y / ProbeScale) + float2(0.5, 0.0);
     samplePos = float2(samplePos.x + index, samplePos.y) / PrevSize;
 
     float2 floorPos = floor(samplePos);
@@ -143,7 +146,7 @@ PixelShaderOutput MainPS(PixelShaderInput input)
     float vrays = intrv + 1.0;
     float plane = floor(texel.x / intrv);
     float index = floor(texel.x - (plane * intrv));
-    float2 probe = float2(plane * intrv, texel.y) + float2(0.5, 0.0);
+    float2 probe = float2(plane * intrv, texel.y * ProbeScale) + float2(0.5, 0.0);
 
     float4 radL, radR, trnL, trnR;
     MergeCone(probe, plane, intrv, vrays, index, 0.0, radL, trnL);

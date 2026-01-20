@@ -10,6 +10,7 @@ SamplerState SamplerPrevT : register(s1);
 float2 PrevSize;
 float2 CascadeSize;
 float2 CascadeIndex;
+float ProbeScale;
 
 struct VertexShaderInput
 {
@@ -48,7 +49,8 @@ void GetVolume(float2 probe, float index, float interval, float lookupWidth,
                float2 resolution, float4 defValR, float4 defValT,
                out float4 rad, out float4 trn)
 {
-    float2 samplePos = float2(floor(probe.x / interval) * lookupWidth, probe.y) + float2(0.5, 0.0);
+    // probe.y is in world space, scale down for half-height texture
+    float2 samplePos = float2(floor(probe.x / interval) * lookupWidth, probe.y / ProbeScale) + float2(0.5, 0.0);
     samplePos = float2(samplePos.x + index, samplePos.y) / resolution;
 
     float2 floorPos = floor(samplePos);
@@ -86,7 +88,7 @@ PixelShaderOutput MainPS(PixelShaderInput input)
     float vrays = intrv + 1.0;
     float plane = floor(texel.x / vrays);
     float index = floor(texel.x - (plane * vrays));
-    float2 probe = float2(plane * intrv, texel.y) + float2(0.5, 0.0);
+    float2 probe = float2(plane * intrv, texel.y * ProbeScale) + float2(0.5, 0.0);
 
     float prev_intrv = exp2(CascadeIndex.x - 1.0);
     float prev_vrays = prev_intrv + 1.0;
