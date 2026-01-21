@@ -238,7 +238,6 @@ public class HRCGI : core.System
 
     private void Compose()
     {
-        // GameMaker uses gpu_set_tex_filter(false) = PointClamp for all HRC passes
         Renderer
             .Reset()
             .SetShader("HRC/HRC_FluenceSum")
