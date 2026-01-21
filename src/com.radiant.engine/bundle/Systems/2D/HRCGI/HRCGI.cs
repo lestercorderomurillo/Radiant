@@ -16,7 +16,10 @@ namespace com.radiant.engine.bundle;
 public class HRCGI : core.System
 {
     private const int FrustumCount = 4;
-    private const int ProbeScale = 2;  // 1 = full resolution, 2 = half probes
+    private static readonly int[] ProbeScales = { 1, 2, 4, 6, 8 };
+    private static readonly string[] QualityNames = { "Native", "Ultra", "High", "Medium", "Low" };
+    private int ProbeScaleIndex = 1;  // Default to Ultra (ProbeScale = 2)
+    private int ProbeScale => ProbeScales[ProbeScaleIndex];
     private int CascadeCount;
 
     private SceneGeometry SDFSystem;
@@ -159,7 +162,7 @@ public class HRCGI : core.System
         Compose();
         Renderer.Device.SetRenderTargets(originalTargets);
 
-        Gizmos.Set("HRCGI", $"World: {(int)WorldSize.X} | Cascades: {CascadeCount} | Frustums: {FrustumCount}");
+        Gizmos.Set("HRCGI", $"World: {(int)WorldSize.X} | Cascades: {CascadeCount} | Shadow Quality: {QualityNames[ProbeScaleIndex]} [F5]");
     }
 
     private void RenderFrustumSeed(int frustum, Texture2D emissive, Texture2D absorption)
@@ -260,6 +263,13 @@ public class HRCGI : core.System
         var keyboard = Keyboard.GetState();
         if (keyboard.IsKeyDown(Keys.F3) && !PrevKeyState.IsKeyDown(Keys.F3))
             DebugIndex = (DebugIndex + 1) % DebugTextureCount;
+        if (keyboard.IsKeyDown(Keys.F5) && !PrevKeyState.IsKeyDown(Keys.F5))
+        {
+            ProbeScaleIndex = (ProbeScaleIndex + 1) % ProbeScales.Length;
+            DisposeRenderTargets();
+            CalculateCascadeSizes();
+            CreateRenderTargets();
+        }
         PrevKeyState = keyboard;
     }
 
