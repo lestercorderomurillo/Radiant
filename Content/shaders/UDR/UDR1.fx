@@ -3,6 +3,7 @@
 
 Texture2D InputTexture : register(t0);
 Texture2D EmissiveTexture : register(t1);
+Texture2D SDFTexture : register(t2);
 SamplerState Sampler : register(s0);
 
 float2 InputSize;
@@ -226,71 +227,123 @@ float3 Sharpen(float3 color, NeighborhoodSamples neighborhood)
 }
 
 // Correct edges using SDF overlay at full resolution
+// SDFTexture: 0 = on surface, 0->1 = distance outside (normalized)
+// EmissiveTexture.a: 1 = on surface, 0 = outside
 float3 CorrectEdges(float3 color, float2 uv)
 {
+    // Adjustable constants
+    static const float OUTER_MARGIN = 0.001;      // SDF distance outside to blend (0 = edge, 0.05 = far)
+    static const float INNER_MARGIN = 32.0;       // Texels inside to blend (1-4 range based on samples)
+    static const float EDGE_BLEND = 0.8;          // Blend strength at exact edge
+
     float4 emissive = EmissiveTexture.Sample(Sampler, uv);
-    float sdf = emissive.a; // SDF: positive = on surface, 0 = background
+    float sdfDist = SDFTexture.Sample(Sampler, uv).r;  // 0 = on surface, >0 = outside
+    bool onSurface = emissive.a > 0.0;
 
-    float surfaceThreshold = 0.5;
-
-    // On surface
-    if (sdf > surfaceThreshold)
-    {
-        // Deep inside surface - just use original upscaled color
-        // Near inner edge - blend between upscaled and emissive
-        float innerEdgeThreshold = 1.75;
-        if (sdf < innerEdgeThreshold)
-        {
-            // sdf 0.5->1.0 maps to blend 1->0 (more blend near edge, less deep inside)
-            float blendFactor = 1.0 - ((sdf - surfaceThreshold) / (innerEdgeThreshold - surfaceThreshold));
-            return lerp(color, emissive.rgb, blendFactor);
-        }
-        return color;
-    }
-
-    // Near edge (subpixel zone or outside but close) - blend toward full-res emissive
-    // Sample neighborhood to find nearby surfaces
     float2 texelSize = 1.0 / OutputSize;
-    float4 emissiveL = EmissiveTexture.Sample(Sampler, uv + float2(-texelSize.x, 0));
-    float4 emissiveR = EmissiveTexture.Sample(Sampler, uv + float2( texelSize.x, 0));
-    float4 emissiveU = EmissiveTexture.Sample(Sampler, uv + float2(0, -texelSize.y));
-    float4 emissiveD = EmissiveTexture.Sample(Sampler, uv + float2(0,  texelSize.y));
 
-    // Find the strongest nearby surface sample
-    float maxNeighborSdf = max(max(emissiveL.a, emissiveR.a), max(emissiveU.a, emissiveD.a));
-
-    // Only blend if there's a nearby surface
-    if (maxNeighborSdf > surfaceThreshold)
+    if (onSurface)
     {
-        // Weighted average of full-res emissive colors from neighbors on surface
-        float3 neighborEmissive = float3(0, 0, 0);
-        float neighborWeight = 0.0;
+        // ON SURFACE - find distance to edge by sampling two distances and interpolating
+        static const int SAMPLE_COUNT = 8;
+        static const float SAMPLE_DISTANCES[8] = { 1.0, 4.0, 8.0, 12.0, 16.0, 20.0, 26.0, 32.0 };
 
-        if (emissiveL.a > surfaceThreshold) { neighborEmissive += emissiveL.rgb; neighborWeight += 1.0; }
-        if (emissiveR.a > surfaceThreshold) { neighborEmissive += emissiveR.rgb; neighborWeight += 1.0; }
-        if (emissiveU.a > surfaceThreshold) { neighborEmissive += emissiveU.rgb; neighborWeight += 1.0; }
-        if (emissiveD.a > surfaceThreshold) { neighborEmissive += emissiveD.rgb; neighborWeight += 1.0; }
+        float lastOnSurface = 0.0;    // Last distance where we were still on surface
+        float firstOffSurface = INNER_MARGIN + 1.0;  // First distance where we found edge
 
-        neighborEmissive /= neighborWeight;
-
-        // Blend factor: subpixel zone (0 < sdf <= 0.5) uses sdf as coverage
-        //               outside (sdf <= 0) uses neighbor proximity
-        float blendFactor;
-        if (sdf > 0.0)
+        [unroll]
+        for (int i = 0; i < SAMPLE_COUNT; i++)
         {
-            // Subpixel zone - blend based on coverage (sdf 0->0.5 maps to blend 1->0)
-            blendFactor = 1.0 - (sdf / surfaceThreshold);
-        }
-        else
-        {
-            // Outside - blend based on neighbor proximity
-            blendFactor = saturate((maxNeighborSdf - surfaceThreshold) * 2.0) * 0.5;
+            float dist = SAMPLE_DISTANCES[i];
+
+            float2 offsetL = float2(-texelSize.x * dist, 0);
+            float2 offsetR = float2( texelSize.x * dist, 0);
+            float2 offsetU = float2(0, -texelSize.y * dist);
+            float2 offsetD = float2(0,  texelSize.y * dist);
+
+            float aL = EmissiveTexture.Sample(Sampler, uv + offsetL).a;
+            float aR = EmissiveTexture.Sample(Sampler, uv + offsetR).a;
+            float aU = EmissiveTexture.Sample(Sampler, uv + offsetU).a;
+            float aD = EmissiveTexture.Sample(Sampler, uv + offsetD).a;
+
+            // Check if any direction hit the edge
+            bool hitEdge = (aL < 0.5) || (aR < 0.5) || (aU < 0.5) || (aD < 0.5);
+
+            if (hitEdge)
+            {
+                firstOffSurface = dist;
+                break;  // Found the edge, stop searching
+            }
+            else
+            {
+                lastOnSurface = dist;  // Still on surface, remember this distance
+            }
         }
 
-        return lerp(color, neighborEmissive, blendFactor);
+        // Deep inside - no correction needed
+        if (firstOffSurface > INNER_MARGIN)
+        {
+            return color;
+        }
+
+        // Interpolate between the two sample distances for smooth gradient
+        // Edge is somewhere between lastOnSurface and firstOffSurface
+        // Use midpoint as estimate, then normalize to INNER_MARGIN
+        float estimatedDist = (lastOnSurface + firstOffSurface) * 0.5;
+
+        // Blend factor: 0 at edge (use emissive), 1 at INNER_MARGIN (use color)
+        float blendFactor = estimatedDist / INNER_MARGIN;
+        blendFactor = smoothstep(0.0, 1.0, blendFactor);
+
+        // blendFactor: 0 at edge, 1 deep inside
+        // At edge: use emissive (full-res, fills holes)
+        // Deep inside: use color (original upscaled, already good)
+
+        // Apply EDGE_BLEND to control max emissive contribution at edge
+        float emissiveAmount = (1.0 - blendFactor) * EDGE_BLEND;
+
+        // Blend: emissive fills holes near edge, original color preserved inside
+        return lerp(color, emissive.rgb, emissiveAmount);
     }
+    else
+    {
+        // OUTSIDE SURFACE - blend toward neighbor emissive colors
 
-    return color;
+        // Far from any surface - no correction needed
+        if (sdfDist > OUTER_MARGIN)
+        {
+            return color;
+        }
+
+        // Sample neighbor emissive colors
+        float4 emissiveL = EmissiveTexture.Sample(Sampler, uv + float2(-texelSize.x, 0));
+        float4 emissiveR = EmissiveTexture.Sample(Sampler, uv + float2( texelSize.x, 0));
+        float4 emissiveU = EmissiveTexture.Sample(Sampler, uv + float2(0, -texelSize.y));
+        float4 emissiveD = EmissiveTexture.Sample(Sampler, uv + float2(0,  texelSize.y));
+
+        // Weighted average from neighbors on surface
+        float3 surfaceColor = float3(0, 0, 0);
+        float surfaceWeight = 0.0;
+
+        if (emissiveL.a > 0.0) { surfaceColor += emissiveL.rgb; surfaceWeight += 1.0; }
+        if (emissiveR.a > 0.0) { surfaceColor += emissiveR.rgb; surfaceWeight += 1.0; }
+        if (emissiveU.a > 0.0) { surfaceColor += emissiveU.rgb; surfaceWeight += 1.0; }
+        if (emissiveD.a > 0.0) { surfaceColor += emissiveD.rgb; surfaceWeight += 1.0; }
+
+        // No nearby surface - no correction
+        if (surfaceWeight < 0.001)
+        {
+            return color;
+        }
+
+        surfaceColor /= surfaceWeight;
+
+        // Blend factor: 1 at edge (sdfDist=0), 0 at OUTER_MARGIN
+        float blendFactor = 1.0 - (sdfDist / OUTER_MARGIN);
+        blendFactor *= EDGE_BLEND;
+
+        return lerp(color, surfaceColor, blendFactor);
+    }
 }
 
 // UDR main pixel shader

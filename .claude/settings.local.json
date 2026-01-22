@@ -6,7 +6,8 @@
       "WebFetch(domain:api.github.com)",
       "Bash(dotnet build:*)",
       "Bash(dotnet run)",
-      "Bash(dotnet msbuild:*)"
+      "Bash(dotnet msbuild:*)",
+      "Bash(git -C \"e:\\\\code\\\\beyond_proyects\\\\radiant\" log --oneline -10 -- Content/shaders/UDR/UDR1.fx)"
     ]
   }
 }

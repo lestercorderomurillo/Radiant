@@ -97,6 +97,7 @@ public class UDR1 : core.System
             .Clear(Color.Black)
             .SetParameter("InputTexture", input)
             .SetParameter("EmissiveTexture", Geometry?.EmissiveTexture)
+            .SetParameter("SDFTexture", Geometry?.SDFTexture)
             .SetParameter("InputSize", inputSize)
             .SetParameter("OutputSize", OutputSize)
             .SetParameter("Sharpness", Sharpness)
