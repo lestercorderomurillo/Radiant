@@ -15,6 +15,7 @@ public class UDR1 : core.System
 
     public float Sharpness = 0.5f;
     public bool EdgeCorrection = true;
+    public bool DebugRays = false;
 
     private RenderTarget2D OutputTexture;
     private RenderTarget2D SmoothTexture;
@@ -112,6 +113,7 @@ public class UDR1 : core.System
             .SetParameter("OutputSize", OutputSize)
             .SetParameter("Sharpness", Sharpness)
             .SetParameter("EdgeCorrection", EdgeCorrection ? 1f : 0f)
+            .SetParameter("DebugRays", DebugRays ? 1f : 0f)
             .Draw()
             .Commit()
             .SetTarget(null);
@@ -135,6 +137,7 @@ public class UDR1 : core.System
         Gizmos?.Set("UDR1", $"Output Size: {OutputSize.X}x{OutputSize.Y}");
         Gizmos?.Set("UDR1", $"Sharpness Factor: {Sharpness:F2} [F7/F8]");
         Gizmos?.Set("UDR1", $"Detail Reconstruction: {(EdgeCorrection ? "On" : "Off")} [F9]");
+        Gizmos?.Set("UDR1", $"Debug Rays: {(DebugRays ? "On" : "Off")} [F10]");
     }
 
     private void HandleInput()
@@ -162,6 +165,12 @@ public class UDR1 : core.System
         if (key.IsKeyDown(Keys.F9) && !PrevKeyState.IsKeyDown(Keys.F9))
         {
             EdgeCorrection = !EdgeCorrection;
+        }
+
+        // F10 to toggle debug rays visualization
+        if (key.IsKeyDown(Keys.F10) && !PrevKeyState.IsKeyDown(Keys.F10))
+        {
+            DebugRays = !DebugRays;
         }
 
         PrevKeyState = key;

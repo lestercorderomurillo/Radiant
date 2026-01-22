@@ -17,7 +17,8 @@ public class GizmosRenderer : core.System
     private List<RectGizmo> RectQueue = new();
 
     private Dictionary<string, List<string>> PendingStats = new();
-    private bool ShowStats = true;
+    private List<string> CategoryOrder = new();
+    private new bool Enabled = true;
     private Vector2 StatsPosition = new(15, 15);
     private const float LineSpacing = 34f;
     private const float TextPadding = 4f;
@@ -44,7 +45,7 @@ public class GizmosRenderer : core.System
         var keyboard = Keyboard.GetState();
 
         if (keyboard.IsKeyDown(Keys.F1) && PrevKeyState.IsKeyUp(Keys.F1))
-            ShowStats = !ShowStats;
+            Enabled = !Enabled;
 
         PrevKeyState = keyboard;
 
@@ -66,6 +67,7 @@ public class GizmosRenderer : core.System
         {
             list = new List<string>();
             PendingStats[category] = list;
+            CategoryOrder.Add(category);
 
             if (!CategoryColorMap.ContainsKey(category))
                 CategoryColorMap[category] = CategoryColors[CategoryColorMap.Count % CategoryColors.Length];
@@ -105,12 +107,19 @@ public class GizmosRenderer : core.System
 
     public override void LateRender()
     {
-        Renderer.SpriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
+        if (Enabled)
+        {
+            Renderer.SpriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
 
-        RenderGizmos(Renderer.SpriteBatch);
-        RenderStats(Renderer.SpriteBatch);
+            RenderGizmos(Renderer.SpriteBatch);
+            RenderStats(Renderer.SpriteBatch);
 
-        Renderer.SpriteBatch.End();
+            Renderer.SpriteBatch.End();
+        }
+
+        // Clear stats after render (ready for next frame)
+        foreach (var list in PendingStats.Values)
+            list.Clear();
     }
 
     private void RenderGizmos(SpriteBatch batch)
@@ -228,14 +237,19 @@ public class GizmosRenderer : core.System
 
     private void RenderStats(SpriteBatch batch)
     {
-        if (!ShowStats || BaseFont == null) return;
+        if (BaseFont == null) return;
 
         float y = StatsPosition.Y;
-        foreach (var kvp in PendingStats)
+
+        // Show controls hint
+        RenderTextWithBackground(batch, new TextGizmo(
+            new Vector2(StatsPosition.X, y), "Hide [F1]", Color.Gray));
+        y += LineSpacing + 12;
+
+        foreach (var category in CategoryOrder)
         {
-            var category = kvp.Key;
-            var lines = kvp.Value;
-            if (lines.Count == 0) continue;
+            if (!PendingStats.TryGetValue(category, out var lines) || lines.Count == 0)
+                continue;
 
             var titleColor = GetCategoryColor(category);
             RenderTextWithBackground(batch, new TextGizmo(
@@ -251,9 +265,6 @@ public class GizmosRenderer : core.System
 
             y += 12;
         }
-
-        foreach (var list in PendingStats.Values)
-            list.Clear();
     }
 
     public override void Dispose() { }

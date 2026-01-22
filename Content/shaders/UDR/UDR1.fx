@@ -10,6 +10,7 @@ float2 InputSize;
 float2 OutputSize;
 float Sharpness;
 float EdgeCorrection;
+float DebugRays;
 
 struct VertexShaderInput
 {
@@ -229,7 +230,8 @@ float3 Sharpen(float3 color, NeighborhoodSamples neighborhood)
 // Correct edges using SDF overlay at full resolution
 // SDFTexture: 0 = on surface, 0->1 = distance outside (normalized)
 // EmissiveTexture.a: 1 = on surface, 0 = outside
-float3 CorrectEdges(float3 color, float2 uv)
+// Returns: xyz = corrected color, w = debug blend factor (0-1 for visualization)
+float4 CorrectEdgesWithDebug(float3 color, float2 uv)
 {
     // Adjustable constants
     static const float OUTER_MARGIN = 0.001;      // SDF distance outside to blend (0 = edge, 0.05 = far)
@@ -283,7 +285,7 @@ float3 CorrectEdges(float3 color, float2 uv)
         // Deep inside - no correction needed
         if (firstOffSurface > INNER_MARGIN)
         {
-            return color;
+            return float4(color, 0.0);  // debug = 0 (no correction)
         }
 
         // Interpolate between the two sample distances for smooth gradient
@@ -303,7 +305,8 @@ float3 CorrectEdges(float3 color, float2 uv)
         float emissiveAmount = (1.0 - blendFactor) * EDGE_BLEND;
 
         // Blend: emissive fills holes near edge, original color preserved inside
-        return lerp(color, emissive.rgb, emissiveAmount);
+        // debug = emissiveAmount remapped to show correction intensity (positive = on surface)
+        return float4(lerp(color, emissive.rgb, emissiveAmount), emissiveAmount + 0.5);
     }
     else
     {
@@ -312,7 +315,7 @@ float3 CorrectEdges(float3 color, float2 uv)
         // Far from any surface - no correction needed
         if (sdfDist > OUTER_MARGIN)
         {
-            return color;
+            return float4(color, 0.0);  // debug = 0 (no correction)
         }
 
         // Sample neighbor emissive colors
@@ -333,7 +336,7 @@ float3 CorrectEdges(float3 color, float2 uv)
         // No nearby surface - no correction
         if (surfaceWeight < 0.001)
         {
-            return color;
+            return float4(color, 0.0);  // debug = 0 (no correction)
         }
 
         surfaceColor /= surfaceWeight;
@@ -342,8 +345,15 @@ float3 CorrectEdges(float3 color, float2 uv)
         float blendFactor = 1.0 - (sdfDist / OUTER_MARGIN);
         blendFactor *= EDGE_BLEND;
 
-        return lerp(color, surfaceColor, blendFactor);
+        // debug = negative values for outside surface correction (0.5 - blendFactor maps to 0-0.5 range)
+        return float4(lerp(color, surfaceColor, blendFactor), 0.5 - blendFactor);
     }
+}
+
+// Wrapper for non-debug path
+float3 CorrectEdges(float3 color, float2 uv)
+{
+    return CorrectEdgesWithDebug(color, uv).rgb;
 }
 
 // UDR main pixel shader
@@ -380,7 +390,38 @@ float4 UDR1_PS(PixelShaderInput input) : SV_Target0
     // Correct edges (optional)
     if (EdgeCorrection > 0.0)
     {
-        result = CorrectEdges(result, uv);
+        if (DebugRays > 0.0)
+        {
+            // Debug mode: visualize edge correction areas
+            float4 corrected = CorrectEdgesWithDebug(result, uv);
+            float debugVal = corrected.w;
+
+            // debugVal encoding:
+            // 0.0 = no correction
+            // 0.5-1.0 = on surface correction (green gradient)
+            // 0.0-0.5 = outside surface correction (red gradient)
+
+            if (debugVal > 0.5)
+            {
+                // On surface: green tint, intensity based on correction amount
+                float intensity = (debugVal - 0.5) * 2.0;
+                result = lerp(corrected.rgb, float3(0.0, 1.0, 0.0), intensity * 0.7);
+            }
+            else if (debugVal > 0.001)
+            {
+                // Outside surface: red tint, intensity based on correction amount
+                float intensity = (0.5 - debugVal) * 2.0;
+                result = lerp(corrected.rgb, float3(1.0, 0.0, 0.0), intensity * 0.7);
+            }
+            else
+            {
+                result = corrected.rgb;
+            }
+        }
+        else
+        {
+            result = CorrectEdges(result, uv);
+        }
     }
 
     return float4(result, 1.0);

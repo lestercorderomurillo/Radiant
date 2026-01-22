@@ -114,7 +114,8 @@ public class HRCGI : core.System
 
     private void CreateRenderTargets()
     {
-        var format = SurfaceFormat.HalfVector4;
+        var cascadeFormat = SurfaceFormat.HalfVector4;  // RGB=radiance, A=transmittance
+        var finalFormat = SurfaceFormat.Color;          // RGBA8 for final output (HDR tonemapped in FluenceSum)
 
         // Single set of cascade surfaces (reused for each frustum)
         // RGB = radiance, A = transmittance (single-channel)
@@ -123,18 +124,19 @@ public class HRCGI : core.System
 
         for (int cascade = 0; cascade < CascadeCount; cascade++)
         {
-            VraysCascade[cascade] = new RenderTarget2D(Renderer.Device, (int)CascadeSizes[cascade].X, (int)CascadeSizes[cascade].Y, false, format, DepthFormat.None);
-            MergeCascade[cascade] = new RenderTarget2D(Renderer.Device, (int)MergeSizes[cascade].X, (int)MergeSizes[cascade].Y, false, format, DepthFormat.None);
+            VraysCascade[cascade] = new RenderTarget2D(Renderer.Device, (int)CascadeSizes[cascade].X, (int)CascadeSizes[cascade].Y, false, cascadeFormat, DepthFormat.None);
+            MergeCascade[cascade] = new RenderTarget2D(Renderer.Device, (int)MergeSizes[cascade].X, (int)MergeSizes[cascade].Y, false, cascadeFormat, DepthFormat.None);
         }
 
         // Per-frustum output surfaces (half height to match cascade probes)
+        // Keep HalfVector4 - no RGB16F available in MonoGame
         FrustumOutput = new RenderTarget2D[FrustumCount];
         for (int frustum = 0; frustum < FrustumCount; frustum++)
         {
-            FrustumOutput[frustum] = new RenderTarget2D(Renderer.Device, (int)WorldSize.X, (int)(WorldSize.Y / ProbeScale), false, format, DepthFormat.None);
+            FrustumOutput[frustum] = new RenderTarget2D(Renderer.Device, (int)WorldSize.X, (int)(WorldSize.Y / ProbeScale), false, cascadeFormat, DepthFormat.None);
         }
 
-        FinalTexture = new RenderTarget2D(Renderer.Device, (int)WorldSize.X, (int)WorldSize.Y, false, format, DepthFormat.None);
+        FinalTexture = new RenderTarget2D(Renderer.Device, (int)WorldSize.X, (int)WorldSize.Y, false, finalFormat, DepthFormat.None);
     }
 
     public override void Update()
