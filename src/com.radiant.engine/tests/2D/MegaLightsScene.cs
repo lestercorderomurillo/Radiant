@@ -21,7 +21,7 @@ public class MegaLightsScene : Scene
 
     private HRCGI HRCGISystem;
     private RCGI RCGISystem;
-    private FSR FSRSystem;
+    private UDR1 UDR1System;
     private SceneGeometry GeometrySystem;
     private GizmosRenderer Gizmos;
 
@@ -40,7 +40,7 @@ public class MegaLightsScene : Scene
         GeometrySystem = ECS.AddSystem<SceneGeometry>();
         HRCGISystem = ECS.AddSystem<HRCGI>();
         RCGISystem = ECS.AddSystem<RCGI>(enabled: false);
-        FSRSystem = ECS.AddSystem<FSR>();
+        UDR1System = ECS.AddSystem<UDR1>();
         Gizmos = ECS.AddSystem<GizmosRenderer>();
 
         GeometrySystem.EnableSDF = false;
@@ -53,7 +53,7 @@ public class MegaLightsScene : Scene
         CreateRotatingLights();
         CreateOccluders();
         CreateMouseLight();
-        UpdateFSRInput();
+        UpdateUDR1Input();
 
         base.SetupScene();
     }
@@ -214,12 +214,12 @@ public class MegaLightsScene : Scene
             GeometrySystem.EnableSDF = true;
         }
 
-        UpdateFSRInput();
+        UpdateUDR1Input();
     }
 
-    private void UpdateFSRInput()
+    private void UpdateUDR1Input()
     {
-        FSRSystem.SetInputSource(() => UseHRCGI ? HRCGISystem.GetOutput() : RCGISystem.GetOutput());
+        UDR1System.SetInputSource(() => UseHRCGI ? HRCGISystem.GetOutput() : RCGISystem.GetOutput());
     }
 
     private static Color HueToRGB(float hue)

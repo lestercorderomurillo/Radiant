@@ -6,7 +6,7 @@ using Microsoft.Xna.Framework.Input;
 
 namespace com.radiant.engine.bundle;
 
-public class FSR : core.System
+public class UDR1 : core.System
 {
     private static readonly int[] ScaleFactors = { 100, 88, 77, 50, 33, 25 };
     private static readonly string[] QualityNames = { "Off", "Ultra Quality", "Quality", "Balanced", "Performance", "Ultra Performance" };
@@ -14,17 +14,20 @@ public class FSR : core.System
     private int ScaleFactor => ScaleFactors[QualityIndex];
 
     public float Sharpness = 0.5f;
+    public bool EdgeOverlay = false;
 
     private RenderTarget2D OutputTexture;
     private Vector2 OutputSize;
 
     private Func<Texture2D> InputSource;
+    private SceneGeometry SceneGeometry;
     private GizmosRenderer Gizmos;
     private KeyboardState PrevKeyState;
 
     public override void Initialize()
     {
         Gizmos = Scene.ECS.GetSystem<GizmosRenderer>();
+        SceneGeometry = Scene.ECS.GetSystem<SceneGeometry>();
         OutputSize = Renderer.ScreenSize;
         CreateRenderTargets();
         ApplyRenderScale();
@@ -71,10 +74,10 @@ public class FSR : core.System
 
         HandleInput();
 
-        // Skip FSR processing when Off (native resolution)
+        // Skip UDR1 processing when Off (native resolution)
         if (QualityIndex == 0)
         {
-            Gizmos?.Set("FSR", $"Quality: {QualityNames[QualityIndex]} [F4]");
+            Gizmos?.Set("UDR1", $"Quality: {QualityNames[QualityIndex]} [F4]");
             return;
         }
 
@@ -86,29 +89,32 @@ public class FSR : core.System
 
         Renderer
             .Reset()
-            .SetShader("FSR/FSR_Upscale")
+            .SetShader("UDR/UDR1")
             .Configure(SamplerState.LinearClamp)
             .SetTarget(OutputTexture)
             .Clear(Color.Black)
             .SetParameter("InputTexture", input)
+            .SetParameter("EmissiveTexture", SceneGeometry?.EmissiveTexture)
             .SetParameter("InputSize", inputSize)
             .SetParameter("OutputSize", OutputSize)
             .SetParameter("Sharpness", Sharpness)
+            .SetParameter("EdgeOverlay", EdgeOverlay ? 1f : 0f)
             .Draw()
             .Commit()
             .SetTarget(null);
 
-        Gizmos?.Set("FSR", $"Quality: {QualityNames[QualityIndex]} ({GetScaleFactorNormalized():P0}) [F4]");
-        Gizmos?.Set("FSR", $"Input: {input.Width}x{input.Height}");
-        Gizmos?.Set("FSR", $"Output: {OutputSize.X}x{OutputSize.Y}");
-        Gizmos?.Set("FSR", $"Sharpness: {Sharpness:F2} [F7/F8]");
+        Gizmos?.Set("UDR1", $"Quality: {QualityNames[QualityIndex]} ({GetScaleFactorNormalized():P0}) [F4]");
+        Gizmos?.Set("UDR1", $"Input: {input.Width}x{input.Height}");
+        Gizmos?.Set("UDR1", $"Output: {OutputSize.X}x{OutputSize.Y}");
+        Gizmos?.Set("UDR1", $"Sharpness: {Sharpness:F2} [F7/F8]");
+        Gizmos?.Set("UDR1", $"EdgeOverlay: {(EdgeOverlay ? "On" : "Off")} [F9]");
     }
 
     private void HandleInput()
     {
         var key = Keyboard.GetState();
 
-        // F4 to cycle FSR quality
+        // F4 to cycle UDR1 quality
         if (key.IsKeyDown(Keys.F4) && !PrevKeyState.IsKeyDown(Keys.F4))
         {
             QualityIndex = (QualityIndex + 1) % ScaleFactors.Length;
@@ -123,6 +129,12 @@ public class FSR : core.System
         if (key.IsKeyDown(Keys.F8) && !PrevKeyState.IsKeyDown(Keys.F8))
         {
             Sharpness = Math.Min(2f, Sharpness + 0.1f);
+        }
+
+        // F9 to toggle edge overlay
+        if (key.IsKeyDown(Keys.F9) && !PrevKeyState.IsKeyDown(Keys.F9))
+        {
+            EdgeOverlay = !EdgeOverlay;
         }
 
         PrevKeyState = key;
@@ -153,7 +165,7 @@ public class FSR : core.System
 
     public override void Dispose()
     {
-        // Restore render scale to 1.0 when FSR is disabled
+        // Restore render scale to 1.0 when UDR1 is disabled
         Renderer.RenderScale = 1.0f;
 
         OutputTexture?.Dispose();

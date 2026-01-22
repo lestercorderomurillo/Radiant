@@ -29,7 +29,7 @@ public class Renderer : IDisposable
     public Vector2 ScreenSizeLowerPowerOfTwo { get; private set; }
     public Vector2 ScreenSizeHigherPowerOfTwo { get; private set; }
 
-    // Render Scale (for FSR/upscaling)
+    // Render Scale (for UDR1/upscaling)
     private float _renderScale = 1.0f;
     public float RenderScale
     {

@@ -52,9 +52,9 @@
 /processorParam:DebugMode=Auto
 /build:shaders/HRC/HRC_MergingCones.fx
 
-#begin FSR_Upscale.fx
+#begin UDR1.fx
 /importer:EffectImporter
 /processor:EffectProcessor
 /processorParam:DebugMode=Auto
-/build:shaders/FSR/FSR_Upscale.fx
+/build:shaders/UDR/UDR1.fx
 
