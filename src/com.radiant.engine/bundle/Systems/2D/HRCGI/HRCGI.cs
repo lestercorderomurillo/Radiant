@@ -16,9 +16,9 @@ namespace com.radiant.engine.bundle;
 public class HRCGI : core.System
 {
     private const int FrustumCount = 4;
-    private static readonly int[] ProbeScales = { 1, 2, 4, 6, 8 };
-    private static readonly string[] QualityNames = { "Native", "Ultra", "High", "Medium", "Low" };
-    private int ProbeScaleIndex = 1;  // Default to Ultra (ProbeScale = 2)
+    private static readonly int[] ProbeScales = { 8, 6, 4, 2, 1 };
+    private static readonly string[] QualityNames = { "Low", "Medium", "High", "Ultra", "Native" };
+    private int ProbeScaleIndex = 4;  // Default to Native (ProbeScale = 1)
     private int ProbeScale => ProbeScales[ProbeScaleIndex];
     private int CascadeCount;
 

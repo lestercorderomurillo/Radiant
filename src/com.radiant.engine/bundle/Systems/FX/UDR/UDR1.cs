@@ -8,13 +8,13 @@ namespace com.radiant.engine.bundle;
 
 public class UDR1 : core.System
 {
-    private static readonly int[] ScaleFactors = { 100, 88, 77, 50, 33, 25 };
-    private static readonly string[] QualityNames = { "Off", "Ultra Quality", "Quality", "Balanced", "Performance", "Ultra Performance" };
-    private int QualityIndex = 0;  // Default to Off (native)
+    private static readonly int[] ScaleFactors = { 25, 50, 100 };
+    private static readonly string[] QualityNames = { "Performance", "Balanced", "Native" };
+    private int QualityIndex = 2;  // Default to native scale
     private int ScaleFactor => ScaleFactors[QualityIndex];
 
     public float Sharpness = 0.5f;
-    public bool EdgeOverlay = false;
+    public bool EdgeCorrection = false;
 
     private RenderTarget2D OutputTexture;
     private Vector2 OutputSize;
@@ -60,6 +60,7 @@ public class UDR1 : core.System
     public void SetQuality(int index)
     {
         index = Math.Clamp(index, 0, ScaleFactors.Length - 1);
+
         if (QualityIndex != index)
         {
             QualityIndex = index;
@@ -75,13 +76,14 @@ public class UDR1 : core.System
         HandleInput();
 
         // Skip UDR1 processing when Off (native resolution)
-        if (QualityIndex == 0)
+        /*if (ScaleFactor == 100)
         {
             Gizmos?.Set("UDR1", $"Quality: {QualityNames[QualityIndex]} [F4]");
             return;
-        }
+        }*/
 
         var input = InputSource();
+
         if (input == null)
             return;
 
@@ -98,7 +100,7 @@ public class UDR1 : core.System
             .SetParameter("InputSize", inputSize)
             .SetParameter("OutputSize", OutputSize)
             .SetParameter("Sharpness", Sharpness)
-            .SetParameter("EdgeOverlay", EdgeOverlay ? 1f : 0f)
+            .SetParameter("EdgeCorrection", EdgeCorrection ? 1f : 0f)
             .Draw()
             .Commit()
             .SetTarget(null);
@@ -107,7 +109,7 @@ public class UDR1 : core.System
         Gizmos?.Set("UDR1", $"Input: {input.Width}x{input.Height}");
         Gizmos?.Set("UDR1", $"Output: {OutputSize.X}x{OutputSize.Y}");
         Gizmos?.Set("UDR1", $"Sharpness: {Sharpness:F2} [F7/F8]");
-        Gizmos?.Set("UDR1", $"EdgeOverlay: {(EdgeOverlay ? "On" : "Off")} [F9]");
+        Gizmos?.Set("UDR1", $"EdgeCorrection: {(EdgeCorrection ? "On" : "Off")} [F9]");
     }
 
     private void HandleInput()
@@ -134,7 +136,7 @@ public class UDR1 : core.System
         // F9 to toggle edge overlay
         if (key.IsKeyDown(Keys.F9) && !PrevKeyState.IsKeyDown(Keys.F9))
         {
-            EdgeOverlay = !EdgeOverlay;
+            EdgeCorrection = !EdgeCorrection;
         }
 
         PrevKeyState = key;
@@ -142,7 +144,7 @@ public class UDR1 : core.System
 
     public override void Render()
     {
-        if (InputSource == null || QualityIndex == 0)
+        if (InputSource == null || ScaleFactor == 100)
             return;
 
         Renderer.SpriteBatch.Begin(SpriteSortMode.Immediate, BlendState.AlphaBlend, SamplerState.LinearClamp);

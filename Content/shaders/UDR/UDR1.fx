@@ -8,7 +8,7 @@ SamplerState Sampler : register(s0);
 float2 InputSize;
 float2 OutputSize;
 float Sharpness;
-float EdgeOverlay;
+float EdgeCorrection;
 
 struct VertexShaderInput
 {
@@ -227,7 +227,7 @@ float3 CorrectEdges(float3 color, float2 uv)
     float4 emissive = EmissiveTexture.Sample(Sampler, uv);
 
     // emissive.a > 0 means we're on a surface - overlay the actual emissive color
-    float edgeMask = saturate(emissive.a * 3.0 - EdgeOverlay + 1.0);
+    float edgeMask = saturate(emissive.a * 3.0 - EdgeCorrection + 1.0);
     return lerp(color, emissive.rgb, edgeMask);
 }
 
@@ -263,7 +263,7 @@ float4 UDR1_PS(PixelShaderInput input) : SV_Target0
     }
 
     // Correct edges (optional)
-    if (EdgeOverlay > 0.0)
+    if (EdgeCorrection > 0.0)
     {
         result = CorrectEdges(result, uv);
     }
