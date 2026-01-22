@@ -106,10 +106,10 @@ public class UDR1 : core.System
             .SetTarget(null);
 
         Gizmos?.Set("UDR1", $"Quality: {QualityNames[QualityIndex]} ({GetScaleFactorNormalized():P0}) [F4]");
-        Gizmos?.Set("UDR1", $"Input: {input.Width}x{input.Height}");
-        Gizmos?.Set("UDR1", $"Output: {OutputSize.X}x{OutputSize.Y}");
-        Gizmos?.Set("UDR1", $"Sharpness: {Sharpness:F2} [F7/F8]");
-        Gizmos?.Set("UDR1", $"EdgeCorrection: {(EdgeCorrection ? "On" : "Off")} [F9]");
+        Gizmos?.Set("UDR1", $"Input Size: {input.Width}x{input.Height}");
+        Gizmos?.Set("UDR1", $"Output Size: {OutputSize.X}x{OutputSize.Y}");
+        Gizmos?.Set("UDR1", $"Sharpness Factor: {Sharpness:F2} [F7/F8]");
+        Gizmos?.Set("UDR1", $"Detail Reconstruction: {(EdgeCorrection ? "On" : "Off")} [F9]");
     }
 
     private void HandleInput()
