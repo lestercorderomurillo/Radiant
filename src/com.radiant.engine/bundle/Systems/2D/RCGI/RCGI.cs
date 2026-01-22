@@ -13,7 +13,7 @@ public class RCGI : core.System
 
     private Effect RCShader;
     private SpriteBatch ShaderSpriteBatch;
-    private Geometry SDFSystem;
+    private Geometry GeometrySystem;
     private RenderTarget2D[] CascadeLayers;
     private RenderTarget2D FinalTexture;
     private Vector2 ScreenSize;
@@ -56,7 +56,7 @@ public class RCGI : core.System
     {
         RCShader = Renderer.GetShaderEffect("RCGI/RCGI");
         ShaderSpriteBatch = Renderer.SpriteBatch;
-        SDFSystem = Scene.ECS.GetSystem<Geometry>();
+        GeometrySystem = Scene.ECS.GetSystem<Geometry>();
 
         ScreenSize = Renderer.ScaledSize;
         CascadeSize = ScreenSize / CascadeLinear;
@@ -229,8 +229,8 @@ public class RCGI : core.System
         device.DepthStencilState = DepthStencilState.None;
         device.RasterizerState = CachedRasterizerState;
 
-        var emissive = SDFSystem.EmissiveTexture;
-        var sdf = SDFSystem.SDFTexture;
+        var emissive = GeometrySystem.EmissiveTexture;
+        var sdf = GeometrySystem.SDFTexture;
         var cascade = cascadeIndex < ActiveCascades - 1 ? CascadeLayers[cascadeIndex + 1] : null;
 
         device.Textures[1] = emissive;
