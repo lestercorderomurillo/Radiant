@@ -22,7 +22,7 @@ public class HRCGI : core.System
     private int ProbeScale => ProbeScales[ProbeScaleIndex];
     private int CascadeCount;
 
-    private SceneGeometry SDFSystem;
+    private Geometry SDFSystem;
     private GizmosRenderer Gizmos;
 
     // Single set of cascade surfaces - reused for each frustum (like GameMaker)
@@ -62,7 +62,7 @@ public class HRCGI : core.System
 
     public override void Initialize()
     {
-        SDFSystem = Scene.ECS.GetSystem<SceneGeometry>();
+        SDFSystem = Scene.ECS.GetSystem<Geometry>();
         Gizmos = Scene.ECS.GetSystem<GizmosRenderer>();
 
         WorldSize = new Vector2(Renderer.ScaledHigherPowerOfTwo, Renderer.ScaledHigherPowerOfTwo);

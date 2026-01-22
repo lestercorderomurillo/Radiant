@@ -22,11 +22,11 @@
 /processorParam:DebugMode=Auto
 /build:shaders/RCGI.fx
 
-#begin SceneGeometry.fx
+#begin Geometry.fx
 /importer:EffectImporter
 /processor:EffectProcessor
 /processorParam:DebugMode=Auto
-/build:shaders/SceneGeometry.fx
+/build:shaders/Geometry.fx
 
 #begin HRC_Extensions.fx
 /importer:EffectImporter

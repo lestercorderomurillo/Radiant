@@ -22,7 +22,7 @@ public class MegaLightsScene : Scene
     private HRCGI HRCGISystem;
     private RCGI RCGISystem;
     private UDR1 UDR1System;
-    private SceneGeometry GeometrySystem;
+    private Geometry GeometrySystem;
     private GizmosRenderer Gizmos;
 
     private bool UseHRCGI = true;
@@ -37,7 +37,7 @@ public class MegaLightsScene : Scene
     public override void SetupECS()
     {
         ECS.AddSystem<PerformanceMonitor>();
-        GeometrySystem = ECS.AddSystem<SceneGeometry>();
+        GeometrySystem = ECS.AddSystem<Geometry>();
         HRCGISystem = ECS.AddSystem<HRCGI>();
         RCGISystem = ECS.AddSystem<RCGI>(enabled: false);
         UDR1System = ECS.AddSystem<UDR1>();

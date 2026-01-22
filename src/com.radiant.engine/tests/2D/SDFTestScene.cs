@@ -16,7 +16,7 @@ public class SDFTestScene : Scene
     {
         ECS.AddSystem<PerformanceMonitor>();
         ECS.AddSystem<GizmosRenderer>();
-        ECS.AddSystem<SceneGeometry>();
+        ECS.AddSystem<Geometry>();
         base.SetupECS();
     }
 

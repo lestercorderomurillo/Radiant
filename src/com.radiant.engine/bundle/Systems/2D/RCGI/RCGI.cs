@@ -13,7 +13,7 @@ public class RCGI : core.System
 
     private Effect RCShader;
     private SpriteBatch ShaderSpriteBatch;
-    private SceneGeometry SDFSystem;
+    private Geometry SDFSystem;
     private RenderTarget2D[] CascadeLayers;
     private RenderTarget2D FinalTexture;
     private Vector2 ScreenSize;
@@ -56,7 +56,7 @@ public class RCGI : core.System
     {
         RCShader = Renderer.GetShaderEffect("RCGI");
         ShaderSpriteBatch = Renderer.SpriteBatch;
-        SDFSystem = Scene.ECS.GetSystem<SceneGeometry>();
+        SDFSystem = Scene.ECS.GetSystem<Geometry>();
 
         ScreenSize = Renderer.ScaledSize;
         CascadeSize = ScreenSize / CascadeLinear;

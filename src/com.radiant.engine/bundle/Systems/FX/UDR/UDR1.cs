@@ -10,24 +10,24 @@ public class UDR1 : core.System
 {
     private static readonly int[] ScaleFactors = { 25, 50, 100 };
     private static readonly string[] QualityNames = { "Performance", "Balanced", "Native" };
-    private int QualityIndex = 2;  // Default to native scale
+    private int QualityIndex = 1;  // Default to native scale
     private int ScaleFactor => ScaleFactors[QualityIndex];
 
     public float Sharpness = 0.5f;
-    public bool EdgeCorrection = false;
+    public bool EdgeCorrection = true;
 
     private RenderTarget2D OutputTexture;
     private Vector2 OutputSize;
 
     private Func<Texture2D> InputSource;
-    private SceneGeometry SceneGeometry;
+    private Geometry Geometry;
     private GizmosRenderer Gizmos;
     private KeyboardState PrevKeyState;
 
     public override void Initialize()
     {
         Gizmos = Scene.ECS.GetSystem<GizmosRenderer>();
-        SceneGeometry = Scene.ECS.GetSystem<SceneGeometry>();
+        Geometry = Scene.ECS.GetSystem<Geometry>();
         OutputSize = Renderer.ScreenSize;
         CreateRenderTargets();
         ApplyRenderScale();
@@ -96,7 +96,7 @@ public class UDR1 : core.System
             .SetTarget(OutputTexture)
             .Clear(Color.Black)
             .SetParameter("InputTexture", input)
-            .SetParameter("EmissiveTexture", SceneGeometry?.EmissiveTexture)
+            .SetParameter("EmissiveTexture", Geometry?.EmissiveTexture)
             .SetParameter("InputSize", inputSize)
             .SetParameter("OutputSize", OutputSize)
             .SetParameter("Sharpness", Sharpness)

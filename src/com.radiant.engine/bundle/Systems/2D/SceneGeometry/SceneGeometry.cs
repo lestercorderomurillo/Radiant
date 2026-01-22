@@ -6,7 +6,7 @@ using Microsoft.Xna.Framework.Input;
 
 namespace com.radiant.engine.bundle;
 
-public class SceneGeometry : core.System
+public class Geometry : core.System
 {
     public float SDFScale = 0.50f;
     public bool EnableSDF = false;
@@ -58,7 +58,7 @@ public class SceneGeometry : core.System
     {
         Renderer
             .Reset()
-            .SetShader("SceneGeometry")
+            .SetShader("Geometry")
             .SetTechnique("InitializeJFA")
             .SetTarget(JFATexture1)
             .Clear(Color.Black)
@@ -275,7 +275,7 @@ public class SceneGeometry : core.System
     {
         Renderer
             .Reset()
-            .SetShader("SceneGeometry")
+            .SetShader("Geometry")
             .SetTechnique("JFAPass")
             .SetParameter("WorldsBounds", SDFBounds)
             .SetParameter("ScreenDiagonal", ScreenDiagonal);
@@ -298,7 +298,7 @@ public class SceneGeometry : core.System
     {
         Renderer
             .Reset()
-            .SetShader("SceneGeometry")
+            .SetShader("Geometry")
             .SetTechnique("GenerateSDFFromJFA")
             .SetTarget(SDFTexture)
             .SetParameter("EmissiveTexture", EmissiveTexture)
@@ -337,7 +337,7 @@ public class SceneGeometry : core.System
             case DebugMode.Emissive:
                 Renderer
                     .Reset()
-                    .SetShader("SceneGeometry")
+                    .SetShader("Geometry")
                     .SetTechnique("DebugEmissive")
                     .SetTarget(null)
                     .SetParameter("EmissiveTexture", EmissiveTexture)
@@ -360,7 +360,7 @@ public class SceneGeometry : core.System
             case DebugMode.SDF:
                 Renderer
                     .Reset()
-                    .SetShader("SceneGeometry")
+                    .SetShader("Geometry")
                     .SetTechnique("DebugSDFVisible")
                     .SetTarget(null)
                     .SetParameter("JFATexture", JFAResult)
@@ -374,7 +374,7 @@ public class SceneGeometry : core.System
             case DebugMode.JFADirection:
                 Renderer
                     .Reset()
-                    .SetShader("SceneGeometry")
+                    .SetShader("Geometry")
                     .SetTechnique("DebugJFA")
                     .SetTarget(null)
                     .SetParameter("JFATexture", JFAResult)
@@ -387,7 +387,7 @@ public class SceneGeometry : core.System
             case DebugMode.JFARaw:
                 Renderer
                     .Reset()
-                    .SetShader("SceneGeometry")
+                    .SetShader("Geometry")
                     .SetTechnique("DebugJFARaw")
                     .SetTarget(null)
                     .SetParameter("JFATexture", JFAResult)
