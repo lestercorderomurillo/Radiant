@@ -30,14 +30,14 @@ PixelShaderInput MainVS(VertexShaderInput input)
     return output;
 }
 
-// Compute luminance for edge detection
-float Luminance(float3 color)
+// Get luminance for edge detection
+float GetLuminance(float3 color)
 {
     return dot(color, float3(0.299, 0.587, 0.114));
 }
 
-// Lanczos-like weight function
-float LanczosWeight(float x, float radius)
+// Get Lanczos weight
+float GetLanczosWeight(float x, float radius)
 {
     if (abs(x) < 0.0001) return 1.0;
     if (abs(x) >= radius) return 0.0;
@@ -103,23 +103,23 @@ NeighborhoodSamples SampleNeighborhood(float2 baseUV, float2 texelSize)
     return s;
 }
 
-// Compute luminance for all neighborhood samples
-NeighborhoodLuminance ComputeNeighborhoodLuminance(NeighborhoodSamples s)
+// Get luminance for all neighborhood samples
+NeighborhoodLuminance GetNeighborhoodLuminance(NeighborhoodSamples s)
 {
     NeighborhoodLuminance lum;
 
-    lum.b = Luminance(s.b); lum.c = Luminance(s.c);
-    lum.e = Luminance(s.e); lum.f = Luminance(s.f);
-    lum.g = Luminance(s.g); lum.h = Luminance(s.h);
-    lum.i = Luminance(s.i); lum.j = Luminance(s.j);
-    lum.k = Luminance(s.k); lum.l = Luminance(s.l);
-    lum.n = Luminance(s.n); lum.o = Luminance(s.o);
+    lum.b = GetLuminance(s.b); lum.c = GetLuminance(s.c);
+    lum.e = GetLuminance(s.e); lum.f = GetLuminance(s.f);
+    lum.g = GetLuminance(s.g); lum.h = GetLuminance(s.h);
+    lum.i = GetLuminance(s.i); lum.j = GetLuminance(s.j);
+    lum.k = GetLuminance(s.k); lum.l = GetLuminance(s.l);
+    lum.n = GetLuminance(s.n); lum.o = GetLuminance(s.o);
 
     return lum;
 }
 
-// Detect edges using cross gradients of luminance
-EdgeInfo DetectEdges(NeighborhoodLuminance lum)
+// Find edges using cross gradients of luminance
+EdgeInfo FindEdges(NeighborhoodLuminance lum)
 {
     EdgeInfo edge;
 
@@ -144,21 +144,21 @@ EdgeInfo DetectEdges(NeighborhoodLuminance lum)
     return edge;
 }
 
-// Lanczos 4x4 reconstruction (radius = 2)
-float3 LanczosReconstruction(NeighborhoodSamples s, float2 frac)
+// Reconstruct using Lanczos 4x4 (radius = 2)
+float3 ReconstructLanczos(NeighborhoodSamples s, float2 frac)
 {
     float radius = 2.0;
 
-    // Compute Lanczos weights for the 4x4 grid
-    float wx0 = LanczosWeight(frac.x + 1.0, radius);  // e, i column
-    float wx1 = LanczosWeight(frac.x, radius);        // f, j column
-    float wx2 = LanczosWeight(frac.x - 1.0, radius);  // g, k column
-    float wx3 = LanczosWeight(frac.x - 2.0, radius);  // h, l column
+    // Get Lanczos weights for the 4x4 grid
+    float wx0 = GetLanczosWeight(frac.x + 1.0, radius);  // e, i column
+    float wx1 = GetLanczosWeight(frac.x, radius);        // f, j column
+    float wx2 = GetLanczosWeight(frac.x - 1.0, radius);  // g, k column
+    float wx3 = GetLanczosWeight(frac.x - 2.0, radius);  // h, l column
 
-    float wy0 = LanczosWeight(frac.y + 1.0, radius);  // b, c row
-    float wy1 = LanczosWeight(frac.y, radius);        // e, f, g, h row
-    float wy2 = LanczosWeight(frac.y - 1.0, radius);  // i, j, k, l row
-    float wy3 = LanczosWeight(frac.y - 2.0, radius);  // n, o row
+    float wy0 = GetLanczosWeight(frac.y + 1.0, radius);  // b, c row
+    float wy1 = GetLanczosWeight(frac.y, radius);        // e, f, g, h row
+    float wy2 = GetLanczosWeight(frac.y - 1.0, radius);  // i, j, k, l row
+    float wy3 = GetLanczosWeight(frac.y - 2.0, radius);  // n, o row
 
     // Normalize weights
     float sumX = wx0 + wx1 + wx2 + wx3;
@@ -184,7 +184,7 @@ float3 LanczosReconstruction(NeighborhoodSamples s, float2 frac)
 }
 
 // Edge-aware interpolation refinement
-float3 EdgeAwareRefinement(NeighborhoodSamples s, float3 lanczos, float2 frac, EdgeInfo edge)
+float3 RefineEdges(NeighborhoodSamples s, float3 lanczos, float2 frac, EdgeInfo edge)
 {
     // Compute edge-aware samples (stretch along edges)
     float3 hBlend = lerp(lerp(s.e, s.f, frac.x), lerp(s.g, s.h, frac.x), 0.5);
@@ -201,19 +201,19 @@ float3 EdgeAwareRefinement(NeighborhoodSamples s, float3 lanczos, float2 frac, E
     return lerp(lanczos, edgeAware, edge.strength * 0.7);
 }
 
-// RCAS-style adaptive sharpening
-float3 ApplySharpening(float3 color, NeighborhoodSamples s)
+// Sharpen using RCAS-style adaptive method
+float3 Sharpen(float3 color, NeighborhoodSamples s)
 {
-    // Compute local contrast
+    // Get local contrast
     float3 minColor = min(min(min(s.f, s.g), s.j), s.k);
     float3 maxColor = max(max(max(s.f, s.g), s.j), s.k);
     float3 contrast = maxColor - minColor;
 
     // Adaptive sharpening - less sharpening in high contrast areas
-    float contrastLum = Luminance(contrast);
+    float contrastLum = GetLuminance(contrast);
     float adaptiveSharp = Sharpness * saturate(1.0 - contrastLum * 2.0);
 
-    // Compute sharpening using the bilinear neighborhood
+    // Sharpen using the bilinear neighborhood
     float3 neighbors = (s.f + s.g + s.j + s.k) * 0.25;
     float3 sharpened = color + (color - neighbors) * adaptiveSharp;
 
@@ -221,8 +221,8 @@ float3 ApplySharpening(float3 color, NeighborhoodSamples s)
     return clamp(sharpened, minColor, maxColor);
 }
 
-// Apply SDF edge overlay at full resolution
-float3 ApplyEdgeOverlay(float3 color, float2 uv)
+// Correct edges using SDF overlay at full resolution
+float3 CorrectEdges(float3 color, float2 uv)
 {
     float4 emissive = EmissiveTexture.Sample(Sampler, uv);
 
@@ -243,29 +243,29 @@ float4 UDR1_PS(PixelShaderInput input) : SV_Target0
     float2 frac = inputPos - inputPosFloor;
     float2 baseUV = (inputPosFloor + 0.5) * texelSize;
 
-    // Sample neighborhood and compute luminance
+    // Sample neighborhood and get luminance
     NeighborhoodSamples samples = SampleNeighborhood(baseUV, texelSize);
-    NeighborhoodLuminance luminance = ComputeNeighborhoodLuminance(samples);
+    NeighborhoodLuminance luminance = GetNeighborhoodLuminance(samples);
 
-    // Detect edges
-    EdgeInfo edge = DetectEdges(luminance);
+    // Find edges
+    EdgeInfo edge = FindEdges(luminance);
 
-    // Lanczos reconstruction
-    float3 lanczos = LanczosReconstruction(samples, frac);
+    // Reconstruct with Lanczos
+    float3 lanczos = ReconstructLanczos(samples, frac);
 
-    // Edge-aware refinement
-    float3 result = EdgeAwareRefinement(samples, lanczos, frac, edge);
+    // Refine edges
+    float3 result = RefineEdges(samples, lanczos, frac, edge);
 
-    // Optional sharpening
+    // Sharpen (optional)
     if (Sharpness > 0.0)
     {
-        result = ApplySharpening(result, samples);
+        result = Sharpen(result, samples);
     }
 
-    // Optional edge overlay
+    // Correct edges (optional)
     if (EdgeOverlay > 0.0)
     {
-        result = ApplyEdgeOverlay(result, uv);
+        result = CorrectEdges(result, uv);
     }
 
     return float4(result, 1.0);
