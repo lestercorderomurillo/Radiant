@@ -36,14 +36,15 @@ float GetLuminance(float3 color)
     return dot(color, float3(0.299, 0.587, 0.114));
 }
 
+static const float PI = 3.14159265359;
+
 // Get Lanczos weight
 float GetLanczosWeight(float x, float radius)
 {
     if (abs(x) < 0.0001) return 1.0;
     if (abs(x) >= radius) return 0.0;
 
-    float pi = 3.14159265359;
-    float xpi = x * pi;
+    float xpi = x * PI;
     return (sin(xpi) / xpi) * (sin(xpi / radius) / (xpi / radius));
 }
 
@@ -82,38 +83,38 @@ struct EdgeInfo
 //    n o
 NeighborhoodSamples SampleNeighborhood(float2 baseUV, float2 texelSize)
 {
-    NeighborhoodSamples s;
+    NeighborhoodSamples neighborhood;
 
-    s.b = InputTexture.Sample(Sampler, baseUV + float2( 0, -1) * texelSize).rgb;
-    s.c = InputTexture.Sample(Sampler, baseUV + float2( 1, -1) * texelSize).rgb;
+    neighborhood.b = InputTexture.Sample(Sampler, baseUV + float2( 0, -1) * texelSize).rgb;
+    neighborhood.c = InputTexture.Sample(Sampler, baseUV + float2( 1, -1) * texelSize).rgb;
 
-    s.e = InputTexture.Sample(Sampler, baseUV + float2(-1,  0) * texelSize).rgb;
-    s.f = InputTexture.Sample(Sampler, baseUV + float2( 0,  0) * texelSize).rgb;
-    s.g = InputTexture.Sample(Sampler, baseUV + float2( 1,  0) * texelSize).rgb;
-    s.h = InputTexture.Sample(Sampler, baseUV + float2( 2,  0) * texelSize).rgb;
+    neighborhood.e = InputTexture.Sample(Sampler, baseUV + float2(-1,  0) * texelSize).rgb;
+    neighborhood.f = InputTexture.Sample(Sampler, baseUV + float2( 0,  0) * texelSize).rgb;
+    neighborhood.g = InputTexture.Sample(Sampler, baseUV + float2( 1,  0) * texelSize).rgb;
+    neighborhood.h = InputTexture.Sample(Sampler, baseUV + float2( 2,  0) * texelSize).rgb;
 
-    s.i = InputTexture.Sample(Sampler, baseUV + float2(-1,  1) * texelSize).rgb;
-    s.j = InputTexture.Sample(Sampler, baseUV + float2( 0,  1) * texelSize).rgb;
-    s.k = InputTexture.Sample(Sampler, baseUV + float2( 1,  1) * texelSize).rgb;
-    s.l = InputTexture.Sample(Sampler, baseUV + float2( 2,  1) * texelSize).rgb;
+    neighborhood.i = InputTexture.Sample(Sampler, baseUV + float2(-1,  1) * texelSize).rgb;
+    neighborhood.j = InputTexture.Sample(Sampler, baseUV + float2( 0,  1) * texelSize).rgb;
+    neighborhood.k = InputTexture.Sample(Sampler, baseUV + float2( 1,  1) * texelSize).rgb;
+    neighborhood.l = InputTexture.Sample(Sampler, baseUV + float2( 2,  1) * texelSize).rgb;
 
-    s.n = InputTexture.Sample(Sampler, baseUV + float2( 0,  2) * texelSize).rgb;
-    s.o = InputTexture.Sample(Sampler, baseUV + float2( 1,  2) * texelSize).rgb;
+    neighborhood.n = InputTexture.Sample(Sampler, baseUV + float2( 0,  2) * texelSize).rgb;
+    neighborhood.o = InputTexture.Sample(Sampler, baseUV + float2( 1,  2) * texelSize).rgb;
 
-    return s;
+    return neighborhood;
 }
 
 // Get luminance for all neighborhood samples
-NeighborhoodLuminance GetNeighborhoodLuminance(NeighborhoodSamples s)
+NeighborhoodLuminance GetNeighborhoodLuminance(NeighborhoodSamples neighborhood)
 {
     NeighborhoodLuminance lum;
 
-    lum.b = GetLuminance(s.b); lum.c = GetLuminance(s.c);
-    lum.e = GetLuminance(s.e); lum.f = GetLuminance(s.f);
-    lum.g = GetLuminance(s.g); lum.h = GetLuminance(s.h);
-    lum.i = GetLuminance(s.i); lum.j = GetLuminance(s.j);
-    lum.k = GetLuminance(s.k); lum.l = GetLuminance(s.l);
-    lum.n = GetLuminance(s.n); lum.o = GetLuminance(s.o);
+    lum.b = GetLuminance(neighborhood.b); lum.c = GetLuminance(neighborhood.c);
+    lum.e = GetLuminance(neighborhood.e); lum.f = GetLuminance(neighborhood.f);
+    lum.g = GetLuminance(neighborhood.g); lum.h = GetLuminance(neighborhood.h);
+    lum.i = GetLuminance(neighborhood.i); lum.j = GetLuminance(neighborhood.j);
+    lum.k = GetLuminance(neighborhood.k); lum.l = GetLuminance(neighborhood.l);
+    lum.n = GetLuminance(neighborhood.n); lum.o = GetLuminance(neighborhood.o);
 
     return lum;
 }
@@ -126,15 +127,18 @@ EdgeInfo FindEdges(NeighborhoodLuminance lum)
     // Horizontal edge detection
     float edgeH1 = abs(lum.e - lum.f) + abs(lum.f - lum.g) + abs(lum.g - lum.h);
     float edgeH2 = abs(lum.i - lum.j) + abs(lum.j - lum.k) + abs(lum.k - lum.l);
+
     edge.horizontal = edgeH1 + edgeH2;
 
     // Vertical edge detection
     float edgeV1 = abs(lum.b - lum.f) + abs(lum.f - lum.j) + abs(lum.j - lum.n);
     float edgeV2 = abs(lum.c - lum.g) + abs(lum.g - lum.k) + abs(lum.k - lum.o);
+
     edge.vertical = edgeV1 + edgeV2;
 
     // Determine dominant edge direction
     float edgeTotal = edge.horizontal + edge.vertical + 0.0001;
+    
     edge.hWeight = edge.vertical / edgeTotal;   // More vertical edges = use horizontal interpolation
     edge.vWeight = edge.horizontal / edgeTotal; // More horizontal edges = use vertical interpolation
 
@@ -145,7 +149,7 @@ EdgeInfo FindEdges(NeighborhoodLuminance lum)
 }
 
 // Reconstruct using Lanczos 4x4 (radius = 2)
-float3 ReconstructLanczos(NeighborhoodSamples s, float2 frac)
+float3 ReconstructLanczos(NeighborhoodSamples neighborhood, float2 frac)
 {
     float radius = 2.0;
 
@@ -169,26 +173,26 @@ float3 ReconstructLanczos(NeighborhoodSamples s, float2 frac)
     // Row -1 (only b, c available, use linear for missing samples)
     float w01 = wx1 + wx0 * 0.5;
     float w02 = wx2 + wx3 * 0.5;
-    float3 row0 = (s.b * w01 + s.c * w02) / (w01 + w02);
+    float3 row0 = (neighborhood.b * w01 + neighborhood.c * w02) / (w01 + w02);
 
     // Row 0 (e, f, g, h available)
-    float3 row1 = s.e * wx0 + s.f * wx1 + s.g * wx2 + s.h * wx3;
+    float3 row1 = neighborhood.e * wx0 + neighborhood.f * wx1 + neighborhood.g * wx2 + neighborhood.h * wx3;
 
     // Row 1 (i, j, k, l available)
-    float3 row2 = s.i * wx0 + s.j * wx1 + s.k * wx2 + s.l * wx3;
+    float3 row2 = neighborhood.i * wx0 + neighborhood.j * wx1 + neighborhood.k * wx2 + neighborhood.l * wx3;
 
     // Row 2 (only n, o available, use linear for missing samples)
-    float3 row3 = (s.n * w01 + s.o * w02) / (w01 + w02);
+    float3 row3 = (neighborhood.n * w01 + neighborhood.o * w02) / (w01 + w02);
 
     return row0 * wy0 + row1 * wy1 + row2 * wy2 + row3 * wy3;
 }
 
 // Edge-aware interpolation refinement
-float3 RefineEdges(NeighborhoodSamples s, float3 lanczos, float2 frac, EdgeInfo edge)
+float3 RefineEdges(NeighborhoodSamples neighborhood, float3 lanczos, float2 frac, EdgeInfo edge)
 {
     // Compute edge-aware samples (stretch along edges)
-    float3 hBlend = lerp(lerp(s.e, s.f, frac.x), lerp(s.g, s.h, frac.x), 0.5);
-    float3 vBlend = lerp(lerp(s.b, s.c, frac.x), lerp(s.n, s.o, frac.x), 0.5);
+    float3 hBlend = lerp(lerp(neighborhood.e, neighborhood.f, frac.x), lerp(neighborhood.g, neighborhood.h, frac.x), 0.5);
+    float3 vBlend = lerp(lerp(neighborhood.b, neighborhood.c, frac.x), lerp(neighborhood.n, neighborhood.o, frac.x), 0.5);
 
     // Blend based on edge direction
     float3 edgeAware = lerp(
@@ -202,11 +206,11 @@ float3 RefineEdges(NeighborhoodSamples s, float3 lanczos, float2 frac, EdgeInfo 
 }
 
 // Sharpen using RCAS-style adaptive method
-float3 Sharpen(float3 color, NeighborhoodSamples s)
+float3 Sharpen(float3 color, NeighborhoodSamples neighborhood)
 {
     // Get local contrast
-    float3 minColor = min(min(min(s.f, s.g), s.j), s.k);
-    float3 maxColor = max(max(max(s.f, s.g), s.j), s.k);
+    float3 minColor = min(min(min(neighborhood.f, neighborhood.g), neighborhood.j), neighborhood.k);
+    float3 maxColor = max(max(max(neighborhood.f, neighborhood.g), neighborhood.j), neighborhood.k);
     float3 contrast = maxColor - minColor;
 
     // Adaptive sharpening - less sharpening in high contrast areas
@@ -214,7 +218,7 @@ float3 Sharpen(float3 color, NeighborhoodSamples s)
     float adaptiveSharp = Sharpness * saturate(1.0 - contrastLum * 2.0);
 
     // Sharpen using the bilinear neighborhood
-    float3 neighbors = (s.f + s.g + s.j + s.k) * 0.25;
+    float3 neighbors = (neighborhood.f + neighborhood.g + neighborhood.j + neighborhood.k) * 0.25;
     float3 sharpened = color + (color - neighbors) * adaptiveSharp;
 
     // Clamp to prevent ringing artifacts
