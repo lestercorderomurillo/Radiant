@@ -233,8 +233,8 @@ float3 CorrectEdges(float3 color, float2 uv)
 {
     // Adjustable constants
     static const float OUTER_MARGIN = 0.001;      // SDF distance outside to blend (0 = edge, 0.05 = far)
-    static const float INNER_MARGIN = 32.0;       // Texels inside to blend (1-4 range based on samples)
-    static const float EDGE_BLEND = 0.8;          // Blend strength at exact edge
+    static const float INNER_MARGIN = 20.0;       // Texels inside to blend (1-4 range based on samples)
+    static const float EDGE_BLEND = 0.55;         // Blend strength at exact edge
 
     float4 emissive = EmissiveTexture.Sample(Sampler, uv);
     float sdfDist = SDFTexture.Sample(Sampler, uv).r;  // 0 = on surface, >0 = outside
@@ -386,11 +386,83 @@ float4 UDR1_PS(PixelShaderInput input) : SV_Target0
     return float4(result, 1.0);
 }
 
+// =============================================================================
+// Edge Smoothing Pass - Gaussian blur on detected edges
+// Applied as separate pass on upscaled output at full resolution
+// =============================================================================
+
+float4 EdgeSmooth_PS(PixelShaderInput input) : SV_Target0
+{
+    static const float SMOOTH_STRENGTH = 0.85;
+    static const float CONTRAST_THRESHOLD = 0.015;
+    static const float RELATIVE_THRESHOLD = 0.03;
+
+    float2 uv = input.UV;
+    float2 texelSize = 1.0 / OutputSize;
+
+    // Sample center and neighbors
+    float3 colorM = InputTexture.Sample(Sampler, uv).rgb;
+    float3 colorN = InputTexture.Sample(Sampler, uv + float2(0, -texelSize.y)).rgb;
+    float3 colorS = InputTexture.Sample(Sampler, uv + float2(0,  texelSize.y)).rgb;
+    float3 colorW = InputTexture.Sample(Sampler, uv + float2(-texelSize.x, 0)).rgb;
+    float3 colorE = InputTexture.Sample(Sampler, uv + float2( texelSize.x, 0)).rgb;
+
+    float lumM = GetLuminance(colorM);
+    float lumN = GetLuminance(colorN);
+    float lumS = GetLuminance(colorS);
+    float lumW = GetLuminance(colorW);
+    float lumE = GetLuminance(colorE);
+
+    float lumMin = min(lumM, min(min(lumN, lumS), min(lumW, lumE)));
+    float lumMax = max(lumM, max(max(lumN, lumS), max(lumW, lumE)));
+    float lumRange = lumMax - lumMin;
+
+    float threshold = max(CONTRAST_THRESHOLD, lumMax * RELATIVE_THRESHOLD);
+
+    // Not an edge - return original
+    if (lumRange < threshold)
+    {
+        return float4(colorM, 1.0);
+    }
+
+    // Edge detected - apply Gaussian blur (9x9, sigma ~2.0)
+    float3 blur = float3(0, 0, 0);
+    float totalWeight = 0.0;
+
+    [unroll]
+    for (int y = -4; y <= 4; y++)
+    {
+        [unroll]
+        for (int x = -4; x <= 4; x++)
+        {
+            float2 offset = float2(x, y) * texelSize;
+            float dist = sqrt(float(x * x + y * y));
+            float weight = exp(-(dist * dist) / 8.0);  // sigma = 2.0
+
+            blur += InputTexture.Sample(Sampler, uv + offset).rgb * weight;
+            totalWeight += weight;
+        }
+    }
+    blur /= totalWeight;
+
+    float3 result = lerp(colorM, blur, SMOOTH_STRENGTH);
+    return float4(result, 1.0);
+}
+
 technique Upscale
 {
     pass P0
     {
         VertexShader = compile vs_5_0 MainVS();
         PixelShader = compile ps_5_0 UDR1_PS();
+    }
+}
+
+technique EdgeSmooth
+{
+    pass P0
+    {
+        VertexShader = compile vs_5_0 MainVS();
+        PixelShader = compile ps_5_0 EdgeSmooth_PS();
     }
 }

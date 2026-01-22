@@ -17,6 +17,7 @@ public class UDR1 : core.System
     public bool EdgeCorrection = true;
 
     private RenderTarget2D OutputTexture;
+    private RenderTarget2D SmoothTexture;
     private Vector2 OutputSize;
 
     private Func<Texture2D> InputSource;
@@ -42,6 +43,14 @@ public class UDR1 : core.System
     private void CreateRenderTargets()
     {
         OutputTexture = new RenderTarget2D(
+            Renderer.Device,
+            (int)OutputSize.X,
+            (int)OutputSize.Y,
+            false,
+            SurfaceFormat.HalfVector4,
+            DepthFormat.None);
+
+        SmoothTexture = new RenderTarget2D(
             Renderer.Device,
             (int)OutputSize.X,
             (int)OutputSize.Y,
@@ -92,6 +101,7 @@ public class UDR1 : core.System
         Renderer
             .Reset()
             .SetShader("UDR/UDR1")
+            .SetTechnique("Upscale")
             .Configure(SamplerState.LinearClamp)
             .SetTarget(OutputTexture)
             .Clear(Color.Black)
@@ -102,6 +112,20 @@ public class UDR1 : core.System
             .SetParameter("OutputSize", OutputSize)
             .SetParameter("Sharpness", Sharpness)
             .SetParameter("EdgeCorrection", EdgeCorrection ? 1f : 0f)
+            .Draw()
+            .Commit()
+            .SetTarget(null);
+
+        // Edge smoothing pass (always on)
+        Renderer
+            .Reset()
+            .SetShader("UDR/UDR1")
+            .SetTechnique("EdgeSmooth")
+            .Configure(SamplerState.LinearClamp)
+            .SetTarget(SmoothTexture)
+            .Clear(Color.Black)
+            .SetParameter("InputTexture", OutputTexture)
+            .SetParameter("OutputSize", OutputSize)
             .Draw()
             .Commit()
             .SetTarget(null);
@@ -149,11 +173,11 @@ public class UDR1 : core.System
             return;
 
         Renderer.SpriteBatch.Begin(SpriteSortMode.Immediate, BlendState.AlphaBlend, SamplerState.LinearClamp);
-        Renderer.SpriteBatch.Draw(OutputTexture, Renderer.Device.Viewport.Bounds, Color.White);
+        Renderer.SpriteBatch.Draw(SmoothTexture, Renderer.Device.Viewport.Bounds, Color.White);
         Renderer.SpriteBatch.End();
     }
 
-    public RenderTarget2D GetOutput() => OutputTexture;
+    public RenderTarget2D GetOutput() => SmoothTexture;
 
     public override void OnResize()
     {
@@ -162,6 +186,7 @@ public class UDR1 : core.System
             return;
 
         OutputTexture?.Dispose();
+        SmoothTexture?.Dispose();
         OutputSize = newSize;
         CreateRenderTargets();
     }
@@ -173,5 +198,8 @@ public class UDR1 : core.System
 
         OutputTexture?.Dispose();
         OutputTexture = null;
+
+        SmoothTexture?.Dispose();
+        SmoothTexture = null;
     }
 }
