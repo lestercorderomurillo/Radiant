@@ -6,31 +6,118 @@ using Microsoft.Xna.Framework.Graphics;
 
 namespace com.radiant.engine.core;
 
+/// <summary>
+/// Fluent rendering API for MonoGame/XNA providing shader management, render targets,
+/// and fullscreen quad drawing for post-processing effects.
+///
+/// <example>
+/// Basic fullscreen shader pass:
+/// <code>
+/// Renderer
+///     .Reset()
+///     .SetShader("Effects/Blur")
+///     .Configure((0, SamplerState.LinearClamp))
+///     .SetTarget(outputTexture)
+///     .Clear(Color.Black)
+///     .SetParameter("InputTexture", inputTexture)
+///     .SetParameter("BlurRadius", 5.0f)
+///     .Draw()
+///     .Commit();
+/// </code>
+/// </example>
+///
+/// <example>
+/// Multiple render target (MRT) rendering:
+/// <code>
+/// Renderer
+///     .Reset()
+///     .SetShader("GBuffer/Generate")
+///     .SetTargets(albedoRT, normalRT, depthRT)
+///     .Clear(Color.Black)
+///     .Draw()
+///     .Commit();
+/// </code>
+/// </example>
+///
+/// <example>
+/// SpriteBatch-based texture drawing with shader:
+/// <code>
+/// Renderer
+///     .Reset()
+///     .SetShader("Effects/ColorGrade")
+///     .Configure(BlendState.AlphaBlend)
+///     .SetTarget(outputTexture)
+///     .DrawTexture(inputTexture, Vector2.Zero)
+///     .Commit();
+/// </code>
+/// </example>
+/// </summary>
 public class Renderer : IDisposable
 {
-    // State
+    #region Public Properties
+
+    /// <summary>The parent window containing the graphics device.</summary>
     public Window Window { get; }
-    private GameWindow NativeWindow => Window.Window;
+
+    /// <summary>The underlying MonoGame graphics device.</summary>
     public GraphicsDevice Device { get; }
+
+    /// <summary>Shared SpriteBatch for texture drawing operations.</summary>
     public SpriteBatch SpriteBatch { get; }
+
+    /// <summary>True if currently between Begin/Draw and Commit calls.</summary>
     public bool IsDrawing { get; private set; }
+
+    /// <summary>Name of the currently active shader (null if none).</summary>
     public string CurrentShaderName { get; private set; }
 
-    // Screen Info
+    #endregion
+
+    #region Screen Information
+
+    /// <summary>Current viewport width in pixels.</summary>
     public int ScreenWidth { get; private set; }
+
+    /// <summary>Current viewport height in pixels.</summary>
     public int ScreenHeight { get; private set; }
+
+    /// <summary>Current viewport size as Vector2.</summary>
     public Vector2 ScreenSize { get; private set; }
+
+    /// <summary>Width / Height ratio.</summary>
     public float AspectRatio { get; private set; }
+
+    /// <summary>Height / Width ratio.</summary>
     public float InverseAspectRatio { get; private set; }
+
+    /// <summary>Diagonal length of the screen in pixels.</summary>
     public float ScreenDiagonal { get; private set; }
+
+    /// <summary>Total pixel count (Width * Height).</summary>
     public int ScreenArea { get; private set; }
+
+    /// <summary>Largest power of 2 that fits within max(Width, Height).</summary>
     public int ScreenLowerPowerOfTwo { get; private set; }
+
+    /// <summary>Smallest power of 2 that contains max(Width, Height).</summary>
     public int ScreenHigherPowerOfTwo { get; private set; }
+
+    /// <summary>Square Vector2 using ScreenLowerPowerOfTwo.</summary>
     public Vector2 ScreenSizeLowerPowerOfTwo { get; private set; }
+
+    /// <summary>Square Vector2 using ScreenHigherPowerOfTwo.</summary>
     public Vector2 ScreenSizeHigherPowerOfTwo { get; private set; }
 
-    // Render Scale (for UDR1/upscaling)
+    #endregion
+
+    #region Render Scale (Dynamic Resolution)
+
     private float _renderScale = 1.0f;
+
+    /// <summary>
+    /// Render scale factor for dynamic resolution (0.25 to 1.0).
+    /// Systems can subscribe to RenderScaleChanged to resize their render targets.
+    /// </summary>
     public float RenderScale
     {
         get => _renderScale;
@@ -44,15 +131,27 @@ public class Renderer : IDisposable
             }
         }
     }
+
+    /// <summary>Fired when RenderScale changes. Parameter is the new scale value.</summary>
     public event Action<float> RenderScaleChanged;
 
-    // Scaled Screen Info (for systems that respect RenderScale)
+    /// <summary>Scaled viewport width (ScreenWidth * RenderScale).</summary>
     public int ScaledWidth { get; private set; }
+
+    /// <summary>Scaled viewport height (ScreenHeight * RenderScale).</summary>
     public int ScaledHeight { get; private set; }
+
+    /// <summary>Scaled viewport size as Vector2.</summary>
     public Vector2 ScaledSize { get; private set; }
+
+    /// <summary>Smallest power of 2 containing max(ScaledWidth, ScaledHeight).</summary>
     public int ScaledHigherPowerOfTwo { get; private set; }
 
-    // Internal
+    #endregion
+
+    #region Private State
+
+    private GameWindow NativeWindow => Window.Window;
     private Dictionary<string, Effect> ShaderCache = new();
     private Dictionary<(Color, int, int), Texture2D> SolidTextureCache = new();
     private Dictionary<int, Texture2D> CircleTextureCache = new();
@@ -61,23 +160,27 @@ public class Renderer : IDisposable
     private Effect CurrentShader;
     private bool IsDrawingTextures;
 
-    // Configured states
     private BlendState BlendState = BlendState.Opaque;
     private DepthStencilState DepthStencilState = DepthStencilState.None;
     private RasterizerState RasterizerState = RasterizerState.CullNone;
     private SpriteSortMode SpriteSortMode = SpriteSortMode.Immediate;
     private SamplerState[] SamplerStates = new SamplerState[8];
-    private int SamplerDirtyMask = 0; // Bitmask tracking which samplers need to be applied
+    private int SamplerDirtyMask = 0;
 
-    // Cached MRT binding arrays (allocation-free)
     private readonly RenderTargetBinding[] _twoTargetBindings = new RenderTargetBinding[2];
     private readonly RenderTargetBinding[] _threeTargetBindings = new RenderTargetBinding[3];
     private readonly RenderTargetBinding[] _fourTargetBindings = new RenderTargetBinding[4];
-
-    // Render target stack (avoids GPU sync from GetRenderTargets)
     private readonly Stack<RenderTargetBinding[]> _renderTargetStack = new();
     private RenderTargetBinding[] _currentTargets = null;
 
+    #endregion
+
+    #region Constructor
+
+    /// <summary>
+    /// Creates a new Renderer bound to the specified window.
+    /// </summary>
+    /// <param name="window">The window containing the graphics device.</param>
     public Renderer(Window window)
     {
         Window = window;
@@ -98,6 +201,11 @@ public class Renderer : IDisposable
         };
     }
 
+    #endregion
+
+    #region Screen Info Updates
+
+    /// <summary>Updates all screen-related properties from the current viewport.</summary>
     public void UpdateScreenInfo()
     {
         var viewport = Device.Viewport;
@@ -144,6 +252,10 @@ public class Renderer : IDisposable
         return power;
     }
 
+    #endregion
+
+    #region Quad Initialization
+
     private void InitializeQuad()
     {
         var vertices = new VertexPositionTexture[]
@@ -162,7 +274,15 @@ public class Renderer : IDisposable
         QuadIndexBuffer.SetData(indices);
     }
 
-    // Shader
+    #endregion
+
+    #region Shader Management
+
+    /// <summary>
+    /// Loads and sets the active shader by name. Shaders are cached after first load.
+    /// </summary>
+    /// <param name="name">Shader path relative to Content/shaders/ (e.g., "Effects/Blur").</param>
+    /// <returns>This renderer for method chaining.</returns>
     public Renderer SetShader(string name)
     {
         if (!ShaderCache.TryGetValue(name, out var shader))
@@ -176,6 +296,11 @@ public class Renderer : IDisposable
         return this;
     }
 
+    /// <summary>
+    /// Gets a shader Effect by name without setting it as active. Useful for external parameter setting.
+    /// </summary>
+    /// <param name="name">Shader path relative to Content/shaders/.</param>
+    /// <returns>The loaded Effect object.</returns>
     public Effect GetShaderEffect(string name)
     {
         if (!ShaderCache.TryGetValue(name, out var shader))
@@ -186,6 +311,11 @@ public class Renderer : IDisposable
         return shader;
     }
 
+    /// <summary>
+    /// Disposes and removes a shader from the cache.
+    /// </summary>
+    /// <param name="name">Shader path to release.</param>
+    /// <returns>This renderer for method chaining.</returns>
     public Renderer ReleaseShader(string name)
     {
         if (ShaderCache.TryGetValue(name, out var shader))
@@ -202,6 +332,11 @@ public class Renderer : IDisposable
         return this;
     }
 
+    /// <summary>
+    /// Sets the active technique on the current shader.
+    /// </summary>
+    /// <param name="technique">Name of the technique to activate.</param>
+    /// <returns>This renderer for method chaining.</returns>
     public Renderer SetTechnique(string technique)
     {
         if (CurrentShader != null)
@@ -209,25 +344,34 @@ public class Renderer : IDisposable
         return this;
     }
 
-    // Configure
+    #endregion
+
+    #region State Configuration
+
+    /// <summary>Sets the blend state for subsequent draw calls.</summary>
     public Renderer Configure(BlendState state)
     {
         BlendState = state;
         return this;
     }
 
+    /// <summary>Sets the depth stencil state for subsequent draw calls.</summary>
     public Renderer Configure(DepthStencilState state)
     {
         DepthStencilState = state;
         return this;
     }
 
+    /// <summary>Sets the rasterizer state for subsequent draw calls.</summary>
     public Renderer Configure(RasterizerState state)
     {
         RasterizerState = state;
         return this;
     }
 
+    /// <summary>Sets a sampler state at the specified slot.</summary>
+    /// <param name="state">The sampler state to set.</param>
+    /// <param name="slot">Sampler slot index (0-7).</param>
     public Renderer Configure(SamplerState state, int slot = 0)
     {
         if (slot >= 0 && slot < SamplerStates.Length)
@@ -238,12 +382,14 @@ public class Renderer : IDisposable
         return this;
     }
 
+    /// <summary>Sets the sprite sort mode for DrawTexture operations.</summary>
     public Renderer Configure(SpriteSortMode mode)
     {
         SpriteSortMode = mode;
         return this;
     }
 
+    /// <summary>Sets two sampler states at specified slots.</summary>
     public Renderer Configure((int slot, SamplerState state) s0, (int slot, SamplerState state) s1)
     {
         if (s0.slot >= 0 && s0.slot < SamplerStates.Length)
@@ -259,6 +405,7 @@ public class Renderer : IDisposable
         return this;
     }
 
+    /// <summary>Sets three sampler states at specified slots.</summary>
     public Renderer Configure((int slot, SamplerState state) s0, (int slot, SamplerState state) s1, (int slot, SamplerState state) s2)
     {
         if (s0.slot >= 0 && s0.slot < SamplerStates.Length)
@@ -279,6 +426,7 @@ public class Renderer : IDisposable
         return this;
     }
 
+    /// <summary>Sets four sampler states at specified slots.</summary>
     public Renderer Configure((int slot, SamplerState state) s0, (int slot, SamplerState state) s1, (int slot, SamplerState state) s2, (int slot, SamplerState state) s3)
     {
         if (s0.slot >= 0 && s0.slot < SamplerStates.Length)
@@ -304,6 +452,7 @@ public class Renderer : IDisposable
         return this;
     }
 
+    /// <summary>Sets multiple sampler states at specified slots.</summary>
     public Renderer Configure(params (int slot, SamplerState state)[] samplers)
     {
         foreach (var (slot, state) in samplers)
@@ -317,6 +466,7 @@ public class Renderer : IDisposable
         return this;
     }
 
+    /// <summary>Sets multiple render states by type detection.</summary>
     public Renderer Configure(params object[] states)
     {
         foreach (var state in states)
@@ -336,10 +486,13 @@ public class Renderer : IDisposable
         return this;
     }
 
-    // Targets
+    #endregion
+
+    #region Render Targets
 
     /// <summary>
-    /// Push current render targets onto stack (avoids GPU sync from GetRenderTargets)
+    /// Pushes current render targets onto an internal stack. Use with PopTargets to
+    /// restore state after nested rendering operations without GPU synchronization.
     /// </summary>
     public Renderer PushTargets()
     {
@@ -348,7 +501,7 @@ public class Renderer : IDisposable
     }
 
     /// <summary>
-    /// Pop and restore render targets from stack
+    /// Pops and restores render targets from the internal stack.
     /// </summary>
     public Renderer PopTargets()
     {
@@ -365,6 +518,7 @@ public class Renderer : IDisposable
         return this;
     }
 
+    /// <summary>Sets a single render target (or null for backbuffer).</summary>
     public Renderer SetTarget(RenderTarget2D target)
     {
         CommitTextures();
@@ -373,6 +527,7 @@ public class Renderer : IDisposable
         return this;
     }
 
+    /// <summary>Sets two render targets for MRT rendering.</summary>
     public Renderer SetTargets(RenderTarget2D target0, RenderTarget2D target1)
     {
         CommitTextures();
@@ -383,6 +538,7 @@ public class Renderer : IDisposable
         return this;
     }
 
+    /// <summary>Sets three render targets for MRT rendering.</summary>
     public Renderer SetTargets(RenderTarget2D target0, RenderTarget2D target1, RenderTarget2D target2)
     {
         CommitTextures();
@@ -394,6 +550,7 @@ public class Renderer : IDisposable
         return this;
     }
 
+    /// <summary>Sets four render targets for MRT rendering.</summary>
     public Renderer SetTargets(RenderTarget2D target0, RenderTarget2D target1, RenderTarget2D target2, RenderTarget2D target3)
     {
         CommitTextures();
@@ -406,6 +563,7 @@ public class Renderer : IDisposable
         return this;
     }
 
+    /// <summary>Sets multiple render targets for MRT rendering.</summary>
     public Renderer SetTargets(params RenderTarget2D[] targets)
     {
         CommitTextures();
@@ -417,6 +575,7 @@ public class Renderer : IDisposable
         return this;
     }
 
+    /// <summary>Sets render targets from pre-built bindings array.</summary>
     public Renderer SetTargets(params RenderTargetBinding[] bindings)
     {
         CommitTextures();
@@ -425,94 +584,119 @@ public class Renderer : IDisposable
         return this;
     }
 
-    // Clear
+    #endregion
 
+    #region Clear
+
+    /// <summary>
+    /// Clears the current render target(s) to the specified color.
+    /// </summary>
+    /// <param name="color">Clear color (defaults to Black).</param>
     public Renderer Clear(Color? color = null)
     {
         Device.Clear(color ?? Color.Black);
         return this;
     }
 
-    // Parameters
+    #endregion
 
+    #region Shader Parameters
+
+    /// <summary>Sets a float parameter on the current (or specified) shader.</summary>
     public Renderer SetParameter(string name, float value, Effect shader = null)
     {
         (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
         return this;
     }
 
+    /// <summary>Sets an int parameter on the current (or specified) shader.</summary>
     public Renderer SetParameter(string name, int value, Effect shader = null)
     {
         (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
         return this;
     }
 
+    /// <summary>Sets a bool parameter on the current (or specified) shader.</summary>
     public Renderer SetParameter(string name, bool value, Effect shader = null)
     {
         (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
         return this;
     }
 
+    /// <summary>Sets a Vector2 parameter on the current (or specified) shader.</summary>
     public Renderer SetParameter(string name, Vector2 value, Effect shader = null)
     {
         (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
         return this;
     }
 
+    /// <summary>Sets a Vector3 parameter on the current (or specified) shader.</summary>
     public Renderer SetParameter(string name, Vector3 value, Effect shader = null)
     {
         (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
         return this;
     }
 
+    /// <summary>Sets a Vector4 parameter on the current (or specified) shader.</summary>
     public Renderer SetParameter(string name, Vector4 value, Effect shader = null)
     {
         (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
         return this;
     }
 
+    /// <summary>Sets a Matrix parameter on the current (or specified) shader.</summary>
     public Renderer SetParameter(string name, Matrix value, Effect shader = null)
     {
         (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
         return this;
     }
 
+    /// <summary>
+    /// Sets a Texture2D parameter on the current (or specified) shader.
+    /// The shader must have a named texture parameter (not just a register binding).
+    /// </summary>
     public Renderer SetParameter(string name, Texture2D value, Effect shader = null)
     {
         (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
         return this;
     }
 
+    /// <summary>Sets a float array parameter on the current (or specified) shader.</summary>
     public Renderer SetParameter(string name, float[] value, Effect shader = null)
     {
         (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
         return this;
     }
 
+    /// <summary>Sets a Vector2 array parameter on the current (or specified) shader.</summary>
     public Renderer SetParameter(string name, Vector2[] value, Effect shader = null)
     {
         (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
         return this;
     }
 
+    /// <summary>Sets a Vector3 array parameter on the current (or specified) shader.</summary>
     public Renderer SetParameter(string name, Vector3[] value, Effect shader = null)
     {
         (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
         return this;
     }
 
+    /// <summary>Sets a Vector4 array parameter on the current (or specified) shader.</summary>
     public Renderer SetParameter(string name, Vector4[] value, Effect shader = null)
     {
         (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
         return this;
     }
 
+    /// <summary>Sets a Matrix array parameter on the current (or specified) shader.</summary>
     public Renderer SetParameter(string name, Matrix[] value, Effect shader = null)
     {
         (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
         return this;
     }
 
+    /// <summary>Sets multiple parameters using tuples with type detection.</summary>
     public Renderer SetParameter(Effect shader = null, params (string name, object value)[] parameters)
     {
         var target = shader ?? CurrentShader;
@@ -524,7 +708,9 @@ public class Renderer : IDisposable
         return this;
     }
 
-    // Static helper for setting parameters on external Effect objects
+    /// <summary>
+    /// Static helper for setting parameters on external Effect objects with automatic type detection.
+    /// </summary>
     public static void SetParameter(Effect shader, string key, object value)
     {
         var parameter = shader?.Parameters[key];
@@ -548,7 +734,17 @@ public class Renderer : IDisposable
         }
     }
 
-    // Solid Textures (cached)
+    #endregion
+
+    #region Texture Utilities
+
+    /// <summary>
+    /// Gets or creates a cached solid color texture.
+    /// </summary>
+    /// <param name="color">Fill color for the texture.</param>
+    /// <param name="width">Texture width (default 1).</param>
+    /// <param name="height">Texture height (default 1).</param>
+    /// <returns>Cached texture with the specified color.</returns>
     public Texture2D GetSolidTexture(Color color, int width = 1, int height = 1)
     {
         var key = (color, width, height);
@@ -563,7 +759,11 @@ public class Renderer : IDisposable
         return texture;
     }
 
-    // Circle Textures (cached by diameter)
+    /// <summary>
+    /// Gets or creates a cached anti-aliased circle texture.
+    /// </summary>
+    /// <param name="diameter">Circle diameter in pixels.</param>
+    /// <returns>Cached white circle texture with premultiplied alpha.</returns>
     public Texture2D GetCircleTexture(int diameter)
     {
         if (diameter < 1) diameter = 1;
@@ -577,7 +777,6 @@ public class Renderer : IDisposable
             float centerX = radius - 0.5f;
             float centerY = radius - 0.5f;
 
-            // 1px AA band centered on edge - stable for integer movement
             const float aaWidth = 1.0f;
             float innerRadius = radius - aaWidth * 0.5f;
 
@@ -589,11 +788,9 @@ public class Renderer : IDisposable
                     float dy = y - centerY;
                     float dist = MathF.Sqrt(dx * dx + dy * dy);
 
-                    // Smooth falloff from inner edge to outer edge
                     float alpha = 1.0f - MathHelper.Clamp((dist - innerRadius) / aaWidth, 0f, 1f);
                     byte a = (byte)(alpha * 255f + 0.5f);
 
-                    // Premultiplied alpha: RGB = white * alpha
                     data[y * diameter + x] = new Color(a, a, a, alpha);
                 }
             }
@@ -604,13 +801,17 @@ public class Renderer : IDisposable
         return texture;
     }
 
-    // Textures
+    /// <summary>
+    /// Binds a texture directly to a device slot (for register-bound shader textures).
+    /// Prefer SetParameter for named texture parameters.
+    /// </summary>
     public Renderer SetTexture(int slot, Texture2D texture)
     {
         Device.Textures[slot] = texture;
         return this;
     }
 
+    /// <summary>Binds a texture and sampler directly to a device slot.</summary>
     public Renderer SetTexture(int slot, Texture2D texture, SamplerState sampler)
     {
         Device.Textures[slot] = texture;
@@ -618,6 +819,7 @@ public class Renderer : IDisposable
         return this;
     }
 
+    /// <summary>Binds multiple textures directly to device slots.</summary>
     public Renderer SetTextures(params (int slot, Texture2D texture)[] textures)
     {
         foreach (var (slot, texture) in textures)
@@ -625,6 +827,7 @@ public class Renderer : IDisposable
         return this;
     }
 
+    /// <summary>Binds multiple textures and samplers directly to device slots.</summary>
     public Renderer SetTextures(params (int slot, Texture2D texture, SamplerState sampler)[] textures)
     {
         foreach (var (slot, texture, sampler) in textures)
@@ -635,6 +838,7 @@ public class Renderer : IDisposable
         return this;
     }
 
+    /// <summary>Clears texture bindings on the first N slots.</summary>
     public Renderer ClearTextures(int count = 4)
     {
         for (int i = 0; i < count; i++)
@@ -642,7 +846,14 @@ public class Renderer : IDisposable
         return this;
     }
 
-    // Draw Shader
+    #endregion
+
+    #region Drawing
+
+    /// <summary>
+    /// Draws a fullscreen quad using the current shader. The shader must have a vertex
+    /// shader that accepts POSITION0 and TEXCOORD0 semantics.
+    /// </summary>
     public Renderer Draw()
     {
         CommitTextures();
@@ -651,8 +862,6 @@ public class Renderer : IDisposable
         Device.DepthStencilState = DepthStencilState;
         Device.RasterizerState = RasterizerState;
 
-        // Only apply samplers that were explicitly configured via Configure()
-        // The mask persists until Reset() is called
         for (int i = 0; i < SamplerStates.Length; i++)
         {
             if ((SamplerDirtyMask & (1 << i)) != 0)
@@ -675,12 +884,13 @@ public class Renderer : IDisposable
         return this;
     }
 
-    // Draw Textures
+    /// <summary>Draws a texture at the specified position using SpriteBatch.</summary>
     public Renderer DrawTexture(Texture2D texture, Vector2 position)
     {
         return DrawTexture(texture, position, Color.White);
     }
 
+    /// <summary>Draws a texture at the specified position with tint using SpriteBatch.</summary>
     public Renderer DrawTexture(Texture2D texture, Vector2 position, Color color)
     {
         BeginTextures();
@@ -688,11 +898,13 @@ public class Renderer : IDisposable
         return this;
     }
 
+    /// <summary>Draws a texture stretched to the destination rectangle using SpriteBatch.</summary>
     public Renderer DrawTexture(Texture2D texture, Rectangle destination)
     {
         return DrawTexture(texture, destination, Color.White);
     }
 
+    /// <summary>Draws a texture stretched to the destination rectangle with tint using SpriteBatch.</summary>
     public Renderer DrawTexture(Texture2D texture, Rectangle destination, Color color)
     {
         BeginTextures();
@@ -700,6 +912,7 @@ public class Renderer : IDisposable
         return this;
     }
 
+    /// <summary>Draws a texture with source rectangle using SpriteBatch.</summary>
     public Renderer DrawTexture(Texture2D texture, Rectangle destination, Rectangle? source, Color color)
     {
         BeginTextures();
@@ -707,6 +920,7 @@ public class Renderer : IDisposable
         return this;
     }
 
+    /// <summary>Draws a texture with full transform parameters using SpriteBatch.</summary>
     public Renderer DrawTexture(Texture2D texture, Vector2 position, Rectangle? source, Color color, float rotation, Vector2 origin, Vector2 scale, SpriteEffects effects, float depth)
     {
         BeginTextures();
@@ -739,7 +953,20 @@ public class Renderer : IDisposable
         IsDrawingTextures = false;
     }
 
-    // PingPong
+    #endregion
+
+    #region Ping-Pong Rendering
+
+    /// <summary>
+    /// Performs ping-pong rendering between two render targets for multi-pass effects.
+    /// </summary>
+    /// <param name="a">First render target.</param>
+    /// <param name="b">Second render target.</param>
+    /// <param name="passes">Number of passes to perform.</param>
+    /// <param name="beforePass">Callback before each pass. Receives pass index and current input texture.</param>
+    /// <param name="afterPass">Callback after each pass. Receives pass index.</param>
+    /// <param name="clearColor">Color to clear output target each pass (default Black).</param>
+    /// <returns>The final output render target (may be a or b depending on pass count).</returns>
     public RenderTarget2D PingPong(
         RenderTarget2D a,
         RenderTarget2D b,
@@ -763,7 +990,6 @@ public class Renderer : IDisposable
             Device.DepthStencilState = DepthStencilState;
             Device.RasterizerState = RasterizerState;
 
-            // Only apply samplers that were explicitly configured via Configure()
             for (int s = 0; s < SamplerStates.Length; s++)
             {
                 if ((SamplerDirtyMask & (1 << s)) != 0)
@@ -791,13 +1017,21 @@ public class Renderer : IDisposable
         return input;
     }
 
-    // Control flags
+    #endregion
+
+    #region Flow Control
+
+    /// <summary>Marks the renderer as actively drawing (rarely needed directly).</summary>
     public Renderer Begin()
     {
         IsDrawing = true;
         return this;
     }
 
+    /// <summary>
+    /// Commits any pending SpriteBatch operations and marks drawing complete.
+    /// Call at the end of each render pass.
+    /// </summary>
     public Renderer Commit()
     {
         CommitTextures();
@@ -805,6 +1039,10 @@ public class Renderer : IDisposable
         return this;
     }
 
+    /// <summary>
+    /// Resets all render state to defaults and clears the current shader.
+    /// Call at the start of each render pass for clean state.
+    /// </summary>
     public Renderer Reset()
     {
         CommitTextures();
@@ -813,7 +1051,7 @@ public class Renderer : IDisposable
         DepthStencilState = DepthStencilState.None;
         RasterizerState = RasterizerState.CullNone;
         SpriteSortMode = SpriteSortMode.Immediate;
-        SamplerDirtyMask = 0; // Clear dirty mask, no samplers need applying until configured
+        SamplerDirtyMask = 0;
 
         CurrentShader = null;
         CurrentShaderName = null;
@@ -822,6 +1060,11 @@ public class Renderer : IDisposable
         return this;
     }
 
+    #endregion
+
+    #region IDisposable
+
+    /// <summary>Disposes all cached resources (shaders, textures, buffers).</summary>
     public void Dispose()
     {
         QuadVertexBuffer?.Dispose();
@@ -840,4 +1083,6 @@ public class Renderer : IDisposable
             shader?.Dispose();
         ShaderCache.Clear();
     }
+
+    #endregion
 }

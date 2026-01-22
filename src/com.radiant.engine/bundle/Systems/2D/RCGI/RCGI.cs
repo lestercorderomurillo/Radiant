@@ -11,9 +11,8 @@ public class RCGI : core.System
     private const float CascadeInterval = 1.0f;
     private const int MaxCascades = 8;
 
-    private Effect RCShader;
-    private SpriteBatch ShaderSpriteBatch;
     private Geometry GeometrySystem;
+    private GizmosRenderer Gizmos;
     private RenderTarget2D[] CascadeLayers;
     private RenderTarget2D FinalTexture;
     private Vector2 ScreenSize;
@@ -22,7 +21,6 @@ public class RCGI : core.System
     private Vector2 InvCascadeSize;
     private int ActiveCascades;
     private CascadeData[] CascadeParameters;
-    private RasterizerState CachedRasterizerState;
 
     public float TimeOfDay = 0.25f;
     public bool EnableSkyRadiance = false;
@@ -54,9 +52,8 @@ public class RCGI : core.System
 
     public override void Initialize()
     {
-        RCShader = Renderer.GetShaderEffect("RCGI/RCGI");
-        ShaderSpriteBatch = Renderer.SpriteBatch;
         GeometrySystem = Scene.ECS.GetSystem<Geometry>();
+        Gizmos = Scene.ECS.GetSystem<GizmosRenderer>();
 
         ScreenSize = Renderer.ScaledSize;
         CascadeSize = ScreenSize / CascadeLinear;
@@ -67,13 +64,6 @@ public class RCGI : core.System
         PreCalculateCascadeParameters();
         InitializeRenderTargets();
 
-        CachedRasterizerState = new RasterizerState
-        {
-            MultiSampleAntiAlias = false,
-            CullMode = CullMode.None
-        };
-
-        // Subscribe to render scale changes
         Renderer.RenderScaleChanged += OnRenderScaleChanged;
     }
 
@@ -181,16 +171,7 @@ public class RCGI : core.System
     private void InitializeRenderTargets()
     {
         var device = Renderer.Device;
-
-        SurfaceFormat format = SurfaceFormat.HalfVector4;
-        try
-        {
-            using var test = new RenderTarget2D(device, 1, 1, false, SurfaceFormat.HalfVector4, DepthFormat.None);
-        }
-        catch
-        {
-            format = SurfaceFormat.Color;
-        }
+        var format = SurfaceFormat.HalfVector4;
 
         CascadeLayers = new RenderTarget2D[MaxCascades];
         for (int i = 0; i < MaxCascades; i++)
@@ -205,7 +186,7 @@ public class RCGI : core.System
         FinalTexture = new RenderTarget2D(
             device,
             (int)ScreenSize.X, (int)ScreenSize.Y,
-            false, SurfaceFormat.Color, DepthFormat.None
+            false, format, DepthFormat.None
         );
     }
 
@@ -213,88 +194,72 @@ public class RCGI : core.System
     {
         UpdateSkyParameters();
 
-        for (int i = ActiveCascades - 1; i >= 0; i--)
-            RenderCascade(i);
-
-        RenderFinal();
-    }
-
-    private void RenderCascade(int cascadeIndex)
-    {
-        var device = Renderer.Device;
-        device.SetRenderTarget(CascadeLayers[cascadeIndex]);
-        device.Clear(Color.Transparent);
-
-        device.BlendState = BlendState.Opaque;
-        device.DepthStencilState = DepthStencilState.None;
-        device.RasterizerState = CachedRasterizerState;
-
         var emissive = GeometrySystem.EmissiveTexture;
         var sdf = GeometrySystem.SDFTexture;
-        var cascade = cascadeIndex < ActiveCascades - 1 ? CascadeLayers[cascadeIndex + 1] : null;
 
-        device.Textures[1] = emissive;
-        device.Textures[2] = sdf;
-        device.Textures[3] = cascade;
-        device.SamplerStates[0] = SamplerState.LinearClamp;
-        device.SamplerStates[1] = SamplerState.LinearClamp;
-        device.SamplerStates[2] = SamplerState.LinearClamp;
-        device.SamplerStates[3] = SamplerState.LinearClamp;
+        Renderer.PushTargets();
 
+        for (int i = ActiveCascades - 1; i >= 0; i--)
+            RenderCascade(i, emissive, sdf);
+
+        RenderFinal();
+
+        Renderer.PopTargets();
+
+        Gizmos.Set("RCGI", $"Screen: {(int)ScreenSize.X}x{(int)ScreenSize.Y} | Cascades: {ActiveCascades}");
+    }
+
+    private void RenderCascade(int cascadeIndex, Texture2D emissive, Texture2D sdf)
+    {
         ref var data = ref CascadeParameters[cascadeIndex];
+        bool hasHigher = cascadeIndex < ActiveCascades - 1;
+        var higherCascade = hasHigher ? CascadeLayers[cascadeIndex + 1] : null;
 
-        Renderer.SetParameter(RCShader, "ScreenSize", ScreenSize);
-        Renderer.SetParameter(RCShader, "CascadeSize", CascadeSize);
-        Renderer.SetParameter(RCShader, "CascadeIndex", (float)cascadeIndex);
-        Renderer.SetParameter(RCShader, "CascadeCount", (float)ActiveCascades);
-        Renderer.SetParameter(RCShader, "AngularPerAxis", data.AngularPerAxis);
-        Renderer.SetParameter(RCShader, "ProbeExtent", data.ProbeExtent);
-        Renderer.SetParameter(RCShader, "ProbeSpacing", data.ProbeSpacing);
-        Renderer.SetParameter(RCShader, "RayOffset", data.RayOffset);
-        Renderer.SetParameter(RCShader, "RayRange", data.RayRange);
-        Renderer.SetParameter(RCShader, "SDFScale", data.SDFScale);
-        Renderer.SetParameter(RCShader, "ThetaScalar", data.ThetaScalar);
-        Renderer.SetParameter(RCShader, "InvProbeExtent", data.InvProbeExtent);
-        Renderer.SetParameter(RCShader, "InvScreenSize", InvScreenSize);
-        Renderer.SetParameter(RCShader, "InvCascadeSize", InvCascadeSize);
-        Renderer.SetParameter(RCShader, "PreCalcSkyColor", CurrentSkyData.SkyColor);
-        Renderer.SetParameter(RCShader, "PreCalcSunColor", CurrentSkyData.SunColor);
-        Renderer.SetParameter(RCShader, "PreCalcSunAngle", CurrentSkyData.SunAngle);
-        Renderer.SetParameter(RCShader, "PreCalcSSunS", CurrentSkyData.SSunS);
-        Renderer.SetParameter(RCShader, "PreCalcISSunS", CurrentSkyData.ISSunS);
-        Renderer.SetParameter(RCShader, "EnableSkyRadiance", EnableSkyRadiance);
-        Renderer.SetParameter(RCShader, "EmissiveTexture", emissive);
-        Renderer.SetParameter(RCShader, "SceneSDFTexture", sdf);
-        Renderer.SetParameter(RCShader, "CascadeTexture", cascade);
-
-        if (cascadeIndex < ActiveCascades - 1)
-        {
-            Renderer.SetParameter(RCShader, "HigherAngularPerAxis", data.HigherAngularPerAxis);
-            Renderer.SetParameter(RCShader, "HigherExtent", data.HigherExtent);
-        }
-
-        RCShader.CurrentTechnique = RCShader.Techniques["GenerateOutputTexture"];
-        ShaderSpriteBatch.Begin(SpriteSortMode.Immediate, BlendState.Opaque, SamplerState.PointClamp, null, null, RCShader);
-        ShaderSpriteBatch.Draw(Renderer.GetSolidTexture(Color.White), new Rectangle(0, 0, (int)CascadeSize.X, (int)CascadeSize.Y), Color.White);
-        ShaderSpriteBatch.End();
-
-        device.SetRenderTarget(null);
-        device.Textures[1] = null;
-        device.Textures[2] = null;
-        device.Textures[3] = null;
+        Renderer
+            .Reset()
+            .SetShader("RCGI/RCGI")
+            .Configure(
+                (0, SamplerState.LinearClamp),
+                (1, SamplerState.LinearClamp),
+                (2, SamplerState.LinearClamp))
+            .SetTarget(CascadeLayers[cascadeIndex])
+            .Clear(Color.Transparent)
+            .SetParameter("EmissiveTexture", emissive)
+            .SetParameter("SceneSDFTexture", sdf)
+            .SetParameter("CascadeTexture", higherCascade)
+            .SetParameter("ScreenSize", ScreenSize)
+            .SetParameter("CascadeSize", CascadeSize)
+            .SetParameter("ProbeExtent", data.ProbeExtent)
+            .SetParameter("ProbeSpacing", data.ProbeSpacing)
+            .SetParameter("HigherExtent", hasHigher ? data.HigherExtent : Vector2.Zero)
+            .SetParameter("InvProbeExtent", data.InvProbeExtent)
+            .SetParameter("InvScreenSize", InvScreenSize)
+            .SetParameter("InvCascadeSize", InvCascadeSize)
+            .SetParameter("CascadeIndex", (float)cascadeIndex)
+            .SetParameter("CascadeCount", (float)ActiveCascades)
+            .SetParameter("AngularPerAxis", data.AngularPerAxis)
+            .SetParameter("RayOffset", data.RayOffset)
+            .SetParameter("RayRange", data.RayRange)
+            .SetParameter("SDFScale", data.SDFScale)
+            .SetParameter("ThetaScalar", data.ThetaScalar)
+            .SetParameter("HigherAngularPerAxis", hasHigher ? data.HigherAngularPerAxis : 0f)
+            .SetParameter("PreCalcSkyColor", CurrentSkyData.SkyColor)
+            .SetParameter("PreCalcSunAngle", CurrentSkyData.SunAngle)
+            .SetParameter("PreCalcSunColor", CurrentSkyData.SunColor)
+            .SetParameter("PreCalcSSunS", CurrentSkyData.SSunS)
+            .SetParameter("PreCalcISSunS", CurrentSkyData.ISSunS)
+            .SetParameter("EnableSkyRadiance", EnableSkyRadiance)
+            .Draw()
+            .Commit();
     }
 
     private void RenderFinal()
     {
-        var device = Renderer.Device;
-        device.SetRenderTarget(FinalTexture);
-        device.Clear(Color.White);
-
-        ShaderSpriteBatch.Begin(SpriteSortMode.Immediate, BlendState.AlphaBlend, SamplerState.LinearClamp);
-        ShaderSpriteBatch.Draw(CascadeLayers[0], device.Viewport.Bounds, Color.White);
-        ShaderSpriteBatch.End();
-
-        device.SetRenderTarget(null);
+        Renderer.Device.SetRenderTarget(FinalTexture);
+        Renderer.Device.Clear(Color.Black);
+        Renderer.SpriteBatch.Begin(SpriteSortMode.Immediate, BlendState.Opaque, SamplerState.LinearClamp);
+        Renderer.SpriteBatch.Draw(CascadeLayers[0], Renderer.Device.Viewport.Bounds, Color.White);
+        Renderer.SpriteBatch.End();
     }
 
     public override void Render()
@@ -308,15 +273,12 @@ public class RCGI : core.System
 
     public override void OnResize()
     {
-        // Lazy resize - only rebuild if scaled screen size actually changed
         Vector2 newSize = Renderer.ScaledSize;
         if (ScreenSize == newSize)
             return;
 
-        // Dispose existing render targets
         DisposeRenderTargets();
 
-        // Recalculate sizes
         ScreenSize = newSize;
         CascadeSize = ScreenSize / CascadeLinear;
         InvScreenSize = new Vector2(1f / ScreenSize.X, 1f / ScreenSize.Y);
@@ -334,8 +296,8 @@ public class RCGI : core.System
 
         if (CascadeLayers != null)
         {
-            foreach (var layer in CascadeLayers)
-                layer?.Dispose();
+            for (int i = 0; i < CascadeLayers.Length; i++)
+                CascadeLayers[i]?.Dispose();
             CascadeLayers = null;
         }
     }
@@ -344,17 +306,13 @@ public class RCGI : core.System
     {
         Renderer.RenderScaleChanged -= OnRenderScaleChanged;
 
-        // Note: RCShader, ShaderSpriteBatch are managed by Renderer
         FinalTexture?.Dispose();
         FinalTexture = null;
 
-        CachedRasterizerState?.Dispose();
-        CachedRasterizerState = null;
-
         if (CascadeLayers != null)
         {
-            foreach (var layer in CascadeLayers)
-                layer?.Dispose();
+            for (int i = 0; i < CascadeLayers.Length; i++)
+                CascadeLayers[i]?.Dispose();
             CascadeLayers = null;
         }
     }

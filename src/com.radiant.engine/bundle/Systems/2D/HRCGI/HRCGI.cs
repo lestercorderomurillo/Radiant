@@ -86,9 +86,12 @@ public class HRCGI : core.System
             return;
 
         DisposeRenderTargets();
+
         WorldSize = new Vector2(newSize, newSize);
+
         CalculateCascadeSizes();
         CreateRenderTargets();
+        
         DebugTextureCount = 1 + CascadeCount * 2 + FrustumCount + 2;
     }
 

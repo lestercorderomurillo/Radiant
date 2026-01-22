@@ -4,16 +4,13 @@ static const float EPSILON = 0.00001;
 static const float CASCADE_INTERVAL = 1.0;
 static const int MAX_RAYMARCH_STEPS = 128;
 
-// t0/s0 reserved for MonoGame SpriteBatch
-Texture2D SpriteBatchTexture : register(t0);
-Texture2D EmissiveTexture : register(t1);
-Texture2D SceneSDFTexture : register(t2);
-Texture2D CascadeTexture : register(t3);
+Texture2D EmissiveTexture : register(t0);
+Texture2D SceneSDFTexture : register(t1);
+Texture2D CascadeTexture : register(t2);
 
-SamplerState SpriteBatchSampler : register(s0);
-SamplerState SceneColorSampler : register(s1);
-SamplerState SceneSDFSampler : register(s2);
-SamplerState CascadeSampler : register(s3);
+SamplerState SceneColorSampler : register(s0);
+SamplerState SceneSDFSampler : register(s1);
+SamplerState CascadeSampler : register(s2);
 
 cbuffer CascadeParams : register(b0)
 {
@@ -45,12 +42,25 @@ cbuffer SkyParams : register(b1)
     bool EnableSkyRadiance;
 };
 
+struct VertexShaderInput
+{
+    float3 Position : POSITION0;
+    float2 TexCoord : TEXCOORD0;
+};
+
 struct PixelShaderInput
 {
     float4 Position : SV_POSITION;
-    float4 Color    : COLOR0;
     float2 UV       : TEXCOORD0;
 };
+
+PixelShaderInput MainVS(VertexShaderInput input)
+{
+    PixelShaderInput output;
+    output.Position = float4(input.Position, 1.0);
+    output.UV = input.TexCoord;
+    return output;
+}
 
 float3 ACESToneMapping(float3 color)
 {
@@ -187,8 +197,9 @@ float4 GenerateOutputTexture(PixelShaderInput input) : SV_Target
 
 technique GenerateOutputTexture
 {
-    pass P0 
-    { 
-        PixelShader = compile ps_5_0 GenerateOutputTexture(); 
+    pass P0
+    {
+        VertexShader = compile vs_5_0 MainVS();
+        PixelShader = compile ps_5_0 GenerateOutputTexture();
     }
 }
