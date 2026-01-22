@@ -1,6 +1,7 @@
 using com.radiant.engine.bundle;
 using com.radiant.engine.runtime;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using System;
 
@@ -22,10 +23,12 @@ public class MegaLightsScene : Scene
     private HRCGI HRCGISystem;
     private RCGI RCGISystem;
     private UDR1 UDR1System;
+    private UDR2 UDR2System;
     private Geometry GeometrySystem;
     private GizmosRenderer Gizmos;
 
     private bool UseHRCGI = true;
+    private bool UseUDR2 = false;  // Toggle between UDR1 and UDR2
 
     private const float RotationSpeed = 0.1f;
     private const float OrbitRadius = 300f;
@@ -41,6 +44,7 @@ public class MegaLightsScene : Scene
         HRCGISystem = ECS.AddSystem<HRCGI>();
         RCGISystem = ECS.AddSystem<RCGI>(enabled: false);
         UDR1System = ECS.AddSystem<UDR1>();
+        UDR2System = ECS.AddSystem<UDR2>(enabled: false);
         Gizmos = ECS.AddSystem<GizmosRenderer>();
 
         GeometrySystem.EnableSDF = false;
@@ -53,7 +57,7 @@ public class MegaLightsScene : Scene
         CreateRotatingLights();
         CreateOccluders();
         CreateMouseLight();
-        UpdateUDR1Input();
+        UpdateUDRInput();
 
         base.SetupScene();
     }
@@ -186,10 +190,15 @@ public class MegaLightsScene : Scene
                 CreateOccluder(new Vector2(mouse.X, mouse.Y), 40f);
         }
 
+        // F11 to toggle UDR mode
+        if (keyboard.IsKeyDown(Keys.F11) && PrevKeyboard.IsKeyUp(Keys.F11))
+            ToggleUDRSystem();
+
         PrevKeyboard = keyboard;
         PrevMouse = mouse;
 
         Gizmos.Set("Scene", $"GI: {(UseHRCGI ? "HRCGI" : "RCGI")} [Tab] | Animation: {(IsAnimating ? "On" : "Off")} [Space]");
+        Gizmos.Set("Scene", $"Upscaler: {(UseUDR2 ? "UDR2 (Temporal)" : "UDR1 (Spatial)")} [F11]");
         Gizmos.Set("Scene", "Left Click: Add Light | Right Click: Add Occluder");
     }
 
@@ -214,12 +223,36 @@ public class MegaLightsScene : Scene
             GeometrySystem.EnableSDF = true;
         }
 
-        UpdateUDR1Input();
+        UpdateUDRInput();
     }
 
-    private void UpdateUDR1Input()
+    private void UpdateUDRInput()
     {
-        UDR1System.SetInputSource(() => UseHRCGI ? HRCGISystem.GetOutput() : RCGISystem.GetOutput());
+        var inputSource = new Func<Texture2D>(() => UseHRCGI ? HRCGISystem.GetOutput() : RCGISystem.GetOutput());
+        UDR1System.SetInputSource(inputSource);
+        UDR2System.SetInputSource(inputSource);
+    }
+
+    private void ToggleUDRSystem()
+    {
+        UseUDR2 = !UseUDR2;
+
+        if (UseUDR2)
+        {
+            UDR1System.Dispose();
+            UDR1System.Enabled = false;
+            UDR2System.Initialize();
+            UDR2System.Enabled = true;
+        }
+        else
+        {
+            UDR2System.Dispose();
+            UDR2System.Enabled = false;
+            UDR1System.Initialize();
+            UDR1System.Enabled = true;
+        }
+
+        UpdateUDRInput();
     }
 
     private static Color HueToRGB(float hue)

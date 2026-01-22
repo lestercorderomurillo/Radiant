@@ -6,18 +6,24 @@ using Microsoft.Xna.Framework.Input;
 
 namespace com.radiant.engine.bundle;
 
-public class UDR1 : core.System
+public class UDR2 : core.System
 {
     private static readonly int[] ScaleFactors = { 25, 50, 100 };
     private static readonly string[] QualityNames = { "Performance", "Balanced", "Native" };
-    private int QualityIndex = 1;  // Default to native scale
+    private int QualityIndex = 1;
     private int ScaleFactor => ScaleFactors[QualityIndex];
 
+    // Spatial parameters
     public float Sharpness = 0.5f;
     public bool EdgeCorrection = true;
     public bool DebugRays = false;
 
-    private RenderTarget2D OutputTexture;
+    // Temporal parameters (adjustable)
+    public int FramesToAccumulate = 8;         // Number of frames to average together (1 = no temporal, 8 = very smooth)
+    private const int MaxFrames = 16;
+
+    private RenderTarget2D SpatialTexture;
+    private RenderTarget2D AccumulationTexture;  // Running sum of frames
     private RenderTarget2D SmoothTexture;
     private Vector2 OutputSize;
 
@@ -25,6 +31,8 @@ public class UDR1 : core.System
     private Geometry Geometry;
     private GizmosRenderer Gizmos;
     private KeyboardState PrevKeyState;
+
+    private int FrameIndex = 0;
 
     public override void Initialize()
     {
@@ -34,6 +42,7 @@ public class UDR1 : core.System
         CreateRenderTargets();
         ApplyRenderScale();
         PrevKeyState = Keyboard.GetState();
+        FrameIndex = 0;
     }
 
     public void SetInputSource(Func<Texture2D> source)
@@ -43,7 +52,15 @@ public class UDR1 : core.System
 
     private void CreateRenderTargets()
     {
-        OutputTexture = new RenderTarget2D(
+        SpatialTexture = new RenderTarget2D(
+            Renderer.Device,
+            (int)OutputSize.X,
+            (int)OutputSize.Y,
+            false,
+            SurfaceFormat.HalfVector4,
+            DepthFormat.None);
+
+        AccumulationTexture = new RenderTarget2D(
             Renderer.Device,
             (int)OutputSize.X,
             (int)OutputSize.Y,
@@ -85,13 +102,6 @@ public class UDR1 : core.System
 
         HandleInput();
 
-        // Skip UDR1 processing when Off (native resolution)
-        /*if (ScaleFactor == 100)
-        {
-            Gizmos?.Set("UDR1", $"Quality: {QualityNames[QualityIndex]} [F4]");
-            return;
-        }*/
-
         var input = InputSource();
 
         if (input == null)
@@ -99,12 +109,13 @@ public class UDR1 : core.System
 
         Vector2 inputSize = new Vector2(input.Width, input.Height);
 
+        // Pass 1: Spatial upscaling (Lanczos + edge refinement)
         Renderer
             .Reset()
-            .SetShader("UDR/UDR1")
-            .SetTechnique("Upscale")
+            .SetShader("UDR/UDR2")
+            .SetTechnique("Spatial")
             .Configure(SamplerState.LinearClamp)
-            .SetTarget(OutputTexture)
+            .SetTarget(SpatialTexture)
             .Clear(Color.Black)
             .SetParameter("InputTexture", input)
             .SetParameter("EmissiveTexture", Geometry?.EmissiveTexture)
@@ -118,37 +129,72 @@ public class UDR1 : core.System
             .Commit()
             .SetTarget(null);
 
-        // Edge smoothing pass (always on)
+        // Pass 2: Temporal accumulation (running average)
+        // Weight for current frame: 1/N where N = min(FrameIndex+1, FramesToAccumulate)
+        int effectiveFrames = Math.Min(FrameIndex + 1, FramesToAccumulate);
+        float currentWeight = 1.0f / effectiveFrames;
+
         Renderer
             .Reset()
-            .SetShader("UDR/UDR1")
-            .SetTechnique("EdgeSmooth")
+            .SetShader("UDR/UDR2")
+            .SetTechnique("Temporal")
             .Configure(SamplerState.LinearClamp)
             .SetTarget(SmoothTexture)
             .Clear(Color.Black)
-            .SetParameter("InputTexture", OutputTexture)
+            .SetParameter("InputTexture", SpatialTexture)
+            .SetParameter("HistoryTexture", AccumulationTexture)
             .SetParameter("OutputSize", OutputSize)
+            .SetParameter("CurrentWeight", currentWeight)
+            .SetParameter("FrameCount", (float)effectiveFrames)
             .Draw()
             .Commit()
             .SetTarget(null);
 
-        Gizmos?.Set("UDR1", $"Quality: {QualityNames[QualityIndex]} ({GetScaleFactorNormalized():P0}) [F4]");
-        Gizmos?.Set("UDR1", $"Input Size: {input.Width}x{input.Height}");
-        Gizmos?.Set("UDR1", $"Output Size: {OutputSize.X}x{OutputSize.Y}");
-        Gizmos?.Set("UDR1", $"Sharpness: {Sharpness:F2} [F7/F8]");
-        Gizmos?.Set("UDR1", $"Detail Reconstruction: {(EdgeCorrection ? "On" : "Off")} [F9]");
-        Gizmos?.Set("UDR1", $"Debug Rays: {(DebugRays ? "On" : "Off")} [F10]");
+        // Copy result to accumulation buffer for next frame
+        Renderer
+            .Reset()
+            .SetShader("UDR/UDR2")
+            .SetTechnique("Copy")
+            .Configure(SamplerState.LinearClamp)
+            .SetTarget(AccumulationTexture)
+            .Clear(Color.Black)
+            .SetParameter("InputTexture", SmoothTexture)
+            .Draw()
+            .Commit()
+            .SetTarget(null);
+
+        FrameIndex++;
+
+        Gizmos?.Set("UDR2", $"Quality: {QualityNames[QualityIndex]} ({GetScaleFactorNormalized():P0}) [F4]");
+        Gizmos?.Set("UDR2", $"Input Size: {input.Width}x{input.Height}");
+        Gizmos?.Set("UDR2", $"Output Size: {OutputSize.X}x{OutputSize.Y}");
+        Gizmos?.Set("UDR2", $"Sharpness: {Sharpness:F2} [F7/F8]");
+        Gizmos?.Set("UDR2", $"Frames to Accumulate: {FramesToAccumulate} [T/Y] (current: {effectiveFrames})");
+        Gizmos?.Set("UDR2", $"Detail Reconstruction: {(EdgeCorrection ? "On" : "Off")} [F9]");
+        Gizmos?.Set("UDR2", $"Debug Rays: {(DebugRays ? "On" : "Off")} [F10]");
     }
 
     private void HandleInput()
     {
         var key = Keyboard.GetState();
 
-        // F4 to cycle UDR1 quality
+        // F4 to cycle quality
         if (key.IsKeyDown(Keys.F4) && !PrevKeyState.IsKeyDown(Keys.F4))
         {
             QualityIndex = (QualityIndex + 1) % ScaleFactors.Length;
             ApplyRenderScale();
+        }
+
+        // T/Y to adjust frames to accumulate
+        if (key.IsKeyDown(Keys.T) && !PrevKeyState.IsKeyDown(Keys.T))
+        {
+            FramesToAccumulate = Math.Max(1, FramesToAccumulate - 1);
+            FrameIndex = 0;  // Reset accumulation
+        }
+        if (key.IsKeyDown(Keys.Y) && !PrevKeyState.IsKeyDown(Keys.Y))
+        {
+            FramesToAccumulate = Math.Min(MaxFrames, FramesToAccumulate + 1);
+            FrameIndex = 0;  // Reset accumulation
         }
 
         // F7/F8 to adjust sharpness
@@ -161,7 +207,7 @@ public class UDR1 : core.System
             Sharpness = Math.Min(2f, Sharpness + 0.1f);
         }
 
-        // F9 to toggle edge overlay
+        // F9 to toggle edge correction
         if (key.IsKeyDown(Keys.F9) && !PrevKeyState.IsKeyDown(Keys.F9))
         {
             EdgeCorrection = !EdgeCorrection;
@@ -194,21 +240,27 @@ public class UDR1 : core.System
         if (OutputSize == newSize)
             return;
 
-        OutputTexture?.Dispose();
-        SmoothTexture?.Dispose();
+        DisposeRenderTargets();
         OutputSize = newSize;
         CreateRenderTargets();
+        FrameIndex = 0;  // Reset accumulation on resize
+    }
+
+    private void DisposeRenderTargets()
+    {
+        SpatialTexture?.Dispose();
+        AccumulationTexture?.Dispose();
+        SmoothTexture?.Dispose();
     }
 
     public override void Dispose()
     {
-        // Restore render scale to 1.0 when UDR1 is disabled
+        // Restore render scale to 1.0 when UDR2 is disabled
         Renderer.RenderScale = 1.0f;
 
-        OutputTexture?.Dispose();
-        OutputTexture = null;
-
-        SmoothTexture?.Dispose();
+        DisposeRenderTargets();
+        SpatialTexture = null;
+        AccumulationTexture = null;
         SmoothTexture = null;
     }
 }
