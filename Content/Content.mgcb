@@ -16,17 +16,17 @@
 /processorParam:TextureFormat=Compressed
 /build:fonts/BaseFont.spritefont;
 
-#begin RCGI.fx
-/importer:EffectImporter
-/processor:EffectProcessor
-/processorParam:DebugMode=Auto
-/build:shaders/RCGI.fx
-
 #begin Geometry.fx
 /importer:EffectImporter
 /processor:EffectProcessor
 /processorParam:DebugMode=Auto
 /build:shaders/Geometry.fx
+
+#begin RCGI.fx
+/importer:EffectImporter
+/processor:EffectProcessor
+/processorParam:DebugMode=Auto
+/build:shaders/RCGI/RCGI.fx
 
 #begin HRC_Extensions.fx
 /importer:EffectImporter
