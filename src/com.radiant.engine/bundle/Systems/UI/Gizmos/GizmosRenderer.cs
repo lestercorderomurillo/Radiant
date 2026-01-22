@@ -19,7 +19,7 @@ public class GizmosRenderer : core.System
     private Dictionary<string, List<string>> PendingStats = new();
     private bool ShowStats = true;
     private Vector2 StatsPosition = new(15, 15);
-    private const float LineSpacing = 28f;
+    private const float LineSpacing = 34f;
     private const float TextPadding = 4f;
     private Color TextBackgroundColor = new(0, 0, 0, 180);
 

@@ -229,10 +229,68 @@ float3 Sharpen(float3 color, NeighborhoodSamples neighborhood)
 float3 CorrectEdges(float3 color, float2 uv)
 {
     float4 emissive = EmissiveTexture.Sample(Sampler, uv);
+    float sdf = emissive.a; // SDF: positive = on surface, 0 = background
 
-    // emissive.a > 0 means we're on a surface - overlay the actual emissive color
-    float edgeMask = saturate(emissive.a * 3.0 - EdgeCorrection + 1.0);
-    return lerp(color, emissive.rgb, edgeMask);
+    float surfaceThreshold = 0.5;
+
+    // On surface
+    if (sdf > surfaceThreshold)
+    {
+        // Deep inside surface - just use original upscaled color
+        // Near inner edge - blend between upscaled and emissive
+        float innerEdgeThreshold = 1.75;
+        if (sdf < innerEdgeThreshold)
+        {
+            // sdf 0.5->1.0 maps to blend 1->0 (more blend near edge, less deep inside)
+            float blendFactor = 1.0 - ((sdf - surfaceThreshold) / (innerEdgeThreshold - surfaceThreshold));
+            return lerp(color, emissive.rgb, blendFactor);
+        }
+        return color;
+    }
+
+    // Near edge (subpixel zone or outside but close) - blend toward full-res emissive
+    // Sample neighborhood to find nearby surfaces
+    float2 texelSize = 1.0 / OutputSize;
+    float4 emissiveL = EmissiveTexture.Sample(Sampler, uv + float2(-texelSize.x, 0));
+    float4 emissiveR = EmissiveTexture.Sample(Sampler, uv + float2( texelSize.x, 0));
+    float4 emissiveU = EmissiveTexture.Sample(Sampler, uv + float2(0, -texelSize.y));
+    float4 emissiveD = EmissiveTexture.Sample(Sampler, uv + float2(0,  texelSize.y));
+
+    // Find the strongest nearby surface sample
+    float maxNeighborSdf = max(max(emissiveL.a, emissiveR.a), max(emissiveU.a, emissiveD.a));
+
+    // Only blend if there's a nearby surface
+    if (maxNeighborSdf > surfaceThreshold)
+    {
+        // Weighted average of full-res emissive colors from neighbors on surface
+        float3 neighborEmissive = float3(0, 0, 0);
+        float neighborWeight = 0.0;
+
+        if (emissiveL.a > surfaceThreshold) { neighborEmissive += emissiveL.rgb; neighborWeight += 1.0; }
+        if (emissiveR.a > surfaceThreshold) { neighborEmissive += emissiveR.rgb; neighborWeight += 1.0; }
+        if (emissiveU.a > surfaceThreshold) { neighborEmissive += emissiveU.rgb; neighborWeight += 1.0; }
+        if (emissiveD.a > surfaceThreshold) { neighborEmissive += emissiveD.rgb; neighborWeight += 1.0; }
+
+        neighborEmissive /= neighborWeight;
+
+        // Blend factor: subpixel zone (0 < sdf <= 0.5) uses sdf as coverage
+        //               outside (sdf <= 0) uses neighbor proximity
+        float blendFactor;
+        if (sdf > 0.0)
+        {
+            // Subpixel zone - blend based on coverage (sdf 0->0.5 maps to blend 1->0)
+            blendFactor = 1.0 - (sdf / surfaceThreshold);
+        }
+        else
+        {
+            // Outside - blend based on neighbor proximity
+            blendFactor = saturate((maxNeighborSdf - surfaceThreshold) * 2.0) * 0.5;
+        }
+
+        return lerp(color, neighborEmissive, blendFactor);
+    }
+
+    return color;
 }
 
 // UDR main pixel shader
