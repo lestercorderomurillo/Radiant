@@ -4,6 +4,7 @@
 [Tt]humbs.db
 *.DS_Store
 ~$*
+nul
 
 #=====================
 # Visual Studio

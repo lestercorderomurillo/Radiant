@@ -129,4 +129,25 @@ public sealed class SparseSet<T> : IComponentSet where T : struct
         componentChunks.Clear();
         count = 0;
     }
+
+    // Direct iteration access - avoids GetComponent lookups
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int GetEntityAt(int denseIndex)
+    {
+        GetChunkIndices(denseIndex, out int chunk, out int local);
+        return denseChunks[chunk][local];
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public ref T GetComponentAt(int denseIndex)
+    {
+        GetChunkIndices(denseIndex, out int chunk, out int local);
+        return ref componentChunks[chunk][local];
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int GetDenseIndex(int entity)
+    {
+        return sparse.TryGetValue(entity, out int idx) ? idx : -1;
+    }
 }

@@ -124,15 +124,24 @@ public class PerformanceMonitor : core.System
 
     private void UpdateDisplay()
     {
-        int TargetFps = Renderer.Window.GameLoop?.TargetFramesPerSecond ?? 144;
-        float ActualFps = Renderer.Window.GameLoop?.FramesPerSecond ?? 1f;
+        var gameLoop = Renderer.Window.GameLoop;
+        int TargetFps = gameLoop?.TargetFramesPerSecond ?? 144;
+        float ActualFps = gameLoop?.FramesPerSecond ?? 1f;
         int ActualFpsRounded = (int)MathF.Round(ActualFps);
+        float FrameTimeReal = gameLoop?.FrameTimeSmoothed ?? 0f;
+        float TargetMs = 1000f / TargetFps;
 
         // Reuse StringBuilders - zero allocation
         FpsBuilder.Clear().Append("FPS: ").Append(ActualFpsRounded).Append('/').Append(TargetFps);
         Gizmos.Set("Performance", FpsBuilder.ToString());
 
-        FrameTimeBuilder.Clear().Append("Frametime: ").AppendFormat("{0:F1}", FrameTimeAverage).Append("ms");
+        // Show both: avg frametime and actual frame pacing time
+        FrameTimeBuilder.Clear()
+            .Append("Frame: ")
+            .AppendFormat("{0:F2}", FrameTimeAverage)
+            .Append("ms (target: ")
+            .AppendFormat("{0:F2}", TargetMs)
+            .Append("ms)");
         Gizmos.Set("Performance", FrameTimeBuilder.ToString());
 
         CpuBuilder.Clear().Append("CPU: ").AppendFormat("{0:F1}", CpuUsage).Append("% (").Append(CpuCoreCount).Append(" cores)");

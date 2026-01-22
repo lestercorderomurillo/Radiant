@@ -8,19 +8,10 @@ namespace com.radiant.engine.bundle;
 
 public class FSR : core.System
 {
-    private FSRQuality _quality = FSRQuality.Off;
-    public FSRQuality Quality
-    {
-        get => _quality;
-        set
-        {
-            if (_quality != value)
-            {
-                _quality = value;
-                ApplyRenderScale();
-            }
-        }
-    }
+    private static readonly int[] ScaleFactors = { 100, 88, 77, 50, 33, 25 };
+    private static readonly string[] QualityNames = { "Off", "Ultra Quality", "Quality", "Balanced", "Performance", "Ultra Performance" };
+    private int QualityIndex = 0;  // Default to Off (native)
+    private int ScaleFactor => ScaleFactors[QualityIndex];
 
     public float Sharpness = 0.5f;
 
@@ -29,7 +20,6 @@ public class FSR : core.System
 
     private Func<Texture2D> InputSource;
     private GizmosRenderer Gizmos;
-    private float PreviousRenderScale;
     private KeyboardState PrevKeyState;
 
     public override void Initialize()
@@ -37,10 +27,7 @@ public class FSR : core.System
         Gizmos = Scene.ECS.GetSystem<GizmosRenderer>();
         OutputSize = Renderer.ScreenSize;
         CreateRenderTargets();
-
-        PreviousRenderScale = Renderer.RenderScale;
         ApplyRenderScale();
-
         PrevKeyState = Keyboard.GetState();
     }
 
@@ -60,11 +47,21 @@ public class FSR : core.System
             DepthFormat.None);
     }
 
-    private float GetScaleFactor() => (int)Quality / 100f;
+    private float GetScaleFactorNormalized() => ScaleFactor / 100f;
 
     private void ApplyRenderScale()
     {
-        Renderer.RenderScale = GetScaleFactor();
+        Renderer.RenderScale = GetScaleFactorNormalized();
+    }
+
+    public void SetQuality(int index)
+    {
+        index = Math.Clamp(index, 0, ScaleFactors.Length - 1);
+        if (QualityIndex != index)
+        {
+            QualityIndex = index;
+            ApplyRenderScale();
+        }
     }
 
     public override void Update()
@@ -75,9 +72,9 @@ public class FSR : core.System
         HandleInput();
 
         // Skip FSR processing when Off (native resolution)
-        if (Quality == FSRQuality.Off)
+        if (QualityIndex == 0)
         {
-            Gizmos?.Set("FSR", "Quality: Off (Native) [F4]");
+            Gizmos?.Set("FSR", $"Quality: {QualityNames[QualityIndex]} [F4]");
             return;
         }
 
@@ -101,7 +98,7 @@ public class FSR : core.System
             .Commit()
             .SetTarget(null);
 
-        Gizmos?.Set("FSR", $"Quality: {Quality} ({GetScaleFactor():P0}) [F4]");
+        Gizmos?.Set("FSR", $"Quality: {QualityNames[QualityIndex]} ({GetScaleFactorNormalized():P0}) [F4]");
         Gizmos?.Set("FSR", $"Input: {input.Width}x{input.Height}");
         Gizmos?.Set("FSR", $"Output: {OutputSize.X}x{OutputSize.Y}");
         Gizmos?.Set("FSR", $"Sharpness: {Sharpness:F2} [F7/F8]");
@@ -110,6 +107,13 @@ public class FSR : core.System
     private void HandleInput()
     {
         var key = Keyboard.GetState();
+
+        // F4 to cycle FSR quality
+        if (key.IsKeyDown(Keys.F4) && !PrevKeyState.IsKeyDown(Keys.F4))
+        {
+            QualityIndex = (QualityIndex + 1) % ScaleFactors.Length;
+            ApplyRenderScale();
+        }
 
         // F7/F8 to adjust sharpness
         if (key.IsKeyDown(Keys.F7) && !PrevKeyState.IsKeyDown(Keys.F7))
@@ -126,7 +130,7 @@ public class FSR : core.System
 
     public override void Render()
     {
-        if (InputSource == null || Quality == FSRQuality.Off)
+        if (InputSource == null || QualityIndex == 0)
             return;
 
         Renderer.SpriteBatch.Begin(SpriteSortMode.Immediate, BlendState.AlphaBlend, SamplerState.LinearClamp);

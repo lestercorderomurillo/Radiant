@@ -74,6 +74,10 @@ public class Renderer : IDisposable
     private readonly RenderTargetBinding[] _threeTargetBindings = new RenderTargetBinding[3];
     private readonly RenderTargetBinding[] _fourTargetBindings = new RenderTargetBinding[4];
 
+    // Render target stack (avoids GPU sync from GetRenderTargets)
+    private readonly Stack<RenderTargetBinding[]> _renderTargetStack = new();
+    private RenderTargetBinding[] _currentTargets = null;
+
     public Renderer(Window window)
     {
         Window = window;
@@ -334,10 +338,38 @@ public class Renderer : IDisposable
 
     // Targets
 
+    /// <summary>
+    /// Push current render targets onto stack (avoids GPU sync from GetRenderTargets)
+    /// </summary>
+    public Renderer PushTargets()
+    {
+        _renderTargetStack.Push(_currentTargets);
+        return this;
+    }
+
+    /// <summary>
+    /// Pop and restore render targets from stack
+    /// </summary>
+    public Renderer PopTargets()
+    {
+        if (_renderTargetStack.Count > 0)
+        {
+            var targets = _renderTargetStack.Pop();
+            CommitTextures();
+            if (targets == null)
+                Device.SetRenderTarget(null);
+            else
+                Device.SetRenderTargets(targets);
+            _currentTargets = targets;
+        }
+        return this;
+    }
+
     public Renderer SetTarget(RenderTarget2D target)
     {
         CommitTextures();
         Device.SetRenderTarget(target);
+        _currentTargets = target != null ? new[] { new RenderTargetBinding(target) } : null;
         return this;
     }
 
@@ -347,6 +379,7 @@ public class Renderer : IDisposable
         _twoTargetBindings[0] = new RenderTargetBinding(target0);
         _twoTargetBindings[1] = new RenderTargetBinding(target1);
         Device.SetRenderTargets(_twoTargetBindings);
+        _currentTargets = (RenderTargetBinding[])_twoTargetBindings.Clone();
         return this;
     }
 
@@ -357,6 +390,7 @@ public class Renderer : IDisposable
         _threeTargetBindings[1] = new RenderTargetBinding(target1);
         _threeTargetBindings[2] = new RenderTargetBinding(target2);
         Device.SetRenderTargets(_threeTargetBindings);
+        _currentTargets = (RenderTargetBinding[])_threeTargetBindings.Clone();
         return this;
     }
 
@@ -368,6 +402,7 @@ public class Renderer : IDisposable
         _fourTargetBindings[2] = new RenderTargetBinding(target2);
         _fourTargetBindings[3] = new RenderTargetBinding(target3);
         Device.SetRenderTargets(_fourTargetBindings);
+        _currentTargets = (RenderTargetBinding[])_fourTargetBindings.Clone();
         return this;
     }
 
@@ -378,6 +413,7 @@ public class Renderer : IDisposable
         for (int i = 0; i < targets.Length; i++)
             bindings[i] = new RenderTargetBinding(targets[i]);
         Device.SetRenderTargets(bindings);
+        _currentTargets = bindings;
         return this;
     }
 
@@ -385,6 +421,7 @@ public class Renderer : IDisposable
     {
         CommitTextures();
         Device.SetRenderTargets(bindings);
+        _currentTargets = bindings;
         return this;
     }
 
@@ -539,7 +576,10 @@ public class Renderer : IDisposable
             float radius = diameter / 2f;
             float centerX = radius - 0.5f;
             float centerY = radius - 0.5f;
-            float radiusSq = radius * radius;
+
+            // 1px AA band centered on edge - stable for integer movement
+            const float aaWidth = 1.0f;
+            float innerRadius = radius - aaWidth * 0.5f;
 
             for (int y = 0; y < diameter; y++)
             {
@@ -547,12 +587,14 @@ public class Renderer : IDisposable
                 {
                     float dx = x - centerX;
                     float dy = y - centerY;
-                    float distSq = dx * dx + dy * dy;
+                    float dist = MathF.Sqrt(dx * dx + dy * dy);
 
-                    if (distSq <= radiusSq)
-                        data[y * diameter + x] = Color.White;
-                    else
-                        data[y * diameter + x] = Color.Transparent;
+                    // Smooth falloff from inner edge to outer edge
+                    float alpha = 1.0f - MathHelper.Clamp((dist - innerRadius) / aaWidth, 0f, 1f);
+                    byte a = (byte)(alpha * 255f + 0.5f);
+
+                    // Premultiplied alpha: RGB = white * alpha
+                    data[y * diameter + x] = new Color(a, a, a, alpha);
                 }
             }
 

@@ -8,7 +8,7 @@ namespace com.radiant.engine.bundle;
 
 public class SceneGeometry : core.System
 {
-    public float SDFScale = 0.25f;
+    public float SDFScale = 0.50f;
     public bool EnableSDF = false;
 
     private RenderTarget2D JFATexture1;
@@ -109,7 +109,12 @@ public class SceneGeometry : core.System
         RenderEmissiveTexture();
         RenderAbsorptionTexture();
 
-        if (EnableSDF)
+        bool needsSDF = EnableSDF ||
+            CurrentDebug == DebugMode.SDF ||
+            CurrentDebug == DebugMode.JFADirection ||
+            CurrentDebug == DebugMode.JFARaw;
+
+        if (needsSDF)
             RenderSDFTexture();
 
         UpdateGizmos();
@@ -127,11 +132,11 @@ public class SceneGeometry : core.System
         int count = 0;
 
         // Render rectangles
-        foreach (var id in Scene.ECS.Query<Transform, Rectangle2D, Material>(culling: false))
+        foreach (var e in Scene.ECS.View<Transform, Rectangle2D, Material>())
         {
-            ref var transform = ref Scene.ECS.GetComponent<Transform>(id);
-            ref var rect = ref Scene.ECS.GetComponent<Rectangle2D>(id);
-            ref var mat = ref Scene.ECS.GetComponent<Material>(id);
+            ref var transform = ref e.C1;
+            ref var rect = ref e.C2;
+            ref var mat = ref e.C3;
 
             if (mat.Emissive.A == 0) continue;
 
@@ -155,11 +160,11 @@ public class SceneGeometry : core.System
         }
 
         // Render circles
-        foreach (var id in Scene.ECS.Query<Transform, Circle2D, Material>(culling: false))
+        foreach (var e in Scene.ECS.View<Transform, Circle2D, Material>())
         {
-            ref var transform = ref Scene.ECS.GetComponent<Transform>(id);
-            ref var circle = ref Scene.ECS.GetComponent<Circle2D>(id);
-            ref var mat = ref Scene.ECS.GetComponent<Material>(id);
+            ref var transform = ref e.C1;
+            ref var circle = ref e.C2;
+            ref var mat = ref e.C3;
 
             if (mat.Emissive.A == 0) continue;
 
@@ -206,11 +211,11 @@ public class SceneGeometry : core.System
         Rectangle screen = new Rectangle(0, 0, (int)WorldBounds.X, (int)WorldBounds.Y);
 
         // Render rectangles
-        foreach (var id in Scene.ECS.Query<Transform, Rectangle2D, Material>(culling: false))
+        foreach (var e in Scene.ECS.View<Transform, Rectangle2D, Material>())
         {
-            ref var transform = ref Scene.ECS.GetComponent<Transform>(id);
-            ref var rect = ref Scene.ECS.GetComponent<Rectangle2D>(id);
-            ref var mat = ref Scene.ECS.GetComponent<Material>(id);
+            ref var transform = ref e.C1;
+            ref var rect = ref e.C2;
+            ref var mat = ref e.C3;
 
             if (mat.Albedo.A == 0) continue;
 
@@ -227,11 +232,11 @@ public class SceneGeometry : core.System
         }
 
         // Render circles
-        foreach (var id in Scene.ECS.Query<Transform, Circle2D, Material>(culling: false))
+        foreach (var e in Scene.ECS.View<Transform, Circle2D, Material>())
         {
-            ref var transform = ref Scene.ECS.GetComponent<Transform>(id);
-            ref var circle = ref Scene.ECS.GetComponent<Circle2D>(id);
-            ref var mat = ref Scene.ECS.GetComponent<Material>(id);
+            ref var transform = ref e.C1;
+            ref var circle = ref e.C2;
+            ref var mat = ref e.C3;
 
             if (mat.Albedo.A == 0) continue;
 

@@ -44,12 +44,18 @@ public class GameLoop : IGameObject
 
     private double FixedUpdateAccumulator;
 
+    // Maximum fixed updates per frame to prevent spiral of death
+    private const int MaxFixedUpdatesPerFrame = 8;
+
     // FPS tracking
     public float FramesPerSecond { get; private set; }
+    public float FrameTimeMs { get; private set; }
+    public float FrameTimeSmoothed { get; private set; }
 
     private int FrameCount;
 
     private double LastFpsUpdate;
+    private const float FrameTimeSmoothing = 0.9f; // EMA smoothing factor
 
     public void Initialize(Window window)
     {
@@ -109,10 +115,11 @@ public class GameLoop : IGameObject
 
         LastUpdateTicks = currentTicks;
 
-        // Process fixed updates
+        // Process fixed updates with cap to prevent spiral of death
         FixedUpdateAccumulator += deltaTime;
 
-        while (FixedUpdateAccumulator >= UpdateInterval)
+        int iterations = 0;
+        while (FixedUpdateAccumulator >= UpdateInterval && iterations++ < MaxFixedUpdatesPerFrame)
         {
             if (SceneId != NO_SCENE)
             {
@@ -123,6 +130,10 @@ public class GameLoop : IGameObject
 
             FixedUpdateAccumulator -= UpdateInterval;
         }
+
+        // Discard excess accumulated time to prevent catch-up attempts
+        if (FixedUpdateAccumulator > UpdateInterval)
+            FixedUpdateAccumulator = UpdateInterval;
 
         // Variable update with precise delta time
         if (SceneId != NO_SCENE)
@@ -136,41 +147,52 @@ public class GameLoop : IGameObject
 
     public void Render()
     {
-        // Frame pacing with hybrid sleep/spin-wait
+        long frameStartTicks = GlobalTimer.ElapsedTicks;
+
+        // Frame pacing - yield-based sleep with short spin-wait finish
         if (TargetFramesPerSecond > 0)
         {
-            long currentTicks = GlobalTimer.ElapsedTicks;
             long targetTicks = LastFrameTicks + (long)(FrameInterval * Stopwatch.Frequency);
 
-            if (currentTicks < targetTicks)
+            if (frameStartTicks < targetTicks)
             {
-                long remainingTicks = targetTicks - currentTicks;
+                long remainingTicks = targetTicks - frameStartTicks;
                 double remainingMs = remainingTicks * 1000.0 / Stopwatch.Frequency;
 
-                int sleepMs = (int)(remainingMs - 1);
-                if (sleepMs > 0) Thread.Sleep(sleepMs);
+                // Yield in small chunks instead of sleeping (avoids 15ms scheduler quantum)
+                while (remainingMs > 2.0)
+                {
+                    Thread.Sleep(1);
+                    remainingMs = (targetTicks - GlobalTimer.ElapsedTicks) * 1000.0 / Stopwatch.Frequency;
+                }
 
-                while (GlobalTimer.ElapsedTicks < targetTicks) { }
+                // Short spin-wait for precision (< 2ms)
+                while (GlobalTimer.ElapsedTicks < targetTicks)
+                    Thread.SpinWait(10);
 
                 LastFrameTicks = targetTicks;
             }
             else
             {
                 // We're behind - reset to NOW, don't try to catch up
-                LastFrameTicks = currentTicks;
+                LastFrameTicks = frameStartTicks;
             }
         }
         else
         {
-            LastFrameTicks = GlobalTimer.ElapsedTicks;
+            LastFrameTicks = frameStartTicks;
         }
 
-        // FPS calculation
-        FrameCount++;
+        // Per-frame timing (actual frame time including wait)
+        long afterWaitTicks = GlobalTimer.ElapsedTicks;
+        FrameTimeMs = (float)((afterWaitTicks - frameStartTicks) * 1000.0 / Stopwatch.Frequency);
+        FrameTimeSmoothed = FrameTimeSmoothed * FrameTimeSmoothing + FrameTimeMs * (1f - FrameTimeSmoothing);
 
+        // FPS calculation (0.5s window for faster updates)
+        FrameCount++;
         double now = GlobalTimer.Elapsed.TotalSeconds;
 
-        if (now - LastFpsUpdate >= 1.0)
+        if (now - LastFpsUpdate >= 0.5)
         {
             FramesPerSecond = (float)(FrameCount / (now - LastFpsUpdate));
             FrameCount = 0;

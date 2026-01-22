@@ -1,11 +1,10 @@
-/* HRC_Extensions.fx - MRT Output
-   Ray extension combines chained rays from cascade N-1 to form rays of cascade N. */
+/* HRC_Extensions.fx
+   Ray extension combines chained rays from cascade N-1 to form rays of cascade N.
+   Transmittance is packed in the alpha channel. */
 
-Texture2D PrevRadiance : register(t0);
-Texture2D PrevTransmit : register(t1);
+Texture2D PrevCascade : register(t0);  // RGB = radiance, A = transmittance
 
-SamplerState SamplerPrevR : register(s0);
-SamplerState SamplerPrevT : register(s1);
+SamplerState SamplerPrev : register(s0);
 
 float2 PrevSize;
 float2 CascadeSize;
@@ -34,20 +33,19 @@ PixelShaderInput MainVS(VertexShaderInput input)
 
 struct PixelShaderOutput
 {
-    float4 Radiance : SV_Target0;
-    float4 Transmit : SV_Target1;
+    float4 Radiance : SV_Target0;  // RGB = radiance, A = transmittance
 };
 
-void MergeRadiance(float4 nearR, float4 nearT, float4 farR, float4 farT,
-                   out float4 radiance, out float4 transmit)
+// Merge radiance with single-channel transmittance in alpha
+float4 MergeRadiance(float4 near, float4 far)
 {
-    radiance = nearR + (farR * nearT);
-    transmit = nearT * farT;
+    // radiance = nearR + farR * nearT
+    // transmit = nearT * farT
+    return float4(near.rgb + far.rgb * near.a, near.a * far.a);
 }
 
-void GetVolume(float2 probe, float index, float interval, float lookupWidth,
-               float2 resolution, float4 defValR, float4 defValT,
-               out float4 rad, out float4 trn)
+float4 GetVolume(float2 probe, float index, float interval, float lookupWidth,
+                 float2 resolution, float4 defVal)
 {
     // probe.y is in world space, scale down for half-height texture
     float2 samplePos = float2(floor(probe.x / interval) * lookupWidth, probe.y / ProbeScale) + float2(0.5, 0.0);
@@ -56,27 +54,18 @@ void GetVolume(float2 probe, float index, float interval, float lookupWidth,
     float2 floorPos = floor(samplePos);
     float weight = (floorPos.x != 0.0 || floorPos.y != 0.0) ? 1.0 : 0.0;
 
-    rad = lerp(PrevRadiance.Sample(SamplerPrevR, samplePos), defValR, weight);
-    trn = lerp(PrevTransmit.Sample(SamplerPrevT, samplePos), defValT, weight);
+    return lerp(PrevCascade.Sample(SamplerPrev, samplePos), defVal, weight);
 }
 
-void ExtendRay(float2 probe, float lo_index, float hi_index,
-               float prev_intrv, float prev_vrays,
-               out float4 radiance, out float4 transmit)
+float4 ExtendRay(float2 probe, float lo_index, float hi_index,
+                 float prev_intrv, float prev_vrays)
 {
     float2 merge = probe + float2(prev_intrv, -prev_intrv + (lo_index * 2.0));
 
-    float4 radiance_near, transmit_near, radiance_far, transmit_far;
+    float4 near = GetVolume(probe, lo_index, prev_intrv, prev_vrays, PrevSize, float4(0.0, 0.0, 0.0, 1.0));
+    float4 far = GetVolume(merge, hi_index, prev_intrv, prev_vrays, PrevSize, float4(0.0, 0.0, 0.0, 1.0));
 
-    GetVolume(probe, lo_index, prev_intrv, prev_vrays, PrevSize,
-              float4(0.0, 0.0, 0.0, 0.0), float4(1.0, 1.0, 1.0, 1.0),
-              radiance_near, transmit_near);
-
-    GetVolume(merge, hi_index, prev_intrv, prev_vrays, PrevSize,
-              float4(0.0, 0.0, 0.0, 0.0), float4(1.0, 1.0, 1.0, 1.0),
-              radiance_far, transmit_far);
-
-    MergeRadiance(radiance_near, transmit_near, radiance_far, transmit_far, radiance, transmit);
+    return MergeRadiance(near, far);
 }
 
 PixelShaderOutput MainPS(PixelShaderInput input)
@@ -96,14 +85,10 @@ PixelShaderOutput MainPS(PixelShaderInput input)
     float lower = floor(index * 0.5);
     float upper = ceil(index * 0.5);
 
-    float4 radianceL, radianceU, transmitL, transmitU;
-    
-    ExtendRay(probe, lower, upper, prev_intrv, prev_vrays, radianceL, transmitL);
-    ExtendRay(probe, upper, lower, prev_intrv, prev_vrays, radianceU, transmitU);
+    float4 resultL = ExtendRay(probe, lower, upper, prev_intrv, prev_vrays);
+    float4 resultU = ExtendRay(probe, upper, lower, prev_intrv, prev_vrays);
 
-    output.Radiance = lerp(radianceL, radianceU, 0.5);
-    output.Transmit = lerp(transmitL, transmitU, 0.5);
-
+    output.Radiance = lerp(resultL, resultU, 0.5);
     return output;
 }
 

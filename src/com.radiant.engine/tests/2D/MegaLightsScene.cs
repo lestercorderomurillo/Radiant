@@ -8,40 +8,41 @@ namespace com.radiant.engine.core;
 
 public class MegaLightsScene : Scene
 {
-    private int MouseEmitterEntityId;
-    private MouseState PreviousMouseState;
-    private int[] BoxEntityIds; // Track box entities
-    private int[] OccluderEntityIds; // Track scattered occluder entities
-    private float RotationSpeed = 0.10f; // Rotation speed in radians per second
-    private float CurrentRotation = 0f; // Current rotation angle
-    private Vector2 ScreenCenter; // Center point for rotation
-    private float BoxRadius = 300; // Radius of the ring
-    private Random Random = new Random(); // Random number generator for occluder placement
-    private bool IsMoving = true; // Toggle for box movement
-    private KeyboardState PreviousKeyboardState; // Track keyboard state for toggle
-    private bool UseHolographic = true; // Toggle for rendering mode
-    private HRCGI HolographicSystem;
+    private int MouseLightId;
+    private int[] RotatingLightIds;
+    private int[] OccluderIds;
+
+    private MouseState PrevMouse;
+    private KeyboardState PrevKeyboard;
+    private Random Rng = new();
+
+    private float Rotation;
+    private bool IsAnimating = true;
+
+    private HRCGI HRCGISystem;
     private RCGI RCGISystem;
     private FSR FSRSystem;
     private SceneGeometry GeometrySystem;
     private GizmosRenderer Gizmos;
 
-    // Personalizable sizes
-    private float BoxSize = 75; // Size for rotating light boxes
-    private float OccluderSize = 75; // Size for occluders
-    private float CenterExclusionRadius = 400; // Radius around center to keep clear of occluders
+    private bool UseHRCGI = true;
+
+    private const float RotationSpeed = 0.1f;
+    private const float OrbitRadius = 300f;
+    private const int LightCount = 12;
+    private const int OccluderCount = 80;
+    private const float OccluderMargin = 150f;
+    private const float CenterClearance = 400f;
 
     public override void SetupECS()
     {
-        // Add systems
         ECS.AddSystem<PerformanceMonitor>();
         GeometrySystem = ECS.AddSystem<SceneGeometry>();
-        HolographicSystem = ECS.AddSystem<HRCGI>();
+        HRCGISystem = ECS.AddSystem<HRCGI>();
         RCGISystem = ECS.AddSystem<RCGI>(enabled: false);
         FSRSystem = ECS.AddSystem<FSR>();
         Gizmos = ECS.AddSystem<GizmosRenderer>();
 
-        // HRCGI doesn't need SDF, RCGI does
         GeometrySystem.EnableSDF = false;
 
         base.SetupECS();
@@ -49,277 +50,187 @@ public class MegaLightsScene : Scene
 
     public override void SetupScene()
     {
-        ScreenCenter = Renderer.Window.GetScreenCenter();
-
-        // Create ring of boxes
-        CreateRotatingBoxes();
-
-        // Create scattered occluders
-        CreateScatteredOccluders();
-
-        // Create mouse-following emitter
-        CreateMouseEmitter();
-
-        // Setup FSR input source
-        UpdateFSRInputSource();
+        CreateRotatingLights();
+        CreateOccluders();
+        CreateMouseLight();
+        UpdateFSRInput();
 
         base.SetupScene();
     }
 
-    private void CreateRotatingBoxes()
+    private void CreateRotatingLights()
     {
-        int boxCount = 12;
+        RotatingLightIds = new int[LightCount];
+        var center = Renderer.Window.GetScreenCenter();
 
-        BoxEntityIds = new int[boxCount]; // Initialize array to track box entities
-
-        for (int i = 0; i < boxCount; i++)
+        for (int i = 0; i < LightCount; i++)
         {
-            int boxEntity = ECS.CreateEntity();
-            BoxEntityIds[i] = boxEntity;
+            float angle = i / (float)LightCount * MathHelper.TwoPi;
+            float x = center.X + OrbitRadius * MathF.Cos(angle);
+            float y = center.Y + OrbitRadius * MathF.Sin(angle);
 
-            ref var transform = ref ECS.AddComponent<Transform>(boxEntity);
-            ref var circle = ref ECS.AddComponent<Circle2D>(boxEntity);
-            ref var material = ref ECS.AddComponent<Material>(boxEntity);
+            // Rainbow colors
+            float hue = i / (float)LightCount;
+            var color = HueToRGB(hue);
 
-            float angle = (float)i / boxCount * MathHelper.TwoPi;
-            float x = ScreenCenter.X + BoxRadius * (float)Math.Cos(angle);
-            float y = ScreenCenter.Y + BoxRadius * (float)Math.Sin(angle);
-
-            // Different colors per circle
-            byte r = (byte)(Math.Sin(angle) * 127 + 128);
-            byte g = (byte)(Math.Sin(angle + MathHelper.TwoPi / 3) * 127 + 128);
-            byte b = (byte)(Math.Sin(angle + MathHelper.TwoPi * 2 / 3) * 127 + 128);
-
-            transform.Position = new Vector3(x, y, 0);
-            transform.Rotation = new Vector3((float)Math.Cos(angle), (float)Math.Sin(angle), 0);
-            circle.Radius = BoxSize / 2;
-
-            material.Albedo = new Color(r, g, b);
-            material.Emissive = new Color(r, g, b);
+            RotatingLightIds[i] = CreateLight(new Vector2(x, y), 40f, color);
         }
     }
 
-    private void CreateScatteredOccluders()
+    private void CreateOccluders()
     {
-        int targetOccluderCount = 100;
-        int maxAttempts = 100; // Allow more attempts to find valid positions
+        OccluderIds = new int[OccluderCount];
+        var screen = Renderer.Window.GetScreenSize();
+        var center = Renderer.Window.GetScreenCenter();
 
-        OccluderEntityIds = new int[targetOccluderCount];
-
-        // Get screen bounds for scattering
-        Vector2 screenSize = Renderer.Window.GetScreenSize();
-        float margin = 200; // Keep occluders away from screen edges
-
-        int occluderIndex = 0;
-        int attempts = 0;
-
-        while (occluderIndex < targetOccluderCount && attempts < maxAttempts)
+        for (int i = 0; i < OccluderCount; i++)
         {
-            attempts++;
-
-            // Generate random position within screen bounds (with margin)
-            float x = margin + (float)Random.NextDouble() * (screenSize.X - 2 * margin);
-            float y = margin + (float)Random.NextDouble() * (screenSize.Y - 2 * margin);
-            var position = new Vector3(x, y, 0);
-
-            // Check if position is far enough from center
-            float distanceFromCenter = Vector2.Distance(new Vector2(position.X, position.Y), ScreenCenter);
-            if (distanceFromCenter < CenterExclusionRadius)
+            Vector2 pos;
+            do
             {
-                continue; // Skip this position, too close to center
-            }
+                pos = new Vector2(
+                    OccluderMargin + (float)Rng.NextDouble() * (screen.X - 2 * OccluderMargin),
+                    OccluderMargin + (float)Rng.NextDouble() * (screen.Y - 2 * OccluderMargin)
+                );
+            } while (Vector2.Distance(pos, center) < CenterClearance);
 
-            // Position is valid, create occluder
-            int occluderId = ECS.CreateEntity();
-            OccluderEntityIds[occluderIndex] = occluderId;
-
-            ref var transform = ref ECS.AddComponent<Transform>(occluderId);
-            ref var rect = ref ECS.AddComponent<Rectangle2D>(occluderId);
-            ref var material = ref ECS.AddComponent<Material>(occluderId);
-
-            transform.Position = position;
-            transform.Rotation = new Vector3(1, 0, 0);
-
-            // Same size for all occluders
-            rect.Size = new Vector2(OccluderSize, OccluderSize);
-
-            // Dark gray occluders with no emission
-            material.Albedo = new Color(40, 40, 40); // Dark gray for visibility
-            material.Emissive = Color.Black; // No light emission
-
-            occluderIndex++;
-        }
-
-        // Resize array to actual number of created occluders (in case we couldn't place all 100)
-        if (occluderIndex < targetOccluderCount)
-        {
-            Array.Resize(ref OccluderEntityIds, occluderIndex);
+            OccluderIds[i] = CreateOccluder(pos, 60f);
         }
     }
 
-    private void CreateMouseEmitter()
+    private void CreateMouseLight()
     {
-        MouseEmitterEntityId = ECS.CreateEntity();
+        var mouse = Mouse.GetState();
+        MouseLightId = CreateLight(new Vector2(mouse.X, mouse.Y), 50f, Color.White);
+        PrevMouse = mouse;
+    }
 
-        ref var emitterTransform = ref ECS.AddComponent<Transform>(MouseEmitterEntityId);
-        ref var emitterCircle = ref ECS.AddComponent<Circle2D>(MouseEmitterEntityId);
-        ref var emitterMaterial = ref ECS.AddComponent<Material>(MouseEmitterEntityId);
+    private int CreateLight(Vector2 position, float radius, Color color)
+    {
+        int id = ECS.CreateEntity();
 
-        // Initialize emitter
-        MouseState mouse = Mouse.GetState();
-        Vector2 mousePos = new Vector2(mouse.X, mouse.Y);
+        ref var transform = ref ECS.AddComponent<Transform>(id);
+        ref var circle = ref ECS.AddComponent<Circle2D>(id);
+        ref var material = ref ECS.AddComponent<Material>(id);
 
-        emitterTransform.Position = new Vector3(mousePos.X, mousePos.Y, 0);
-        emitterTransform.Rotation = new Vector3(1, 0, 0);
-        emitterCircle.Radius = 50;
-        emitterMaterial.Albedo = new Color(255, 255, 100);
-        emitterMaterial.Emissive = new Color(255, 255, 100); // Bright yellow
+        transform.Position = new Vector3(position, 0);
+        transform.Rotation = Vector3.UnitX;
+        circle.Radius = radius;
+        material.Albedo = color;
+        material.Emissive = color;
 
-        // Initialize mouse state
-        PreviousMouseState = mouse;
+        return id;
+    }
+
+    private int CreateOccluder(Vector2 position, float size)
+    {
+        int id = ECS.CreateEntity();
+
+        ref var transform = ref ECS.AddComponent<Transform>(id);
+        ref var rect = ref ECS.AddComponent<Rectangle2D>(id);
+        ref var material = ref ECS.AddComponent<Material>(id);
+
+        transform.Position = new Vector3(position, 0);
+        transform.Rotation = Vector3.UnitX;
+        rect.Size = new Vector2(size);
+        material.Albedo = new Color(30, 30, 30);
+        material.Emissive = Color.Black;
+
+        return id;
     }
 
     public override void Update()
     {
-        // Check for Space key to toggle movement
-        KeyboardState currentKeyboardState = Keyboard.GetState();
-        if (currentKeyboardState.IsKeyDown(Keys.Space) && PreviousKeyboardState.IsKeyUp(Keys.Space))
+        var keyboard = Keyboard.GetState();
+        var mouse = Mouse.GetState();
+        var center = Renderer.Window.GetScreenCenter();
+
+        // Space: toggle animation
+        if (keyboard.IsKeyDown(Keys.Space) && PrevKeyboard.IsKeyUp(Keys.Space))
+            IsAnimating = !IsAnimating;
+
+        // Tab: toggle GI system
+        if (keyboard.IsKeyDown(Keys.Tab) && PrevKeyboard.IsKeyUp(Keys.Tab))
+            ToggleGISystem();
+
+        // Animate rotating lights
+        if (IsAnimating)
+            Rotation += RotationSpeed * DeltaTime;
+
+        for (int i = 0; i < RotatingLightIds.Length; i++)
         {
-            IsMoving = !IsMoving;
-        }
+            float angle = i / (float)LightCount * MathHelper.TwoPi + Rotation;
+            float x = center.X + OrbitRadius * MathF.Cos(angle);
+            float y = center.Y + OrbitRadius * MathF.Sin(angle);
 
-        // Check for Tab key to toggle between Holographic and RCGI
-        if (currentKeyboardState.IsKeyDown(Keys.Tab) && PreviousKeyboardState.IsKeyUp(Keys.Tab))
-        {
-            UseHolographic = !UseHolographic;
-            if (UseHolographic)
-            {
-                RCGISystem.Dispose();
-                RCGISystem.Enabled = false;
-                HolographicSystem.Initialize();
-                HolographicSystem.Enabled = true;
-                GeometrySystem.EnableSDF = false; // HRCGI doesn't need SDF
-            }
-            else
-            {
-                HolographicSystem.Dispose();
-                HolographicSystem.Enabled = false;
-                RCGISystem.Initialize();
-                RCGISystem.Enabled = true;
-                GeometrySystem.EnableSDF = true; // RCGI needs SDF
-            }
-            UpdateFSRInputSource();
-        }
-
-        // Check for F4 key to cycle FSR quality modes
-        if (currentKeyboardState.IsKeyDown(Keys.F4) && PreviousKeyboardState.IsKeyUp(Keys.F4))
-        {
-            var qualities = Enum.GetValues<FSRQuality>();
-            int currentIndex = Array.IndexOf(qualities, FSRSystem.Quality);
-            FSRSystem.Quality = qualities[(currentIndex + 1) % qualities.Length];
-        }
-
-        PreviousKeyboardState = currentKeyboardState;
-
-        // Update rotation angle only if moving
-        if (IsMoving)
-        {
-            CurrentRotation += RotationSpeed * DeltaTime;
-        }
-
-        // Update box positions
-        for (int i = 0; i < BoxEntityIds.Length; i++)
-        {
-            ref var transform = ref ECS.GetComponent<Transform>(BoxEntityIds[i]);
-
-            float originalAngle = (float)i / BoxEntityIds.Length * MathHelper.TwoPi;
-            float newAngle = originalAngle + CurrentRotation;
-
-            // Calculate new position
-            float x = ScreenCenter.X + BoxRadius * (float)Math.Cos(newAngle);
-            float y = ScreenCenter.Y + BoxRadius * (float)Math.Sin(newAngle);
-
+            ref var transform = ref ECS.GetComponent<Transform>(RotatingLightIds[i]);
             transform.Position = new Vector3(x, y, 0);
-            transform.Rotation = new Vector3((float)Math.Cos(newAngle), (float)Math.Sin(newAngle), 0);
         }
 
-        // Get current mouse state
-        MouseState currentMouseState = Mouse.GetState();
-        Vector2 mousePosition = new Vector2(currentMouseState.X, currentMouseState.Y);
+        // Update mouse light
+        ref var mouseTransform = ref ECS.GetComponent<Transform>(MouseLightId);
+        mouseTransform.Position = new Vector3(mouse.X, mouse.Y, 0);
 
-        // Update mouse emitter position
-        ref var emitterTransform = ref ECS.GetComponent<Transform>(MouseEmitterEntityId);
-
-        emitterTransform.Position = new Vector3(mousePosition.X, mousePosition.Y, 0);
-
-        // Create new emitter on left click
-        if (currentMouseState.LeftButton == ButtonState.Pressed &&
-            PreviousMouseState.LeftButton == ButtonState.Released)
+        // Only allow spawning when window is focused
+        if (Renderer.Window.IsActive)
         {
-            SpawnEmitter(mousePosition);
+            // Left click: spawn light
+            if (mouse.LeftButton == ButtonState.Pressed && PrevMouse.LeftButton == ButtonState.Released)
+            {
+                var color = HueToRGB((float)Rng.NextDouble());
+                CreateLight(new Vector2(mouse.X, mouse.Y), 40f, color);
+            }
+
+            // Right click: spawn occluder
+            if (mouse.RightButton == ButtonState.Pressed && PrevMouse.RightButton == ButtonState.Released)
+                CreateOccluder(new Vector2(mouse.X, mouse.Y), 40f);
         }
 
-        // Create new occluder on right click
-        if (currentMouseState.RightButton == ButtonState.Pressed &&
-            PreviousMouseState.RightButton == ButtonState.Released)
-        {
-            SpawnOccluder(mousePosition);
-        }
+        PrevKeyboard = keyboard;
+        PrevMouse = mouse;
 
-        // Store mouse state for next frame
-        PreviousMouseState = currentMouseState;
-
-        // Display current rendering mode
-        string mode = UseHolographic ? "HRCGI" : "RCGI";
-        Gizmos.Set("Renderer", $"Mode: {mode} (Tab to toggle)");
+        Gizmos.Set("Scene", $"GI: {(UseHRCGI ? "HRCGI" : "RCGI")} [Tab] | Animation: {(IsAnimating ? "On" : "Off")} [Space]");
+        Gizmos.Set("Scene", "Left Click: Add Light | Right Click: Add Occluder");
     }
 
-    private void UpdateFSRInputSource()
+    private void ToggleGISystem()
     {
-        if (UseHolographic)
-            FSRSystem.SetInputSource(() => HolographicSystem.GetOutput());
+        UseHRCGI = !UseHRCGI;
+
+        if (UseHRCGI)
+        {
+            RCGISystem.Dispose();
+            RCGISystem.Enabled = false;
+            HRCGISystem.Initialize();
+            HRCGISystem.Enabled = true;
+            GeometrySystem.EnableSDF = false;
+        }
         else
-            FSRSystem.SetInputSource(() => RCGISystem.GetOutput());
+        {
+            HRCGISystem.Dispose();
+            HRCGISystem.Enabled = false;
+            RCGISystem.Initialize();
+            RCGISystem.Enabled = true;
+            GeometrySystem.EnableSDF = true;
+        }
+
+        UpdateFSRInput();
     }
 
-    private void SpawnEmitter(Vector2 position)
+    private void UpdateFSRInput()
     {
-        // Create a new circle emitter entity
-        int lightId = ECS.CreateEntity();
-
-        ref var transform = ref ECS.AddComponent<Transform>(lightId);
-        ref var circle = ref ECS.AddComponent<Circle2D>(lightId);
-        ref var material = ref ECS.AddComponent<Material>(lightId);
-
-        transform.Position = new Vector3(position.X, position.Y, 0);
-        transform.Rotation = new Vector3(1, 0, 0);
-        circle.Radius = 50;
-
-        // Random color for the light
-        byte r = (byte)Random.Next(128, 256);
-        byte g = (byte)Random.Next(128, 256);
-        byte b = (byte)Random.Next(128, 256);
-        var color = new Color(r, g, b);
-
-        material.Albedo = color;
-        material.Emissive = color;
+        FSRSystem.SetInputSource(() => UseHRCGI ? HRCGISystem.GetOutput() : RCGISystem.GetOutput());
     }
 
-    private void SpawnOccluder(Vector2 position)
+    private static Color HueToRGB(float hue)
     {
-        // Create a new circle occluder entity
-        int occluderId = ECS.CreateEntity();
-
-        ref var transform = ref ECS.AddComponent<Transform>(occluderId);
-        ref var circle = ref ECS.AddComponent<Circle2D>(occluderId);
-        ref var material = ref ECS.AddComponent<Material>(occluderId);
-
-        transform.Position = new Vector3(position.X, position.Y, 0);
-        transform.Rotation = new Vector3(1, 0, 0);
-        circle.Radius = 20;
-
-        // Non-emissive material (black emissive = no light emission)
-        material.Albedo = Color.Red;
-        material.Emissive = Color.Red;
+        float r = MathF.Abs(hue * 6f - 3f) - 1f;
+        float g = 2f - MathF.Abs(hue * 6f - 2f);
+        float b = 2f - MathF.Abs(hue * 6f - 4f);
+        return new Color(
+            (byte)(Math.Clamp(r, 0f, 1f) * 255),
+            (byte)(Math.Clamp(g, 0f, 1f) * 255),
+            (byte)(Math.Clamp(b, 0f, 1f) * 255)
+        );
     }
 }
