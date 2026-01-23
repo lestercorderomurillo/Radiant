@@ -30,11 +30,12 @@ public class MegaLightsScene : Scene
     private RCGI RCGISystem;
     private UDR1 UDR1System;
     private UDR2 UDR2System;
+    private UDR3 UDR3System;
     private Geometry GeometrySystem;
     private GizmosRenderer Gizmos;
 
     private bool UseHRCGI = true;
-    private bool UseUDR2 = true;  // Toggle between UDR1 and UDR2
+    private int UDRMode = 2;  // 0 = UDR1, 1 = UDR2, 2 = UDR3
 
     private const float RotationSpeed = 0.15f;
     private const float OrbitRadius = 300f;
@@ -50,7 +51,8 @@ public class MegaLightsScene : Scene
         HRCGISystem = ECS.AddSystem<HRCGI>();
         RCGISystem = ECS.AddSystem<RCGI>(enabled: false);
         UDR1System = ECS.AddSystem<UDR1>(enabled: false);
-        UDR2System = ECS.AddSystem<UDR2>();
+        UDR2System = ECS.AddSystem<UDR2>(enabled: false);
+        UDR3System = ECS.AddSystem<UDR3>();
         Gizmos = ECS.AddSystem<GizmosRenderer>();
 
         GeometrySystem.EnableSDF = false;
@@ -234,7 +236,7 @@ public class MegaLightsScene : Scene
         PrevMouse = mouse;
 
         Gizmos.Set("Scene", $"GI: {(UseHRCGI ? "HRCGI" : "RCGI")} [Tab] | Animation: {(IsAnimating ? "On" : "Off")} [Space]");
-        Gizmos.Set("Scene", $"Upscaler: {(UseUDR2 ? "UDR2 (Spatial + Temporal)" : "UDR1 (Spatial)")} [F11]");
+        Gizmos.Set("Scene", $"Upscaler: {GetUDRName()} [F11]");
         Gizmos.Set("Scene", "Left Click: Add Light | Right Click: Add Occluder");
     }
 
@@ -267,28 +269,60 @@ public class MegaLightsScene : Scene
         var inputSource = new Func<Texture2D>(() => UseHRCGI ? HRCGISystem.GetOutput() : RCGISystem.GetOutput());
         UDR1System.SetInputSource(inputSource);
         UDR2System.SetInputSource(inputSource);
+        UDR3System.SetInputSource(inputSource);
     }
 
     private void ToggleUDRSystem()
     {
-        UseUDR2 = !UseUDR2;
-
-        if (UseUDR2)
+        // Disable current UDR system
+        switch (UDRMode)
         {
-            UDR1System.Dispose();
-            UDR1System.Enabled = false;
-            UDR2System.Initialize();
-            UDR2System.Enabled = true;
+            case 0:
+                UDR1System.Dispose();
+                UDR1System.Enabled = false;
+                break;
+            case 1:
+                UDR2System.Dispose();
+                UDR2System.Enabled = false;
+                break;
+            case 2:
+                UDR3System.Dispose();
+                UDR3System.Enabled = false;
+                break;
         }
-        else
+
+        // Cycle to next mode
+        UDRMode = (UDRMode + 1) % 3;
+
+        // Enable new UDR system
+        switch (UDRMode)
         {
-            UDR2System.Dispose();
-            UDR2System.Enabled = false;
-            UDR1System.Initialize();
-            UDR1System.Enabled = true;
+            case 0:
+                UDR1System.Initialize();
+                UDR1System.Enabled = true;
+                break;
+            case 1:
+                UDR2System.Initialize();
+                UDR2System.Enabled = true;
+                break;
+            case 2:
+                UDR3System.Initialize();
+                UDR3System.Enabled = true;
+                break;
         }
 
         UpdateUDRInput();
+    }
+
+    private string GetUDRName()
+    {
+        return UDRMode switch
+        {
+            0 => "UDR1 (Spatial)",
+            1 => "UDR2 (Spatial + Temporal)",
+            2 => "UDR3 (Bilinear)",
+            _ => "Unknown"
+        };
     }
 
     private void PaintLightAt(Vector2 position)
