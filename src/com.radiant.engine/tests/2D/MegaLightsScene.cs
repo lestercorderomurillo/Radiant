@@ -34,7 +34,7 @@ public class MegaLightsScene : Scene
     private GizmosRenderer Gizmos;
 
     private bool UseHRCGI = true;
-    private bool UseUDR2 = false;  // Toggle between UDR1 and UDR2
+    private bool UseUDR2 = true;  // Toggle between UDR1 and UDR2
 
     private const float RotationSpeed = 0.15f;
     private const float OrbitRadius = 300f;
@@ -49,8 +49,8 @@ public class MegaLightsScene : Scene
         GeometrySystem = ECS.AddSystem<Geometry>();
         HRCGISystem = ECS.AddSystem<HRCGI>();
         RCGISystem = ECS.AddSystem<RCGI>(enabled: false);
-        UDR1System = ECS.AddSystem<UDR1>();
-        UDR2System = ECS.AddSystem<UDR2>(enabled: false);
+        UDR1System = ECS.AddSystem<UDR1>(enabled: false);
+        UDR2System = ECS.AddSystem<UDR2>();
         Gizmos = ECS.AddSystem<GizmosRenderer>();
 
         GeometrySystem.EnableSDF = false;
