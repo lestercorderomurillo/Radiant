@@ -18,6 +18,12 @@ public class MegaLightsScene : Scene
     private Random Rng = new();
 
     private float Rotation;
+    private float RainbowHue = 0f;
+    private const float HueSpeed = 0.008f;
+    private const float PaintRadius = 10f;
+    private const float PaintSpacing = 5f; // Spacing between painted lights (half radius for overlap)
+    private Vector2 LastPaintPos;
+    private bool HasLastPaintPos = false;
     private bool IsAnimating = true;
 
     private HRCGI HRCGISystem;
@@ -30,7 +36,7 @@ public class MegaLightsScene : Scene
     private bool UseHRCGI = true;
     private bool UseUDR2 = false;  // Toggle between UDR1 and UDR2
 
-    private const float RotationSpeed = 0.1f;
+    private const float RotationSpeed = 0.15f;
     private const float OrbitRadius = 300f;
     private const int LightCount = 12;
     private const int OccluderCount = 80;
@@ -178,11 +184,41 @@ public class MegaLightsScene : Scene
         // Only allow spawning when window is focused
         if (Renderer.Window.IsActive)
         {
-            // Left click: spawn light
-            if (mouse.LeftButton == ButtonState.Pressed && PrevMouse.LeftButton == ButtonState.Released)
+            var mousePos = new Vector2(mouse.X, mouse.Y);
+
+            // Left click + moving: spawn lights continuously with perfect rainbow gradient
+            if (mouse.LeftButton == ButtonState.Pressed)
             {
-                var color = HueToRGB((float)Rng.NextDouble());
-                CreateLight(new Vector2(mouse.X, mouse.Y), 40f, color);
+                if (!HasLastPaintPos)
+                {
+                    // First paint point
+                    PaintLightAt(mousePos);
+                    LastPaintPos = mousePos;
+                    HasLastPaintPos = true;
+                }
+                else
+                {
+                    // Interpolate between last position and current to fill gaps
+                    float distance = Vector2.Distance(LastPaintPos, mousePos);
+                    if (distance >= PaintSpacing)
+                    {
+                        Vector2 direction = Vector2.Normalize(mousePos - LastPaintPos);
+                        float traveled = PaintSpacing;
+
+                        while (traveled <= distance)
+                        {
+                            Vector2 paintPos = LastPaintPos + direction * traveled;
+                            PaintLightAt(paintPos);
+                            traveled += PaintSpacing;
+                        }
+
+                        LastPaintPos = mousePos;
+                    }
+                }
+            }
+            else
+            {
+                HasLastPaintPos = false;
             }
 
             // Right click: spawn occluder
@@ -253,6 +289,30 @@ public class MegaLightsScene : Scene
         }
 
         UpdateUDRInput();
+    }
+
+    private void PaintLightAt(Vector2 position)
+    {
+        var color = HueToRGB(RainbowHue);
+        RainbowHue = (RainbowHue + HueSpeed) % 1f;
+
+        // Check if there's an existing light at this position (ECS spatial query)
+        var nearby = ECS.InRadius(new Vector3(position, 0), PaintRadius);
+        foreach (int entityId in nearby)
+        {
+            // Only replace if it has Circle2D (is a light, not an occluder)
+            if (ECS.HasComponent<Circle2D>(entityId) && entityId != MouseLightId)
+            {
+                // Replace existing light's color
+                ref var material = ref ECS.GetComponent<Material>(entityId);
+                material.Albedo = color;
+                material.Emissive = color;
+                return;
+            }
+        }
+
+        // No overlap, create new light
+        CreateLight(position, PaintRadius, color);
     }
 
     private static Color HueToRGB(float hue)

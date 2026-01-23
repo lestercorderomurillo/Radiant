@@ -232,43 +232,13 @@ float3 Sharpen(float3 color, NeighborhoodSamples neighborhood)
     return clamp(sharpened, minColor, maxColor);
 }
 
-// Detect luminance edges from the upscaled color (for shadow detection)
-// Returns edge strength 0-1
-float GetColorLuminanceEdge(float3 centerColor, float2 uv, float2 texelSize)
-{
-    static const float SHADOW_EDGE_THRESHOLD = 0.12;  // Luminance diff threshold for shadow edges
-
-    float3 colorN = InputTexture.Sample(Sampler, uv + float2(0, -texelSize.y)).rgb;
-    float3 colorS = InputTexture.Sample(Sampler, uv + float2(0,  texelSize.y)).rgb;
-    float3 colorW = InputTexture.Sample(Sampler, uv + float2(-texelSize.x, 0)).rgb;
-    float3 colorE = InputTexture.Sample(Sampler, uv + float2( texelSize.x, 0)).rgb;
-
-    float lumM = GetLuminance(centerColor);
-    float lumN = GetLuminance(colorN);
-    float lumS = GetLuminance(colorS);
-    float lumW = GetLuminance(colorW);
-    float lumE = GetLuminance(colorE);
-
-    float gradH = abs(lumE - lumW);
-    float gradV = abs(lumS - lumN);
-    float gradient = max(gradH, gradV);
-
-    return smoothstep(SHADOW_EDGE_THRESHOLD * 0.5, SHADOW_EDGE_THRESHOLD, gradient);
-}
-
-// Correct edges using SDF overlay at full resolution
-// SDFTexture: 0 = on surface, 0->1 = distance outside (normalized)
-// EmissiveTexture.a: 1 = on surface, 0 = outside
-// Returns: xyz = corrected color, w = debug blend factor
-//   w > 0.5: SDF edge on surface (green in debug)
-//   w < 0.5 && w > 0.001: SDF edge outside surface (red in debug)
-//   w < -0.001: luminance/shadow edge (blue in debug, value is -edgeStrength)
+// Edge correction using SDF
 float4 CorrectEdgesWithDebug(float3 color, float2 uv)
 {
     // Adjustable constants
-    static const float OUTER_MARGIN = 0.001;      // SDF distance outside to blend (0 = edge, 0.05 = far)
-    static const float INNER_MARGIN = 20.0;       // Texels inside to blend (1-4 range based on samples)
-    static const float EDGE_BLEND = 0.55;         // Blend strength at exact edge
+    static const float OUTER_MARGIN = 0.001;
+    static const float INNER_MARGIN = 24.0;
+    static const float EDGE_BLEND = 0.55;
 
     float4 emissive = EmissiveTexture.Sample(Sampler, uv);
     float sdfDist = SDFTexture.Sample(Sampler, uv).r;  // 0 = on surface, >0 = outside
@@ -276,69 +246,49 @@ float4 CorrectEdgesWithDebug(float3 color, float2 uv)
 
     float2 texelSize = 1.0 / OutputSize;
 
-    // Check for luminance edge (shadows) - only relevant if we're on surface
-    float lumEdge = 0.0;
     if (onSurface)
     {
-        lumEdge = GetColorLuminanceEdge(color, uv, texelSize);
-    }
-
-    if (onSurface)
-    {
-        // ON SURFACE - find distance to edge by sampling two distances and interpolating
-        static const int SAMPLE_COUNT = 8;
-        static const float SAMPLE_DISTANCES[8] = { 1.0, 4.0, 8.0, 12.0, 16.0, 20.0, 26.0, 32.0 };
-
-        float lastOnSurface = 0.0;    // Last distance where we were still on surface
-        float firstOffSurface = INNER_MARGIN + 1.0;  // First distance where we found edge
+        // ON SURFACE - sample every 2 texels until edge or 24 texels
+        // Sample 8 directions: cardinal + diagonal
+        float edgeDist = INNER_MARGIN + 1.0;
+        static const float DIAG = 0.707;  // 1/sqrt(2) for diagonal distance
 
         [unroll]
-        for (int i = 0; i < SAMPLE_COUNT; i++)
+        for (int i = 1; i <= 12; i++)
         {
-            float dist = SAMPLE_DISTANCES[i];
+            float dist = i * 2.0;
 
-            float2 offsetL = float2(-texelSize.x * dist, 0);
-            float2 offsetR = float2( texelSize.x * dist, 0);
-            float2 offsetU = float2(0, -texelSize.y * dist);
-            float2 offsetD = float2(0,  texelSize.y * dist);
+            // Cardinal directions
+            float aL = EmissiveTexture.Sample(Sampler, uv + float2(-texelSize.x * dist, 0)).a;
+            float aR = EmissiveTexture.Sample(Sampler, uv + float2( texelSize.x * dist, 0)).a;
+            float aU = EmissiveTexture.Sample(Sampler, uv + float2(0, -texelSize.y * dist)).a;
+            float aD = EmissiveTexture.Sample(Sampler, uv + float2(0,  texelSize.y * dist)).a;
 
-            float aL = EmissiveTexture.Sample(Sampler, uv + offsetL).a;
-            float aR = EmissiveTexture.Sample(Sampler, uv + offsetR).a;
-            float aU = EmissiveTexture.Sample(Sampler, uv + offsetU).a;
-            float aD = EmissiveTexture.Sample(Sampler, uv + offsetD).a;
+            // Diagonal directions
+            float diagDist = dist * DIAG;
+            float aNW = EmissiveTexture.Sample(Sampler, uv + float2(-texelSize.x * diagDist, -texelSize.y * diagDist)).a;
+            float aNE = EmissiveTexture.Sample(Sampler, uv + float2( texelSize.x * diagDist, -texelSize.y * diagDist)).a;
+            float aSW = EmissiveTexture.Sample(Sampler, uv + float2(-texelSize.x * diagDist,  texelSize.y * diagDist)).a;
+            float aSE = EmissiveTexture.Sample(Sampler, uv + float2( texelSize.x * diagDist,  texelSize.y * diagDist)).a;
 
-            // Check if any direction hit the edge
-            bool hitEdge = (aL < 0.5) || (aR < 0.5) || (aU < 0.5) || (aD < 0.5);
+            bool hitEdge = (aL < 0.5) || (aR < 0.5) || (aU < 0.5) || (aD < 0.5) ||
+                           (aNW < 0.5) || (aNE < 0.5) || (aSW < 0.5) || (aSE < 0.5);
 
             if (hitEdge)
             {
-                firstOffSurface = dist;
-                break;  // Found the edge, stop searching
-            }
-            else
-            {
-                lastOnSurface = dist;  // Still on surface, remember this distance
+                edgeDist = dist;
+                break;
             }
         }
 
-        // Deep inside - no SDF correction needed, but check for luminance edge (shadows)
-        if (firstOffSurface > INNER_MARGIN)
+        // Deep inside - no SDF correction needed
+        if (edgeDist > INNER_MARGIN)
         {
-            // No SDF edge, but maybe there's a shadow edge
-            if (lumEdge > 0.01)
-            {
-                return float4(color, -lumEdge);  // debug = negative (blue for shadow edges)
-            }
-            return float4(color, 0.0);  // debug = 0 (no correction)
+            return float4(color, 0.0);
         }
 
-        // Interpolate between the two sample distances for smooth gradient
-        // Edge is somewhere between lastOnSurface and firstOffSurface
-        // Use midpoint as estimate, then normalize to INNER_MARGIN
-        float estimatedDist = (lastOnSurface + firstOffSurface) * 0.5;
-
-        // Blend factor: 0 at edge (use emissive), 1 at INNER_MARGIN (use color)
-        float blendFactor = estimatedDist / INNER_MARGIN;
+        // Smooth gradient: 0 at edge, 1 at INNER_MARGIN
+        float blendFactor = edgeDist / INNER_MARGIN;
         blendFactor = smoothstep(0.0, 1.0, blendFactor);
 
         // blendFactor: 0 at edge, 1 deep inside
@@ -394,26 +344,17 @@ float4 CorrectEdgesWithDebug(float3 color, float2 uv)
     }
 }
 
-// Wrapper for non-debug path
 float3 CorrectEdges(float3 color, float2 uv)
 {
     return CorrectEdgesWithDebug(color, uv).rgb;
 }
 
-// =============================================================================
-// Temporal Stability Functions
-// =============================================================================
-
-// Clamp history to neighborhood color bounds (variance clipping)
 float3 ClampHistory(float3 history, float3 minColor, float3 maxColor)
 {
     return clamp(history, minColor, maxColor);
 }
 
-// =============================================================================
-// UDR2 Main Pixel Shader - Spatial Upscaling Pass
-// =============================================================================
-
+// Spatial pass
 float4 UDR2_Spatial_PS(PixelShaderInput input) : SV_Target0
 {
     float2 uv = input.UV;
@@ -449,34 +390,15 @@ float4 UDR2_Spatial_PS(PixelShaderInput input) : SV_Target0
     {
         if (DebugRays > 0.0)
         {
-            // Debug mode: visualize edge correction areas
-            // debugVal > 0.5: SDF edge on surface (green)
-            // debugVal 0.001-0.5: SDF edge outside surface (red)
-            // debugVal < -0.001: luminance/shadow edge (blue)
+            // Debug: GREEN = SDF edges
             float4 corrected = CorrectEdgesWithDebug(result, uv);
-            float debugVal = corrected.w;
+            float sdfDebug = corrected.w;
+            result = corrected.rgb;
 
-            if (debugVal > 0.5)
+            if (sdfDebug > 0.5)
             {
-                // SDF edge on surface - GREEN
-                float intensity = (debugVal - 0.5) * 2.0;
-                result = lerp(corrected.rgb, float3(0.0, 1.0, 0.0), intensity * 0.7);
-            }
-            else if (debugVal > 0.001)
-            {
-                // SDF edge outside surface - RED
-                float intensity = (0.5 - debugVal) * 2.0;
-                result = lerp(corrected.rgb, float3(1.0, 0.0, 0.0), intensity * 0.7);
-            }
-            else if (debugVal < -0.01)
-            {
-                // Luminance/shadow edge - BLUE
-                float intensity = -debugVal;  // lumEdge was stored as negative
-                result = lerp(corrected.rgb, float3(0.0, 0.5, 1.0), intensity * 0.7);
-            }
-            else
-            {
-                result = corrected.rgb;
+                float intensity = (sdfDebug - 0.5) * 2.0;
+                result = lerp(result, float3(0.0, 1.0, 0.0), intensity * 0.7);
             }
         }
         else
@@ -488,56 +410,9 @@ float4 UDR2_Spatial_PS(PixelShaderInput input) : SV_Target0
     return float4(result, 1.0);
 }
 
-// =============================================================================
-// UDR2 Temporal Accumulation Pass - Edge-only multi-frame averaging
-// =============================================================================
+// Temporal pass
 
-// Detect luminance edges from ray-traced content (InputTexture)
-// Returns edge strength 0-1
-float GetLuminanceEdgeFactor(float2 uv, float2 texelSize)
-{
-    static const float EDGE_THRESHOLD = 0.08;  // Min luminance diff to consider an edge
-
-    // Sample center and 4 neighbors from the source texture
-    float3 colorM = InputTexture.Sample(Sampler, uv).rgb;
-    float3 colorN = InputTexture.Sample(Sampler, uv + float2(0, -texelSize.y)).rgb;
-    float3 colorS = InputTexture.Sample(Sampler, uv + float2(0,  texelSize.y)).rgb;
-    float3 colorW = InputTexture.Sample(Sampler, uv + float2(-texelSize.x, 0)).rgb;
-    float3 colorE = InputTexture.Sample(Sampler, uv + float2( texelSize.x, 0)).rgb;
-
-    float lumM = GetLuminance(colorM);
-    float lumN = GetLuminance(colorN);
-    float lumS = GetLuminance(colorS);
-    float lumW = GetLuminance(colorW);
-    float lumE = GetLuminance(colorE);
-
-    // Compute gradient magnitude (Sobel-like)
-    float gradH = abs(lumE - lumW);
-    float gradV = abs(lumS - lumN);
-    float gradient = max(gradH, gradV);
-
-    // Also check diagonal neighbors for better edge detection
-    float3 colorNW = InputTexture.Sample(Sampler, uv + float2(-texelSize.x, -texelSize.y)).rgb;
-    float3 colorNE = InputTexture.Sample(Sampler, uv + float2( texelSize.x, -texelSize.y)).rgb;
-    float3 colorSW = InputTexture.Sample(Sampler, uv + float2(-texelSize.x,  texelSize.y)).rgb;
-    float3 colorSE = InputTexture.Sample(Sampler, uv + float2( texelSize.x,  texelSize.y)).rgb;
-
-    float lumNW = GetLuminance(colorNW);
-    float lumNE = GetLuminance(colorNE);
-    float lumSW = GetLuminance(colorSW);
-    float lumSE = GetLuminance(colorSE);
-
-    float gradD1 = abs(lumSE - lumNW);
-    float gradD2 = abs(lumSW - lumNE);
-    gradient = max(gradient, max(gradD1, gradD2) * 0.707);  // Diagonal scaled by 1/sqrt(2)
-
-    // Return edge factor: 0 = no edge, 1 = strong edge
-    return smoothstep(EDGE_THRESHOLD * 0.5, EDGE_THRESHOLD, gradient);
-}
-
-// Detect if pixel is near an edge (returns 0-1 blend factor, 1 = on edge)
-// Combines SDF-based edges + luminance edges from ray content
-// outerMarginMultiplier: extends the outside detection range (1.0 = same as edge correction)
+// SDF-based edge detection for temporal blending
 float GetEdgeBlendFactor(float2 uv, float outerMarginMultiplier)
 {
     static const float BASE_OUTER_MARGIN = 0.001;
@@ -545,11 +420,6 @@ float GetEdgeBlendFactor(float2 uv, float outerMarginMultiplier)
 
     float outerMargin = BASE_OUTER_MARGIN * outerMarginMultiplier;
     float2 texelSize = 1.0 / OutputSize;
-
-    // --- Part A: Luminance edge detection from ray content ---
-    float lumEdge = GetLuminanceEdgeFactor(uv, texelSize);
-
-    // --- Part B: SDF-based edge detection ---
     float sdfEdge = 0.0;
 
     float4 emissive = EmissiveTexture.Sample(Sampler, uv);
@@ -558,9 +428,10 @@ float GetEdgeBlendFactor(float2 uv, float outerMarginMultiplier)
 
     if (onSurface)
     {
-        // ON SURFACE - find distance to edge
+        // ON SURFACE - find distance to edge (8 directions: cardinal + diagonal)
         static const int SAMPLE_COUNT = 8;
         static const float SAMPLE_DISTANCES[8] = { 1.0, 4.0, 8.0, 12.0, 16.0, 20.0, 26.0, 32.0 };
+        static const float DIAG = 0.707;
 
         float lastOnSurface = 0.0;
         float firstOffSurface = INNER_MARGIN + 1.0;
@@ -570,17 +441,21 @@ float GetEdgeBlendFactor(float2 uv, float outerMarginMultiplier)
         {
             float dist = SAMPLE_DISTANCES[i];
 
-            float2 offsetL = float2(-texelSize.x * dist, 0);
-            float2 offsetR = float2( texelSize.x * dist, 0);
-            float2 offsetU = float2(0, -texelSize.y * dist);
-            float2 offsetD = float2(0,  texelSize.y * dist);
+            // Cardinal
+            float aL = EmissiveTexture.Sample(Sampler, uv + float2(-texelSize.x * dist, 0)).a;
+            float aR = EmissiveTexture.Sample(Sampler, uv + float2( texelSize.x * dist, 0)).a;
+            float aU = EmissiveTexture.Sample(Sampler, uv + float2(0, -texelSize.y * dist)).a;
+            float aD = EmissiveTexture.Sample(Sampler, uv + float2(0,  texelSize.y * dist)).a;
 
-            float aL = EmissiveTexture.Sample(Sampler, uv + offsetL).a;
-            float aR = EmissiveTexture.Sample(Sampler, uv + offsetR).a;
-            float aU = EmissiveTexture.Sample(Sampler, uv + offsetU).a;
-            float aD = EmissiveTexture.Sample(Sampler, uv + offsetD).a;
+            // Diagonal
+            float diagDist = dist * DIAG;
+            float aNW = EmissiveTexture.Sample(Sampler, uv + float2(-texelSize.x * diagDist, -texelSize.y * diagDist)).a;
+            float aNE = EmissiveTexture.Sample(Sampler, uv + float2( texelSize.x * diagDist, -texelSize.y * diagDist)).a;
+            float aSW = EmissiveTexture.Sample(Sampler, uv + float2(-texelSize.x * diagDist,  texelSize.y * diagDist)).a;
+            float aSE = EmissiveTexture.Sample(Sampler, uv + float2( texelSize.x * diagDist,  texelSize.y * diagDist)).a;
 
-            bool hitEdge = (aL < 0.5) || (aR < 0.5) || (aU < 0.5) || (aD < 0.5);
+            bool hitEdge = (aL < 0.5) || (aR < 0.5) || (aU < 0.5) || (aD < 0.5) ||
+                           (aNW < 0.5) || (aNE < 0.5) || (aSW < 0.5) || (aSE < 0.5);
 
             if (hitEdge)
             {
@@ -610,9 +485,7 @@ float GetEdgeBlendFactor(float2 uv, float outerMarginMultiplier)
         }
     }
 
-    // --- Combine: use max of both edge types (A + B style) ---
-    // Either SDF edge OR luminance edge triggers temporal blending
-    return max(sdfEdge, lumEdge);
+    return sdfEdge;
 }
 
 float4 UDR2_Temporal_PS(PixelShaderInput input) : SV_Target0
@@ -634,15 +507,14 @@ float4 UDR2_Temporal_PS(PixelShaderInput input) : SV_Target0
     // Near edge - apply temporal blending
     float3 history = HistoryTexture.Sample(Sampler, uv).rgb;
 
-    // Detect disocclusion: if current differs too much from history, object moved away
-    // In that case, reject history and use current frame
+    // Blend rate based on color difference: higher diff = lower history weight
     float3 diff = abs(current - history);
     float colorDiff = max(diff.r, max(diff.g, diff.b));
 
-    static const float DISOCCLUSION_THRESHOLD = 0.045;  // Max color difference before rejecting history
+    static const float DIFF_SCALE = 2.0;  // How fast history weight drops with difference
 
-    // If change is too sharp, reduce history influence (object moved away)
-    float historyValidity = 1.0 - smoothstep(DISOCCLUSION_THRESHOLD * 0.5, DISOCCLUSION_THRESHOLD, colorDiff);
+    // historyValidity: 1.0 when identical, approaches 0 as difference increases
+    float historyValidity = 1.0 / (1.0 + colorDiff * DIFF_SCALE);
 
     // Running average: new_avg = old_avg * (1 - 1/N) + current * (1/N)
     // CurrentWeight = 1/N where N = number of frames to accumulate
@@ -658,14 +530,10 @@ float4 UDR2_Temporal_PS(PixelShaderInput input) : SV_Target0
     return float4(result, 1.0);
 }
 
-// =============================================================================
-// Edge Smoothing Pass - Gaussian blur on detected edges
-// Applied as separate pass on upscaled output at full resolution
-// =============================================================================
-
+// Edge smoothing
 float4 EdgeSmooth_PS(PixelShaderInput input) : SV_Target0
 {
-    static const float SMOOTH_STRENGTH = 0.85;
+    static const float SMOOTH_STRENGTH = 0.90;
     static const float CONTRAST_THRESHOLD = 0.015;
     static const float RELATIVE_THRESHOLD = 0.03;
 
@@ -702,10 +570,10 @@ float4 EdgeSmooth_PS(PixelShaderInput input) : SV_Target0
     float totalWeight = 0.0;
 
     [unroll]
-    for (int y = -4; y <= 4; y++)
+    for (int y = -5; y <= 5; y++)
     {
         [unroll]
-        for (int x = -4; x <= 4; x++)
+        for (int x = -5; x <= 5; x++)
         {
             float2 offset = float2(x, y) * texelSize;
             float dist = sqrt(float(x * x + y * y));
@@ -721,10 +589,7 @@ float4 EdgeSmooth_PS(PixelShaderInput input) : SV_Target0
     return float4(result, 1.0);
 }
 
-// =============================================================================
-// Copy pass (for initializing history buffer)
-// =============================================================================
-
+// Copy
 float4 Copy_PS(PixelShaderInput input) : SV_Target0
 {
     return InputTexture.Sample(Sampler, input.UV);
