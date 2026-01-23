@@ -802,6 +802,31 @@ public class Renderer : IDisposable
     }
 
     /// <summary>
+    /// Uploads raw Color array data to a render target. Use for efficient bulk updates.
+    /// The array should match the texture dimensions (width * height elements).
+    /// </summary>
+    /// <param name="target">The render target to update.</param>
+    /// <param name="data">Color array to upload (must be width * height in length).</param>
+    /// <param name="count">Number of elements to upload (0 = all).</param>
+    public void UploadToTexture(RenderTarget2D target, Color[] data, int count = 0)
+    {
+        if (count <= 0)
+            count = data.Length;
+        target.SetData(data, 0, count);
+    }
+
+    /// <summary>
+    /// Uploads raw Color array data to a texture region.
+    /// </summary>
+    /// <param name="target">The render target to update.</param>
+    /// <param name="data">Color array to upload.</param>
+    /// <param name="region">Destination rectangle within the texture.</param>
+    public void UploadToTexture(RenderTarget2D target, Color[] data, Rectangle region)
+    {
+        target.SetData(0, region, data, 0, region.Width * region.Height);
+    }
+
+    /// <summary>
     /// Binds a texture directly to a device slot (for register-bound shader textures).
     /// Prefer SetParameter for named texture parameters.
     /// </summary>
