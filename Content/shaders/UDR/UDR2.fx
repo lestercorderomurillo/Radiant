@@ -232,10 +232,37 @@ float3 Sharpen(float3 color, NeighborhoodSamples neighborhood)
     return clamp(sharpened, minColor, maxColor);
 }
 
+// Detect luminance edges from the upscaled color (for shadow detection)
+// Returns edge strength 0-1
+float GetColorLuminanceEdge(float3 centerColor, float2 uv, float2 texelSize)
+{
+    static const float SHADOW_EDGE_THRESHOLD = 0.12;  // Luminance diff threshold for shadow edges
+
+    float3 colorN = InputTexture.Sample(Sampler, uv + float2(0, -texelSize.y)).rgb;
+    float3 colorS = InputTexture.Sample(Sampler, uv + float2(0,  texelSize.y)).rgb;
+    float3 colorW = InputTexture.Sample(Sampler, uv + float2(-texelSize.x, 0)).rgb;
+    float3 colorE = InputTexture.Sample(Sampler, uv + float2( texelSize.x, 0)).rgb;
+
+    float lumM = GetLuminance(centerColor);
+    float lumN = GetLuminance(colorN);
+    float lumS = GetLuminance(colorS);
+    float lumW = GetLuminance(colorW);
+    float lumE = GetLuminance(colorE);
+
+    float gradH = abs(lumE - lumW);
+    float gradV = abs(lumS - lumN);
+    float gradient = max(gradH, gradV);
+
+    return smoothstep(SHADOW_EDGE_THRESHOLD * 0.5, SHADOW_EDGE_THRESHOLD, gradient);
+}
+
 // Correct edges using SDF overlay at full resolution
 // SDFTexture: 0 = on surface, 0->1 = distance outside (normalized)
 // EmissiveTexture.a: 1 = on surface, 0 = outside
-// Returns: xyz = corrected color, w = debug blend factor (0-1 for visualization)
+// Returns: xyz = corrected color, w = debug blend factor
+//   w > 0.5: SDF edge on surface (green in debug)
+//   w < 0.5 && w > 0.001: SDF edge outside surface (red in debug)
+//   w < -0.001: luminance/shadow edge (blue in debug, value is -edgeStrength)
 float4 CorrectEdgesWithDebug(float3 color, float2 uv)
 {
     // Adjustable constants
@@ -248,6 +275,13 @@ float4 CorrectEdgesWithDebug(float3 color, float2 uv)
     bool onSurface = emissive.a > 0.0;
 
     float2 texelSize = 1.0 / OutputSize;
+
+    // Check for luminance edge (shadows) - only relevant if we're on surface
+    float lumEdge = 0.0;
+    if (onSurface)
+    {
+        lumEdge = GetColorLuminanceEdge(color, uv, texelSize);
+    }
 
     if (onSurface)
     {
@@ -287,9 +321,14 @@ float4 CorrectEdgesWithDebug(float3 color, float2 uv)
             }
         }
 
-        // Deep inside - no correction needed
+        // Deep inside - no SDF correction needed, but check for luminance edge (shadows)
         if (firstOffSurface > INNER_MARGIN)
         {
+            // No SDF edge, but maybe there's a shadow edge
+            if (lumEdge > 0.01)
+            {
+                return float4(color, -lumEdge);  // debug = negative (blue for shadow edges)
+            }
             return float4(color, 0.0);  // debug = 0 (no correction)
         }
 
@@ -411,18 +450,29 @@ float4 UDR2_Spatial_PS(PixelShaderInput input) : SV_Target0
         if (DebugRays > 0.0)
         {
             // Debug mode: visualize edge correction areas
+            // debugVal > 0.5: SDF edge on surface (green)
+            // debugVal 0.001-0.5: SDF edge outside surface (red)
+            // debugVal < -0.001: luminance/shadow edge (blue)
             float4 corrected = CorrectEdgesWithDebug(result, uv);
             float debugVal = corrected.w;
 
             if (debugVal > 0.5)
             {
+                // SDF edge on surface - GREEN
                 float intensity = (debugVal - 0.5) * 2.0;
                 result = lerp(corrected.rgb, float3(0.0, 1.0, 0.0), intensity * 0.7);
             }
             else if (debugVal > 0.001)
             {
+                // SDF edge outside surface - RED
                 float intensity = (0.5 - debugVal) * 2.0;
                 result = lerp(corrected.rgb, float3(1.0, 0.0, 0.0), intensity * 0.7);
+            }
+            else if (debugVal < -0.01)
+            {
+                // Luminance/shadow edge - BLUE
+                float intensity = -debugVal;  // lumEdge was stored as negative
+                result = lerp(corrected.rgb, float3(0.0, 0.5, 1.0), intensity * 0.7);
             }
             else
             {
@@ -439,8 +489,131 @@ float4 UDR2_Spatial_PS(PixelShaderInput input) : SV_Target0
 }
 
 // =============================================================================
-// UDR2 Temporal Accumulation Pass - Multi-frame averaging
+// UDR2 Temporal Accumulation Pass - Edge-only multi-frame averaging
 // =============================================================================
+
+// Detect luminance edges from ray-traced content (InputTexture)
+// Returns edge strength 0-1
+float GetLuminanceEdgeFactor(float2 uv, float2 texelSize)
+{
+    static const float EDGE_THRESHOLD = 0.08;  // Min luminance diff to consider an edge
+
+    // Sample center and 4 neighbors from the source texture
+    float3 colorM = InputTexture.Sample(Sampler, uv).rgb;
+    float3 colorN = InputTexture.Sample(Sampler, uv + float2(0, -texelSize.y)).rgb;
+    float3 colorS = InputTexture.Sample(Sampler, uv + float2(0,  texelSize.y)).rgb;
+    float3 colorW = InputTexture.Sample(Sampler, uv + float2(-texelSize.x, 0)).rgb;
+    float3 colorE = InputTexture.Sample(Sampler, uv + float2( texelSize.x, 0)).rgb;
+
+    float lumM = GetLuminance(colorM);
+    float lumN = GetLuminance(colorN);
+    float lumS = GetLuminance(colorS);
+    float lumW = GetLuminance(colorW);
+    float lumE = GetLuminance(colorE);
+
+    // Compute gradient magnitude (Sobel-like)
+    float gradH = abs(lumE - lumW);
+    float gradV = abs(lumS - lumN);
+    float gradient = max(gradH, gradV);
+
+    // Also check diagonal neighbors for better edge detection
+    float3 colorNW = InputTexture.Sample(Sampler, uv + float2(-texelSize.x, -texelSize.y)).rgb;
+    float3 colorNE = InputTexture.Sample(Sampler, uv + float2( texelSize.x, -texelSize.y)).rgb;
+    float3 colorSW = InputTexture.Sample(Sampler, uv + float2(-texelSize.x,  texelSize.y)).rgb;
+    float3 colorSE = InputTexture.Sample(Sampler, uv + float2( texelSize.x,  texelSize.y)).rgb;
+
+    float lumNW = GetLuminance(colorNW);
+    float lumNE = GetLuminance(colorNE);
+    float lumSW = GetLuminance(colorSW);
+    float lumSE = GetLuminance(colorSE);
+
+    float gradD1 = abs(lumSE - lumNW);
+    float gradD2 = abs(lumSW - lumNE);
+    gradient = max(gradient, max(gradD1, gradD2) * 0.707);  // Diagonal scaled by 1/sqrt(2)
+
+    // Return edge factor: 0 = no edge, 1 = strong edge
+    return smoothstep(EDGE_THRESHOLD * 0.5, EDGE_THRESHOLD, gradient);
+}
+
+// Detect if pixel is near an edge (returns 0-1 blend factor, 1 = on edge)
+// Combines SDF-based edges + luminance edges from ray content
+// outerMarginMultiplier: extends the outside detection range (1.0 = same as edge correction)
+float GetEdgeBlendFactor(float2 uv, float outerMarginMultiplier)
+{
+    static const float BASE_OUTER_MARGIN = 0.001;
+    static const float INNER_MARGIN = 20.0;
+
+    float outerMargin = BASE_OUTER_MARGIN * outerMarginMultiplier;
+    float2 texelSize = 1.0 / OutputSize;
+
+    // --- Part A: Luminance edge detection from ray content ---
+    float lumEdge = GetLuminanceEdgeFactor(uv, texelSize);
+
+    // --- Part B: SDF-based edge detection ---
+    float sdfEdge = 0.0;
+
+    float4 emissive = EmissiveTexture.Sample(Sampler, uv);
+    float sdfDist = SDFTexture.Sample(Sampler, uv).r;
+    bool onSurface = emissive.a > 0.0;
+
+    if (onSurface)
+    {
+        // ON SURFACE - find distance to edge
+        static const int SAMPLE_COUNT = 8;
+        static const float SAMPLE_DISTANCES[8] = { 1.0, 4.0, 8.0, 12.0, 16.0, 20.0, 26.0, 32.0 };
+
+        float lastOnSurface = 0.0;
+        float firstOffSurface = INNER_MARGIN + 1.0;
+
+        [unroll]
+        for (int i = 0; i < SAMPLE_COUNT; i++)
+        {
+            float dist = SAMPLE_DISTANCES[i];
+
+            float2 offsetL = float2(-texelSize.x * dist, 0);
+            float2 offsetR = float2( texelSize.x * dist, 0);
+            float2 offsetU = float2(0, -texelSize.y * dist);
+            float2 offsetD = float2(0,  texelSize.y * dist);
+
+            float aL = EmissiveTexture.Sample(Sampler, uv + offsetL).a;
+            float aR = EmissiveTexture.Sample(Sampler, uv + offsetR).a;
+            float aU = EmissiveTexture.Sample(Sampler, uv + offsetU).a;
+            float aD = EmissiveTexture.Sample(Sampler, uv + offsetD).a;
+
+            bool hitEdge = (aL < 0.5) || (aR < 0.5) || (aU < 0.5) || (aD < 0.5);
+
+            if (hitEdge)
+            {
+                firstOffSurface = dist;
+                break;
+            }
+            else
+            {
+                lastOnSurface = dist;
+            }
+        }
+
+        // Near SDF edge
+        if (firstOffSurface <= INNER_MARGIN)
+        {
+            float estimatedDist = (lastOnSurface + firstOffSurface) * 0.5;
+            float blendFactor = 1.0 - (estimatedDist / INNER_MARGIN);
+            sdfEdge = smoothstep(0.0, 1.0, blendFactor);
+        }
+    }
+    else
+    {
+        // OUTSIDE SURFACE
+        if (sdfDist <= outerMargin)
+        {
+            sdfEdge = 1.0 - (sdfDist / outerMargin);
+        }
+    }
+
+    // --- Combine: use max of both edge types (A + B style) ---
+    // Either SDF edge OR luminance edge triggers temporal blending
+    return max(sdfEdge, lumEdge);
+}
 
 float4 UDR2_Temporal_PS(PixelShaderInput input) : SV_Target0
 {
@@ -449,16 +622,38 @@ float4 UDR2_Temporal_PS(PixelShaderInput input) : SV_Target0
     // Sample current frame (from spatial pass)
     float3 current = InputTexture.Sample(Sampler, uv).rgb;
 
-    // Sample accumulated history
+    // Check if we're near an edge (extends further outside than edge correction)
+    float edgeFactor = GetEdgeBlendFactor(uv, 2.0);  // 2x outer margin for temporal
+
+    // Not near edge - return current frame directly (no temporal blending)
+    if (edgeFactor < 0.001)
+    {
+        return float4(current, 1.0);
+    }
+
+    // Near edge - apply temporal blending
     float3 history = HistoryTexture.Sample(Sampler, uv).rgb;
+
+    // Detect disocclusion: if current differs too much from history, object moved away
+    // In that case, reject history and use current frame
+    float3 diff = abs(current - history);
+    float colorDiff = max(diff.r, max(diff.g, diff.b));
+
+    static const float DISOCCLUSION_THRESHOLD = 0.045;  // Max color difference before rejecting history
+
+    // If change is too sharp, reduce history influence (object moved away)
+    float historyValidity = 1.0 - smoothstep(DISOCCLUSION_THRESHOLD * 0.5, DISOCCLUSION_THRESHOLD, colorDiff);
 
     // Running average: new_avg = old_avg * (1 - 1/N) + current * (1/N)
     // CurrentWeight = 1/N where N = number of frames to accumulate
-    // historyWeight = 1 - CurrentWeight = (N-1)/N
-    float historyWeight = 1.0 - CurrentWeight;
+    float historyWeight = (1.0 - CurrentWeight) * historyValidity;
+    float currentWeight = 1.0 - historyWeight;
 
-    // Blend: this creates a proper running average over N frames
-    float3 result = history * historyWeight + current * CurrentWeight;
+    // Blend temporal result based on edge proximity
+    float3 temporal = history * historyWeight + current * currentWeight;
+
+    // Interpolate between current (no temporal) and temporal based on edge factor
+    float3 result = lerp(current, temporal, edgeFactor);
 
     return float4(result, 1.0);
 }

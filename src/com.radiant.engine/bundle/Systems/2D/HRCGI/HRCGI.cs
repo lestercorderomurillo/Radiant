@@ -16,6 +16,7 @@ namespace com.radiant.engine.bundle;
 public class HRCGI : core.System
 {
     private const int FrustumCount = 4;
+    private const int MaxCascades = 11;  // Limits light propagation range but reduces passes significantly at high resolutions
     private static readonly int[] ProbeScales = { 4, 3, 2, 1 };
     private static readonly string[] QualityNames = { "Performance", "Balanced", "Ultra", "Native" };
     private int ProbeScaleIndex = 3;  // Default to Native (ProbeScale = 1)
@@ -97,7 +98,7 @@ public class HRCGI : core.System
 
     private void CalculateCascadeSizes()
     {
-        CascadeCount = (int)MathF.Ceiling(MathF.Log2(WorldSize.X));
+        CascadeCount = Math.Min((int)MathF.Ceiling(MathF.Log2(WorldSize.X)), MaxCascades);
         CascadeSizes = new Vector2[CascadeCount];
         MergeSizes = new Vector2[CascadeCount];
 

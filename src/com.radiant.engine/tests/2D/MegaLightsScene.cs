@@ -198,7 +198,7 @@ public class MegaLightsScene : Scene
         PrevMouse = mouse;
 
         Gizmos.Set("Scene", $"GI: {(UseHRCGI ? "HRCGI" : "RCGI")} [Tab] | Animation: {(IsAnimating ? "On" : "Off")} [Space]");
-        Gizmos.Set("Scene", $"Upscaler: {(UseUDR2 ? "UDR2 (Temporal)" : "UDR1 (Spatial)")} [F11]");
+        Gizmos.Set("Scene", $"Upscaler: {(UseUDR2 ? "UDR2 (Spatial + Temporal)" : "UDR1 (Spatial)")} [F11]");
         Gizmos.Set("Scene", "Left Click: Add Light | Right Click: Add Occluder");
     }
 
