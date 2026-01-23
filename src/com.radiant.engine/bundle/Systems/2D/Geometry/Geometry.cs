@@ -17,7 +17,6 @@ public class Geometry : core.System
     private Vector2 WorldBounds;
     private Vector2 SDFBounds;
     private float ScreenDiagonal;
-    private Rectangle BufferBounds;
     private int JFAPassCount;
 
     private RenderTarget2D JFAResult;
@@ -95,7 +94,6 @@ public class Geometry : core.System
 
     public override void Update()
     {
-        // Handle input
         var key = Keyboard.GetState();
 
         if (key.IsKeyDown(Keys.F2) && !PrevKeyState.IsKeyDown(Keys.F2))
@@ -119,19 +117,11 @@ public class Geometry : core.System
 
         UpdateGizmos();
     }
-    
+
     private void RenderEmissiveTexture()
     {
-        Renderer
-            .Reset()
-            .Configure(BlendState.AlphaBlend)
-            .Configure(SamplerState.PointClamp)
-            .SetTarget(EmissiveTexture)
-            .Clear(Color.Transparent);
+        Renderer.ClearShapes();
 
-        int count = 0;
-
-        // Render rectangles
         foreach (var e in Scene.ECS.View<Transform, Rectangle2D, Material>())
         {
             ref var transform = ref e.C1;
@@ -145,21 +135,10 @@ public class Geometry : core.System
             if (position.X + rect.Size.X >= 0 && position.X < WorldBounds.X &&
                 position.Y + rect.Size.Y >= 0 && position.Y < WorldBounds.Y)
             {
-                Renderer.DrawTexture(
-                    Renderer.GetSolidTexture(Color.White),
-                    position,
-                    new Rectangle(0, 0, 1, 1),
-                    mat.Emissive,
-                    0f,
-                    Vector2.Zero,
-                    rect.Size,
-                    SpriteEffects.None,
-                    0f);
-                count++;
+                Renderer.DrawRect(position, rect.Size, mat.Emissive);
             }
         }
 
-        // Render circles
         foreach (var e in Scene.ECS.View<Transform, Circle2D, Material>())
         {
             ref var transform = ref e.C1;
@@ -168,49 +147,23 @@ public class Geometry : core.System
 
             if (mat.Emissive.A == 0) continue;
 
-            float diameter = circle.Radius * 2;
-            Vector2 position = new Vector2(MathF.Round(transform.Position.X - circle.Radius), MathF.Round(transform.Position.Y - circle.Radius));
+            Vector2 center = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
 
-            if (position.X + diameter >= 0 && position.X < WorldBounds.X &&
-                position.Y + diameter >= 0 && position.Y < WorldBounds.Y)
+            if (center.X + circle.Radius >= 0 && center.X - circle.Radius < WorldBounds.X &&
+                center.Y + circle.Radius >= 0 && center.Y - circle.Radius < WorldBounds.Y)
             {
-                int texDiameter = Math.Max(1, (int)diameter);
-                var circleTexture = Renderer.GetCircleTexture(texDiameter);
-
-                Renderer.DrawTexture(
-                    circleTexture,
-                    position,
-                    null,
-                    mat.Emissive,
-                    0f,
-                    Vector2.Zero,
-                    Vector2.One,
-                    SpriteEffects.None,
-                    0f);
-                count++;
+                Renderer.DrawCircle(center, circle.Radius, mat.Emissive);
             }
         }
 
-        Renderer
-            .Commit()
-            .SetTarget(null);
-
-        EmissiveCount = count;
+        EmissiveCount = Renderer.ShapeBatchCount;
+        Renderer.Configure(BlendState.AlphaBlend).FlushShapes(EmissiveTexture, Color.Transparent);
     }
 
     private void RenderAbsorptionTexture()
     {
-        Renderer
-            .Reset()
-            .Configure(BlendState.AlphaBlend)
-            .Configure(SamplerState.PointClamp)
-            .SetTarget(AbsorptionTexture)
-            .Clear(Color.Transparent);
+        Renderer.ClearShapes();
 
-        int count = 0;
-        Rectangle screen = new Rectangle(0, 0, (int)WorldBounds.X, (int)WorldBounds.Y);
-
-        // Render rectangles
         foreach (var e in Scene.ECS.View<Transform, Rectangle2D, Material>())
         {
             ref var transform = ref e.C1;
@@ -219,19 +172,15 @@ public class Geometry : core.System
 
             if (mat.Albedo.A == 0) continue;
 
-            BufferBounds.X = (int)MathF.Round(transform.Position.X);
-            BufferBounds.Y = (int)MathF.Round(transform.Position.Y);
-            BufferBounds.Width = (int)rect.Size.X;
-            BufferBounds.Height = (int)rect.Size.Y;
+            Vector2 position = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
 
-            if (BufferBounds.Intersects(screen))
+            if (position.X + rect.Size.X >= 0 && position.X < WorldBounds.X &&
+                position.Y + rect.Size.Y >= 0 && position.Y < WorldBounds.Y)
             {
-                Renderer.DrawTexture(Renderer.GetSolidTexture(Color.White), BufferBounds, mat.Albedo);
-                count++;
+                Renderer.DrawRect(position, rect.Size, mat.Albedo);
             }
         }
 
-        // Render circles
         foreach (var e in Scene.ECS.View<Transform, Circle2D, Material>())
         {
             ref var transform = ref e.C1;
@@ -240,28 +189,17 @@ public class Geometry : core.System
 
             if (mat.Albedo.A == 0) continue;
 
-            int diameter = Math.Max(1, (int)(circle.Radius * 2));
-            int x = (int)MathF.Round(transform.Position.X - circle.Radius);
-            int y = (int)MathF.Round(transform.Position.Y - circle.Radius);
+            Vector2 center = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
 
-            BufferBounds.X = x;
-            BufferBounds.Y = y;
-            BufferBounds.Width = diameter;
-            BufferBounds.Height = diameter;
-
-            if (BufferBounds.Intersects(screen))
+            if (center.X + circle.Radius >= 0 && center.X - circle.Radius < WorldBounds.X &&
+                center.Y + circle.Radius >= 0 && center.Y - circle.Radius < WorldBounds.Y)
             {
-                var circleTexture = Renderer.GetCircleTexture(diameter);
-                Renderer.DrawTexture(circleTexture, new Rectangle(x, y, diameter, diameter), mat.Albedo);
-                count++;
+                Renderer.DrawCircle(center, circle.Radius, mat.Albedo);
             }
         }
 
-        Renderer
-            .Commit()
-            .SetTarget(null);
-
-        AbsorptionCount = count;
+        AbsorptionCount = Renderer.ShapeBatchCount;
+        Renderer.Configure(BlendState.AlphaBlend).FlushShapes(AbsorptionTexture, Color.Transparent);
     }
 
     private void RenderSDFTexture()
@@ -401,19 +339,16 @@ public class Geometry : core.System
 
     public override void OnResize()
     {
-        // Lazy resize - only rebuild if screen size actually changed
         Vector2 newSize = Renderer.ScreenSize;
         if (WorldBounds == newSize)
             return;
 
-        // Dispose old render targets
         EmissiveTexture?.Dispose();
         AbsorptionTexture?.Dispose();
         SDFTexture?.Dispose();
         JFATexture1?.Dispose();
         JFATexture2?.Dispose();
 
-        // Recalculate bounds
         WorldBounds = newSize;
         SDFBounds = new Vector2(
             (int)(WorldBounds.X * SDFScale),
@@ -423,7 +358,6 @@ public class Geometry : core.System
         float sdfDiagonal = SDFBounds.Length();
         JFAPassCount = (int)Math.Ceiling(Math.Log(sdfDiagonal, 2)) + 1;
 
-        // Recreate buffers
         InitializeGeometryBuffers();
         JFAResult = JFATexture1;
     }

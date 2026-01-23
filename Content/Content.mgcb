@@ -22,6 +22,12 @@
 /processorParam:DebugMode=Auto
 /build:shaders/Geometry.fx
 
+#begin InstancedShapes.fx
+/importer:EffectImporter
+/processor:EffectProcessor
+/processorParam:DebugMode=Auto
+/build:shaders/InstancedShapes.fx
+
 #begin RCGI.fx
 /importer:EffectImporter
 /processor:EffectProcessor

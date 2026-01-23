@@ -173,6 +173,17 @@ public class Renderer : IDisposable
     private readonly Stack<RenderTargetBinding[]> _renderTargetStack = new();
     private RenderTargetBinding[] _currentTargets = null;
 
+    // Instanced shape rendering
+    private const int DefaultShapeCapacity = 65536;
+    private const int MaxShapeCapacity = 4_000_000;
+    private VertexBuffer ShapeQuadBuffer;
+    private IndexBuffer ShapeIndexBuffer;
+    private DynamicVertexBuffer ShapeInstanceBuffer;
+    private Effect ShapeShader;
+    private Shape[] Shapes;
+    private int ShapeCount;
+    private int ShapeCapacity;
+
     #endregion
 
     #region Constructor
@@ -191,6 +202,7 @@ public class Renderer : IDisposable
             SamplerStates[i] = SamplerState.LinearClamp;
 
         InitializeQuad();
+        InitializeShapes();
         UpdateScreenInfo();
         UpdateScaledScreenInfo();
 
@@ -273,6 +285,161 @@ public class Renderer : IDisposable
         QuadIndexBuffer = new IndexBuffer(Device, IndexElementSize.SixteenBits, 6, BufferUsage.WriteOnly);
         QuadIndexBuffer.SetData(indices);
     }
+
+    #endregion
+
+    #region Shape Rendering
+
+    private void InitializeShapes()
+    {
+        var vertices = new ShapeQuadVertex[]
+        {
+            new(new Vector2(0, 0), new Vector2(0, 0)),
+            new(new Vector2(1, 0), new Vector2(1, 0)),
+            new(new Vector2(0, 1), new Vector2(0, 1)),
+            new(new Vector2(1, 1), new Vector2(1, 1))
+        };
+
+        ShapeQuadBuffer = new VertexBuffer(Device, ShapeQuadVertex.Declaration, 4, BufferUsage.WriteOnly);
+        ShapeQuadBuffer.SetData(vertices);
+
+        var indices = new short[] { 0, 1, 2, 2, 1, 3 };
+        ShapeIndexBuffer = new IndexBuffer(Device, IndexElementSize.SixteenBits, 6, BufferUsage.WriteOnly);
+        ShapeIndexBuffer.SetData(indices);
+
+        ShapeCapacity = DefaultShapeCapacity;
+        Shapes = new Shape[ShapeCapacity];
+        ShapeInstanceBuffer = new DynamicVertexBuffer(Device, Shape.Declaration, ShapeCapacity, BufferUsage.WriteOnly);
+    }
+
+    private void EnsureShapeCapacity(int required)
+    {
+        if (required <= ShapeCapacity) return;
+
+        int newCapacity = ShapeCapacity;
+        while (newCapacity < required && newCapacity < MaxShapeCapacity)
+            newCapacity *= 2;
+
+        if (newCapacity > MaxShapeCapacity)
+            newCapacity = MaxShapeCapacity;
+
+        Array.Resize(ref Shapes, newCapacity);
+        ShapeInstanceBuffer?.Dispose();
+        ShapeInstanceBuffer = new DynamicVertexBuffer(Device, Shape.Declaration, newCapacity, BufferUsage.WriteOnly);
+        ShapeCapacity = newCapacity;
+    }
+
+    /// <summary>
+    /// Adds a shape to the current batch. Call FlushShapes() to render.
+    /// </summary>
+    public Renderer DrawShape(Shape shape)
+    {
+        EnsureShapeCapacity(ShapeCount + 1);
+        Shapes[ShapeCount++] = shape;
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a rectangle shape to the current batch.
+    /// </summary>
+    public Renderer DrawRect(Vector2 position, Vector2 size, Color color)
+    {
+        return DrawShape(Shape.Rect(position, size, color));
+    }
+
+    /// <summary>
+    /// Adds a rectangle shape to the current batch.
+    /// </summary>
+    public Renderer DrawRect(float x, float y, float width, float height, Color color)
+    {
+        return DrawShape(Shape.Rect(x, y, width, height, color));
+    }
+
+    /// <summary>
+    /// Adds a circle shape to the current batch.
+    /// </summary>
+    public Renderer DrawCircle(Vector2 center, float radius, Color color)
+    {
+        return DrawShape(Shape.Circle(center, radius, color));
+    }
+
+    /// <summary>
+    /// Adds a circle shape to the current batch.
+    /// </summary>
+    public Renderer DrawCircle(float x, float y, float radius, Color color)
+    {
+        return DrawShape(Shape.Circle(x, y, radius, color));
+    }
+
+    /// <summary>
+    /// Adds a triangle shape to the current batch.
+    /// </summary>
+    public Renderer DrawTriangle(Vector2 position, Vector2 size, Color color)
+    {
+        return DrawShape(Shape.Triangle(position, size, color));
+    }
+
+    /// <summary>
+    /// Renders all batched shapes in a single draw call and clears the batch.
+    /// </summary>
+    /// <param name="target">Render target (null for backbuffer).</param>
+    /// <param name="clearColor">Optional clear color before rendering.</param>
+    public Renderer FlushShapes(RenderTarget2D target = null, Color? clearColor = null)
+    {
+        CommitTextures();
+
+        Device.SetRenderTarget(target);
+
+        if (clearColor.HasValue)
+            Device.Clear(clearColor.Value);
+
+        if (ShapeCount > 0)
+        {
+            ShapeInstanceBuffer.SetData(Shapes, 0, ShapeCount, SetDataOptions.Discard);
+
+            Device.BlendState = BlendState;
+            Device.DepthStencilState = DepthStencilState.None;
+            Device.RasterizerState = RasterizerState.CullNone;
+
+            Device.SetVertexBuffers(
+                new VertexBufferBinding(ShapeQuadBuffer, 0, 0),
+                new VertexBufferBinding(ShapeInstanceBuffer, 0, 1)
+            );
+            Device.Indices = ShapeIndexBuffer;
+
+            float width = target?.Width ?? Device.Viewport.Width;
+            float height = target?.Height ?? Device.Viewport.Height;
+            var viewProjection = Matrix.CreateOrthographicOffCenter(0, width, height, 0, 0, 1);
+
+            ShapeShader ??= GetShaderEffect("InstancedShapes");
+            ShapeShader.CurrentTechnique = ShapeShader.Techniques["Sharp"];
+            ShapeShader.Parameters["ViewProjection"]?.SetValue(viewProjection);
+
+            foreach (var pass in ShapeShader.CurrentTechnique.Passes)
+            {
+                pass.Apply();
+                Device.DrawInstancedPrimitives(PrimitiveType.TriangleList, 0, 0, 2, ShapeCount);
+            }
+
+            ShapeCount = 0;
+        }
+
+        return this;
+    }
+
+    /// <summary>
+    /// Clears the shape batch without rendering.
+    /// </summary>
+    public Renderer ClearShapes()
+    {
+        ShapeCount = 0;
+        return this;
+    }
+
+    /// <summary>
+    /// Current number of shapes in the batch.
+    /// </summary>
+    public int ShapeBatchCount => ShapeCount;
 
     #endregion
 
@@ -1095,6 +1262,10 @@ public class Renderer : IDisposable
         QuadVertexBuffer?.Dispose();
         QuadIndexBuffer?.Dispose();
         SpriteBatch?.Dispose();
+
+        ShapeQuadBuffer?.Dispose();
+        ShapeIndexBuffer?.Dispose();
+        ShapeInstanceBuffer?.Dispose();
 
         foreach (var texture in SolidTextureCache.Values)
             texture?.Dispose();
