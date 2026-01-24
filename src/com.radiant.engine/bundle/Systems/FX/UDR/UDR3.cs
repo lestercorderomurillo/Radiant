@@ -12,7 +12,7 @@ public class UDR3 : core.System
     public bool DebugRays = false;
 
     // Temporal parameters
-    public int FramesToAccumulate = 16;
+    public int FramesToAccumulate = 12;
 
     private RenderTarget2D SpatialTexture;
     private RenderTarget2D TemporalTexture;
