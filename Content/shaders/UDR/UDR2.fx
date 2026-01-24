@@ -242,7 +242,7 @@ float3 Sharpen(float3 color, NeighborhoodSamples neighborhood)
 float4 CorrectEdgesWithDebug(float3 color, float2 uv)
 {
     // Adjustable constants
-    static const float OUTER_MARGIN = 0.001;
+    static const float OUTER_MARGIN = 0.05;  // SDF is now -1 to 1
     static const float INNER_MARGIN = 24.0;
     static const float EDGE_BLEND = 0.55;
 
@@ -312,9 +312,11 @@ float4 CorrectEdgesWithDebug(float3 color, float2 uv)
     else
     {
         // OUTSIDE SURFACE - blend toward neighbor emissive colors
+        // SDF is now -1 to 1, use abs() for distance
+        float absDist = abs(sdfDist);
 
         // Far from any surface - no correction needed
-        if (sdfDist > OUTER_MARGIN)
+        if (absDist > OUTER_MARGIN)
         {
             return float4(color, 0.0);  // debug = 0 (no correction)
         }
@@ -342,8 +344,8 @@ float4 CorrectEdgesWithDebug(float3 color, float2 uv)
 
         surfaceColor /= surfaceWeight;
 
-        // Blend factor: 1 at edge (sdfDist=0), 0 at OUTER_MARGIN
-        float blendFactor = 1.0 - (sdfDist / OUTER_MARGIN);
+        // Blend factor: 1 at edge (absDist=0), 0 at OUTER_MARGIN
+        float blendFactor = 1.0 - (absDist / OUTER_MARGIN);
         blendFactor *= EDGE_BLEND;
 
         // debug = negative values for outside surface correction (0.5 - blendFactor maps to 0-0.5 range)
@@ -422,7 +424,7 @@ float4 UDR2_Spatial_PS(PixelShaderInput input) : SV_Target0
 // SDF-based edge detection for temporal blending
 float GetEdgeBlendFactor(float2 uv, float outerMarginMultiplier)
 {
-    static const float BASE_OUTER_MARGIN = 0.001;
+    static const float BASE_OUTER_MARGIN = 0.05;  // SDF is now -1 to 1, need larger margin
     static const float INNER_MARGIN = 20.0;
 
     float outerMargin = BASE_OUTER_MARGIN * outerMarginMultiplier;
@@ -485,10 +487,11 @@ float GetEdgeBlendFactor(float2 uv, float outerMarginMultiplier)
     }
     else
     {
-        // OUTSIDE SURFACE
-        if (sdfDist <= outerMargin)
+        // OUTSIDE SURFACE - SDF is now -1 to 1, use abs() for distance
+        float absDist = abs(sdfDist);
+        if (absDist <= outerMargin)
         {
-            sdfEdge = 1.0 - (sdfDist / outerMargin);
+            sdfEdge = 1.0 - (absDist / outerMargin);
         }
     }
 
