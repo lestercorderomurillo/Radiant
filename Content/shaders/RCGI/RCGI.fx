@@ -110,8 +110,9 @@ float4 Raymarch(float2 probeOrigin, float rayAngle)
         if (totalDistance >= RayRange)
             break;
         
-        float worldDistance = SceneSDFTexture.SampleLevel(SceneSDFSampler, rayPos, 0).r * SDFScale;
-        
+        float sdfValue = SceneSDFTexture.SampleLevel(SceneSDFSampler, rayPos, 0).r;
+        float worldDistance = max(0.0, sdfValue) * SDFScale;  // SDF: -1=inside, 0=edge, +1=outside
+
         if (worldDistance <= EPSILON)
         {
             if (totalDistance <= EPSILON && CascadeIndex != 0.0)
