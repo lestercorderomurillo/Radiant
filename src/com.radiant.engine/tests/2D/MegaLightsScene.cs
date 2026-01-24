@@ -31,7 +31,7 @@ public class MegaLightsScene : Scene
     private UDR1 UDR1System;
     private UDR2 UDR2System;
     private UDR3 UDR3System;
-    private Geometry GeometrySystem;
+    private Geometry Geometry;
     private GizmosRenderer Gizmos;
 
     private bool UseHRCGI = true;
@@ -47,15 +47,13 @@ public class MegaLightsScene : Scene
     public override void SetupECS()
     {
         ECS.AddSystem<PerformanceMonitor>();
-        GeometrySystem = ECS.AddSystem<Geometry>();
+        Geometry = ECS.AddSystem<Geometry>();
         HRCGISystem = ECS.AddSystem<HRCGI>();
         RCGISystem = ECS.AddSystem<RCGI>(enabled: false);
         UDR1System = ECS.AddSystem<UDR1>(enabled: false);
         UDR2System = ECS.AddSystem<UDR2>(enabled: false);
         UDR3System = ECS.AddSystem<UDR3>();
         Gizmos = ECS.AddSystem<GizmosRenderer>();
-
-        GeometrySystem.EnableSDF = false;
 
         base.SetupECS();
     }
@@ -250,7 +248,6 @@ public class MegaLightsScene : Scene
             RCGISystem.Enabled = false;
             HRCGISystem.Initialize();
             HRCGISystem.Enabled = true;
-            GeometrySystem.EnableSDF = false;
         }
         else
         {
@@ -258,7 +255,6 @@ public class MegaLightsScene : Scene
             HRCGISystem.Enabled = false;
             RCGISystem.Initialize();
             RCGISystem.Enabled = true;
-            GeometrySystem.EnableSDF = true;
         }
 
         UpdateUDRInput();

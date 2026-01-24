@@ -79,13 +79,13 @@ float4 UDR3(PixelShaderInput input) : SV_Target0
 
     if (DebugRays > 0.5)
     {
-        const float threshold = 0.002;
+        const float threshold = 0.001;
 
         // Sample SDF: negative = inside, 0 = edge, positive = outside
         float sdfDist = DetectSDFEdge(uv);
 
         // Show green ring near edge (where abs(sdf) is small)
-        if (abs(sdfDist) < threshold && abs(sdfDist) > 0.001)
+        if (abs(sdfDist) < threshold)
         {
             // Near edge - show as green
             return float4(lerp(result, float3(0.0, 1.0, 0.0), 0.8), 1.0);

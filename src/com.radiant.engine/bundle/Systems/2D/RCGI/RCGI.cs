@@ -11,7 +11,7 @@ public class RCGI : core.System
     private const float CascadeInterval = 1.0f;
     private const int MaxCascades = 8;
 
-    private Geometry GeometrySystem;
+    private Geometry Geometry;
     private GizmosRenderer Gizmos;
     private RenderTarget2D[] CascadeLayers;
     private RenderTarget2D FinalTexture;
@@ -52,7 +52,7 @@ public class RCGI : core.System
 
     public override void Initialize()
     {
-        GeometrySystem = Scene.ECS.GetSystem<Geometry>();
+        Geometry = Scene.ECS.GetSystem<Geometry>();
         Gizmos = Scene.ECS.GetSystem<GizmosRenderer>();
 
         ScreenSize = Renderer.ScaledSize;
@@ -65,6 +65,9 @@ public class RCGI : core.System
         InitializeRenderTargets();
 
         Renderer.RenderScaleChanged += OnRenderScaleChanged;
+
+        if (Geometry != null)
+            Geometry.EnableSDF = true;
     }
 
     private void OnRenderScaleChanged(float newScale)
@@ -194,8 +197,8 @@ public class RCGI : core.System
     {
         UpdateSkyParameters();
 
-        var emissive = GeometrySystem.EmissiveTexture;
-        var sdf = GeometrySystem.SDFTexture;
+        var emissive = Geometry.EmissiveTexture;
+        var sdf = Geometry.SDFTexture;
 
         Renderer.PushTargets();
 

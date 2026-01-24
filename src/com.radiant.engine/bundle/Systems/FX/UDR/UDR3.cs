@@ -15,7 +15,7 @@ public class UDR3 : core.System
 
     // Parameters
     public float DetailCorrection = 0f;
-    public bool DebugRays = false;
+    public bool DebugRays = true;
 
     private RenderTarget2D OutputTexture;
     private Vector2 OutputSize;
@@ -31,8 +31,10 @@ public class UDR3 : core.System
     {
         Gizmos = Scene.ECS.GetSystem<GizmosRenderer>();
         Geometry = Scene.ECS.GetSystem<Geometry>();
+        
         if (Geometry != null)
             Geometry.EnableSDF = true;
+
         OutputSize = Renderer.ScreenSize;
         CreateRenderTargets();
         ApplyRenderScale();

@@ -23,7 +23,7 @@ public class HRCGI : core.System
     private int ProbeScale => ProbeScales[ProbeScaleIndex];
     private int CascadeCount;
 
-    private Geometry GeometrySystem;
+    private Geometry Geometry;
     private GizmosRenderer Gizmos;
 
     // Single set of cascade surfaces - reused for each frustum (like GameMaker)
@@ -63,7 +63,7 @@ public class HRCGI : core.System
 
     public override void Initialize()
     {
-        GeometrySystem = Scene.ECS.GetSystem<Geometry>();
+        Geometry = Scene.ECS.GetSystem<Geometry>();
         Gizmos = Scene.ECS.GetSystem<GizmosRenderer>();
 
         WorldSize = new Vector2(Renderer.ScaledHigherPowerOfTwo, Renderer.ScaledHigherPowerOfTwo);
@@ -144,8 +144,8 @@ public class HRCGI : core.System
     {
         HandleDebugInput();
 
-        var emissive = GeometrySystem.EmissiveTexture;
-        var absorption = GeometrySystem.AbsorptionTexture;
+        var emissive = Geometry.EmissiveTexture;
+        var absorption = Geometry.AbsorptionTexture;
 
         // Push current targets to stack (avoids GPU sync from GetRenderTargets)
         Renderer.PushTargets();
@@ -329,8 +329,8 @@ public class HRCGI : core.System
         textureIndex -= FrustumCount;
 
         // Scene textures
-        if (textureIndex == 0) return GeometrySystem.EmissiveTexture;
-        return GeometrySystem.AbsorptionTexture;
+        if (textureIndex == 0) return Geometry.EmissiveTexture;
+        return Geometry.AbsorptionTexture;
     }
 
     public RenderTarget2D GetOutput() => FinalTexture;

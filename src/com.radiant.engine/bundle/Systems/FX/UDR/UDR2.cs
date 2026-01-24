@@ -16,7 +16,7 @@ public class UDR2 : core.System
     // Spatial parameters
     public float Sharpness = 0.6f;
     public bool EdgeCorrection = true;
-    public bool DebugRays = false;
+    public bool DebugRays = true;
 
     // Temporal parameters (adjustable)
     public int FramesToAccumulate = 10;         // Number of frames to average together (1 = no temporal, 10 = very smooth)
@@ -43,6 +43,9 @@ public class UDR2 : core.System
         ApplyRenderScale();
         PrevKeyState = Keyboard.GetState();
         FrameIndex = 0;
+
+        if (Geometry != null)
+            Geometry.EnableSDF = true;
     }
 
     public void SetInputSource(Func<Texture2D> source)
