@@ -31,6 +31,8 @@ public class UDR3 : core.System
     {
         Gizmos = Scene.ECS.GetSystem<GizmosRenderer>();
         Geometry = Scene.ECS.GetSystem<Geometry>();
+        if (Geometry != null)
+            Geometry.EnableSDF = true;
         OutputSize = Renderer.ScreenSize;
         CreateRenderTargets();
         ApplyRenderScale();

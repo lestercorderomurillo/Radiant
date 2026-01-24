@@ -9,7 +9,6 @@ SamplerState Sampler : register(s0);
 
 float2 InputSize;
 float2 OutputSize;
-float EdgeThreshold;
 float DebugRays;
 float FrameCount;
 
@@ -80,7 +79,7 @@ float4 UDR3(PixelShaderInput input) : SV_Target0
 
     if (DebugRays > 0.5)
     {
-        float threshold = EdgeThreshold > 0.0 ? EdgeThreshold : 0.02;
+        const float threshold = 0.002;
 
         // Sample SDF: negative = inside, 0 = edge, positive = outside
         float sdfDist = DetectSDFEdge(uv);
