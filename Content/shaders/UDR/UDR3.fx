@@ -12,6 +12,9 @@ float DebugRays;
 float FrameCount;
 float CurrentWeight;  // Dynamic weight from C#: 1/min(frameIndex+1, maxFrames)
 
+// Sharpening parameter
+static const float SHARPNESS = 0.5;  // 0 = off, 0.5 = moderate, 1.0 = strong
+
 // Edge correction thresholds (emissive overlay)
 static const float CORRECTION_OUTER_MARGIN = 0.0030;  // SDF distance outside surface
 static const float CORRECTION_INNER_MARGIN = 64.00;   // pixels from edge inside surface
@@ -162,6 +165,135 @@ float Lanczos2(float x)
     return (sin(xpi) / xpi) * (sin(xpi / 2.0) / (xpi / 2.0));
 }
 
+// 12-tap neighborhood sample data (from UDR2)
+//    b c
+//  e f g h
+//  i j k l
+//    n o
+struct NeighborhoodSamples
+{
+    float3 b, c;           // Row -1
+    float3 e, f, g, h;     // Row 0
+    float3 i, j, k, l;     // Row 1
+    float3 n, o;           // Row 2
+};
+
+struct NeighborhoodLuminance
+{
+    float b, c;
+    float e, f, g, h;
+    float i, j, k, l;
+    float n, o;
+};
+
+struct EdgeInfo
+{
+    float horizontal;
+    float vertical;
+    float strength;
+    float hWeight;
+    float vWeight;
+};
+
+NeighborhoodSamples SampleNeighborhood(float2 baseUV, float2 texelSize)
+{
+    NeighborhoodSamples neighborhood;
+
+    neighborhood.b = InputTexture.Sample(Sampler, baseUV + float2( 0, -1) * texelSize).rgb;
+    neighborhood.c = InputTexture.Sample(Sampler, baseUV + float2( 1, -1) * texelSize).rgb;
+
+    neighborhood.e = InputTexture.Sample(Sampler, baseUV + float2(-1,  0) * texelSize).rgb;
+    neighborhood.f = InputTexture.Sample(Sampler, baseUV + float2( 0,  0) * texelSize).rgb;
+    neighborhood.g = InputTexture.Sample(Sampler, baseUV + float2( 1,  0) * texelSize).rgb;
+    neighborhood.h = InputTexture.Sample(Sampler, baseUV + float2( 2,  0) * texelSize).rgb;
+
+    neighborhood.i = InputTexture.Sample(Sampler, baseUV + float2(-1,  1) * texelSize).rgb;
+    neighborhood.j = InputTexture.Sample(Sampler, baseUV + float2( 0,  1) * texelSize).rgb;
+    neighborhood.k = InputTexture.Sample(Sampler, baseUV + float2( 1,  1) * texelSize).rgb;
+    neighborhood.l = InputTexture.Sample(Sampler, baseUV + float2( 2,  1) * texelSize).rgb;
+
+    neighborhood.n = InputTexture.Sample(Sampler, baseUV + float2( 0,  2) * texelSize).rgb;
+    neighborhood.o = InputTexture.Sample(Sampler, baseUV + float2( 1,  2) * texelSize).rgb;
+
+    return neighborhood;
+}
+
+NeighborhoodLuminance GetNeighborhoodLuminance(NeighborhoodSamples neighborhood)
+{
+    NeighborhoodLuminance lum;
+
+    lum.b = GetLuminance(neighborhood.b); lum.c = GetLuminance(neighborhood.c);
+    lum.e = GetLuminance(neighborhood.e); lum.f = GetLuminance(neighborhood.f);
+    lum.g = GetLuminance(neighborhood.g); lum.h = GetLuminance(neighborhood.h);
+    lum.i = GetLuminance(neighborhood.i); lum.j = GetLuminance(neighborhood.j);
+    lum.k = GetLuminance(neighborhood.k); lum.l = GetLuminance(neighborhood.l);
+    lum.n = GetLuminance(neighborhood.n); lum.o = GetLuminance(neighborhood.o);
+
+    return lum;
+}
+
+EdgeInfo FindEdges(NeighborhoodLuminance lum)
+{
+    EdgeInfo edge;
+
+    // Horizontal edge detection
+    float edgeH1 = abs(lum.e - lum.f) + abs(lum.f - lum.g) + abs(lum.g - lum.h);
+    float edgeH2 = abs(lum.i - lum.j) + abs(lum.j - lum.k) + abs(lum.k - lum.l);
+    edge.horizontal = edgeH1 + edgeH2;
+
+    // Vertical edge detection
+    float edgeV1 = abs(lum.b - lum.f) + abs(lum.f - lum.j) + abs(lum.j - lum.n);
+    float edgeV2 = abs(lum.c - lum.g) + abs(lum.g - lum.k) + abs(lum.k - lum.o);
+    edge.vertical = edgeV1 + edgeV2;
+
+    // Determine dominant edge direction
+    float edgeTotal = edge.horizontal + edge.vertical + 0.0001;
+    edge.hWeight = edge.vertical / edgeTotal;   // More vertical edges = use horizontal interpolation
+    edge.vWeight = edge.horizontal / edgeTotal; // More horizontal edges = use vertical interpolation
+
+    // Edge strength determines blend between Lanczos and edge-aware
+    edge.strength = saturate((edge.horizontal + edge.vertical) * 4.0);
+
+    return edge;
+}
+
+float3 RefineEdges(NeighborhoodSamples neighborhood, float3 lanczos, float2 frac, EdgeInfo edge)
+{
+    // Compute edge-aware samples (stretch along edges)
+    float3 hBlend = lerp(lerp(neighborhood.e, neighborhood.f, frac.x), lerp(neighborhood.g, neighborhood.h, frac.x), 0.5);
+    float3 vBlend = lerp(lerp(neighborhood.b, neighborhood.c, frac.x), lerp(neighborhood.n, neighborhood.o, frac.x), 0.5);
+
+    // Blend based on edge direction
+    float3 edgeAware = lerp(
+        lerp(lanczos, hBlend, edge.hWeight * edge.strength * 0.5),
+        lerp(lanczos, vBlend, edge.vWeight * edge.strength * 0.5),
+        0.5
+    );
+
+    // Final blend: use more Lanczos in smooth areas, more edge-aware on edges
+    return lerp(lanczos, edgeAware, edge.strength * 0.7);
+}
+
+// RCAS-style adaptive sharpening (from UDR2)
+float3 Sharpen(float3 color, NeighborhoodSamples neighborhood)
+{
+    // Get local contrast
+    float3 minColor = min(min(min(neighborhood.f, neighborhood.g), neighborhood.j), neighborhood.k);
+    float3 maxColor = max(max(max(neighborhood.f, neighborhood.g), neighborhood.j), neighborhood.k);
+    float3 contrast = maxColor - minColor;
+
+    // Adaptive sharpening - less sharpening in high contrast areas
+    float contrastLum = GetLuminance(contrast);
+    float adaptiveSharp = SHARPNESS * saturate(1.0 - contrastLum * 2.0);
+
+    // Sharpen using the bilinear neighborhood
+    float3 neighbors = (neighborhood.f + neighborhood.g + neighborhood.j + neighborhood.k) * 0.25;
+    float3 sharpened = color + (color - neighbors) * adaptiveSharp;
+
+    // Clamp to prevent ringing artifacts
+    return clamp(sharpened, minColor, maxColor);
+}
+
 float4 UDR3_Spatial(PixelShaderInput input) : SV_Target0
 {
     float2 uv = input.UV;
@@ -170,9 +302,10 @@ float4 UDR3_Spatial(PixelShaderInput input) : SV_Target0
     float2 srcPos = uv * InputSize - 0.5;
     float2 srcBase = floor(srcPos);
     float2 f = srcPos - srcBase;
+    float2 baseUV = (srcBase + 0.5) * texelSize;
 
-    float3 result = 0;
-    float3 emissive = 0;
+    // Step 1: Lanczos on full screen
+    float3 lanczos = 0;
     float totalWeight = 0;
 
     [unroll] for (int ky = -1; ky <= 2; ky++)
@@ -181,19 +314,46 @@ float4 UDR3_Spatial(PixelShaderInput input) : SV_Target0
         {
             float2 samplePos = (srcBase + float2(kx, ky) + 0.5) / InputSize;
             float weight = Lanczos2(kx - f.x) * Lanczos2(ky - f.y);
-            result += InputTexture.SampleLevel(Sampler, samplePos, 0).rgb * weight;
-            emissive += EmissiveTexture.SampleLevel(Sampler, samplePos, 0).rgb * weight;
+            lanczos += InputTexture.SampleLevel(Sampler, samplePos, 0).rgb * weight;
             totalWeight += weight;
         }
     }
 
-    result /= totalWeight;
-    emissive /= totalWeight;
+    lanczos /= totalWeight;
+    float3 result = lanczos;
 
+    // Step 2: Edge-direction-aware refinement + sharpening only near SDF edges (masked areas)
+    float sdfDist = DetectSDFEdge(uv);
+
+    const float REFINE_OUTER_MARGIN = 0.05;   // SDF distance outside for refinement
+    const float REFINE_INNER_MARGIN = 32.0;   // pixels inside for refinement
+
+    float refineFactor = GetEdgeBlendFactorEx(uv, REFINE_OUTER_MARGIN, REFINE_INNER_MARGIN);
+
+    if (refineFactor > 0.001)
+    {
+        // Sample neighborhood and detect edges
+        NeighborhoodSamples samples = SampleNeighborhood(baseUV, texelSize);
+        NeighborhoodLuminance luminance = GetNeighborhoodLuminance(samples);
+        EdgeInfo edge = FindEdges(luminance);
+
+        // Refine edges (stretch interpolation along edge direction)
+        float3 refined = RefineEdges(samples, lanczos, f, edge);
+
+        // Sharpen (RCAS-style adaptive)
+        if (SHARPNESS > 0.0)
+        {
+            refined = Sharpen(refined, samples);
+        }
+
+        // Blend refined result based on mask proximity
+        result = lerp(lanczos, refined, refineFactor);
+    }
+
+    // Step 3: Emissive correction near edges
     const float indoorThreshold = 0.0045;
     const float outdoorThreshold = 0.0012;
 
-    float sdfDist = DetectSDFEdge(uv);
     float edgeIntensity = 0.0;
 
     if (sdfDist < 0 && sdfDist > -indoorThreshold)
