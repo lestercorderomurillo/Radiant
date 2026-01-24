@@ -112,7 +112,7 @@ public class Renderer : IDisposable
 
     #region Render Scale (Dynamic Resolution)
 
-    private float _renderScale = 1.0f;
+    private float RenderScaleValue = 1.0f;
 
     /// <summary>
     /// Render scale factor for dynamic resolution (0.25 to 1.0).
@@ -120,14 +120,14 @@ public class Renderer : IDisposable
     /// </summary>
     public float RenderScale
     {
-        get => _renderScale;
+        get => RenderScaleValue;
         set
         {
-            if (Math.Abs(_renderScale - value) > 0.001f)
+            if (Math.Abs(RenderScaleValue - value) > 0.001f)
             {
-                _renderScale = Math.Clamp(value, 0.25f, 1.0f);
+                RenderScaleValue = Math.Clamp(value, 0.25f, 1.0f);
                 UpdateScaledScreenInfo();
-                RenderScaleChanged?.Invoke(_renderScale);
+                RenderScaleChanged?.Invoke(RenderScaleValue);
             }
         }
     }
@@ -167,11 +167,11 @@ public class Renderer : IDisposable
     private SamplerState[] SamplerStates = new SamplerState[8];
     private int SamplerDirtyMask = 0;
 
-    private readonly RenderTargetBinding[] _twoTargetBindings = new RenderTargetBinding[2];
-    private readonly RenderTargetBinding[] _threeTargetBindings = new RenderTargetBinding[3];
-    private readonly RenderTargetBinding[] _fourTargetBindings = new RenderTargetBinding[4];
-    private readonly Stack<RenderTargetBinding[]> _renderTargetStack = new();
-    private RenderTargetBinding[] _currentTargets = null;
+    private readonly RenderTargetBinding[] TwoTargetBindings = new RenderTargetBinding[2];
+    private readonly RenderTargetBinding[] ThreeTargetBindings = new RenderTargetBinding[3];
+    private readonly RenderTargetBinding[] FourTargetBindings = new RenderTargetBinding[4];
+    private readonly Stack<RenderTargetBinding[]> RenderTargetStack = new();
+    private RenderTargetBinding[] CurrentTargets = null;
 
     // Instanced shape rendering
     private const int DefaultShapeCapacity = 65536;
@@ -238,8 +238,8 @@ public class Renderer : IDisposable
 
     private void UpdateScaledScreenInfo()
     {
-        ScaledWidth = Math.Max(1, (int)(ScreenWidth * _renderScale));
-        ScaledHeight = Math.Max(1, (int)(ScreenHeight * _renderScale));
+        ScaledWidth = Math.Max(1, (int)(ScreenWidth * RenderScaleValue));
+        ScaledHeight = Math.Max(1, (int)(ScreenHeight * RenderScaleValue));
         ScaledSize = new Vector2(ScaledWidth, ScaledHeight);
 
         int scaledMax = Math.Max(ScaledWidth, ScaledHeight);
@@ -664,7 +664,7 @@ public class Renderer : IDisposable
     /// </summary>
     public Renderer PushTargets()
     {
-        _renderTargetStack.Push(_currentTargets);
+        RenderTargetStack.Push(CurrentTargets);
         return this;
     }
 
@@ -673,15 +673,15 @@ public class Renderer : IDisposable
     /// </summary>
     public Renderer PopTargets()
     {
-        if (_renderTargetStack.Count > 0)
+        if (RenderTargetStack.Count > 0)
         {
-            var targets = _renderTargetStack.Pop();
+            var targets = RenderTargetStack.Pop();
             CommitTextures();
             if (targets == null)
                 Device.SetRenderTarget(null);
             else
                 Device.SetRenderTargets(targets);
-            _currentTargets = targets;
+            CurrentTargets = targets;
         }
         return this;
     }
@@ -691,7 +691,7 @@ public class Renderer : IDisposable
     {
         CommitTextures();
         Device.SetRenderTarget(target);
-        _currentTargets = target != null ? new[] { new RenderTargetBinding(target) } : null;
+        CurrentTargets = target != null ? new[] { new RenderTargetBinding(target) } : null;
         return this;
     }
 
@@ -699,10 +699,10 @@ public class Renderer : IDisposable
     public Renderer SetTargets(RenderTarget2D target0, RenderTarget2D target1)
     {
         CommitTextures();
-        _twoTargetBindings[0] = new RenderTargetBinding(target0);
-        _twoTargetBindings[1] = new RenderTargetBinding(target1);
-        Device.SetRenderTargets(_twoTargetBindings);
-        _currentTargets = (RenderTargetBinding[])_twoTargetBindings.Clone();
+        TwoTargetBindings[0] = new RenderTargetBinding(target0);
+        TwoTargetBindings[1] = new RenderTargetBinding(target1);
+        Device.SetRenderTargets(TwoTargetBindings);
+        CurrentTargets = (RenderTargetBinding[])TwoTargetBindings.Clone();
         return this;
     }
 
@@ -710,11 +710,11 @@ public class Renderer : IDisposable
     public Renderer SetTargets(RenderTarget2D target0, RenderTarget2D target1, RenderTarget2D target2)
     {
         CommitTextures();
-        _threeTargetBindings[0] = new RenderTargetBinding(target0);
-        _threeTargetBindings[1] = new RenderTargetBinding(target1);
-        _threeTargetBindings[2] = new RenderTargetBinding(target2);
-        Device.SetRenderTargets(_threeTargetBindings);
-        _currentTargets = (RenderTargetBinding[])_threeTargetBindings.Clone();
+        ThreeTargetBindings[0] = new RenderTargetBinding(target0);
+        ThreeTargetBindings[1] = new RenderTargetBinding(target1);
+        ThreeTargetBindings[2] = new RenderTargetBinding(target2);
+        Device.SetRenderTargets(ThreeTargetBindings);
+        CurrentTargets = (RenderTargetBinding[])ThreeTargetBindings.Clone();
         return this;
     }
 
@@ -722,12 +722,12 @@ public class Renderer : IDisposable
     public Renderer SetTargets(RenderTarget2D target0, RenderTarget2D target1, RenderTarget2D target2, RenderTarget2D target3)
     {
         CommitTextures();
-        _fourTargetBindings[0] = new RenderTargetBinding(target0);
-        _fourTargetBindings[1] = new RenderTargetBinding(target1);
-        _fourTargetBindings[2] = new RenderTargetBinding(target2);
-        _fourTargetBindings[3] = new RenderTargetBinding(target3);
-        Device.SetRenderTargets(_fourTargetBindings);
-        _currentTargets = (RenderTargetBinding[])_fourTargetBindings.Clone();
+        FourTargetBindings[0] = new RenderTargetBinding(target0);
+        FourTargetBindings[1] = new RenderTargetBinding(target1);
+        FourTargetBindings[2] = new RenderTargetBinding(target2);
+        FourTargetBindings[3] = new RenderTargetBinding(target3);
+        Device.SetRenderTargets(FourTargetBindings);
+        CurrentTargets = (RenderTargetBinding[])FourTargetBindings.Clone();
         return this;
     }
 
@@ -739,7 +739,7 @@ public class Renderer : IDisposable
         for (int i = 0; i < targets.Length; i++)
             bindings[i] = new RenderTargetBinding(targets[i]);
         Device.SetRenderTargets(bindings);
-        _currentTargets = bindings;
+        CurrentTargets = bindings;
         return this;
     }
 
@@ -748,7 +748,7 @@ public class Renderer : IDisposable
     {
         CommitTextures();
         Device.SetRenderTargets(bindings);
-        _currentTargets = bindings;
+        CurrentTargets = bindings;
         return this;
     }
 

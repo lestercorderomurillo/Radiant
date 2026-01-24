@@ -1,4 +1,3 @@
-// GameLoop.cs - Optimized frame pacing version
 using com.radiant.engine.core;
 using Microsoft.Xna.Framework;
 using System.Collections.Generic;

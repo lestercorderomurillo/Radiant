@@ -9,29 +9,24 @@ namespace com.radiant.engine.core;
 
 public class SpatialIndex
 {
-    private readonly ECS ecs;
-    private readonly float cellSize;
-    private readonly float inverseCellSize;
+    private readonly ECS Ecs;
+    private readonly float CellSize;
+    private readonly float InverseCellSize;
 
     private const int InitialCellCapacity = 64;
     private const int MaxEntitiesPerCell = 256;
 
-    // Cell storage - grows on demand
-    private readonly Dictionary<long, CellData> cells;
+    private readonly Dictionary<long, CellData> Cells;
 
-    // Entity tracking - dictionary-based, zero memory when empty
-    private readonly Dictionary<int, EntitySpatialData> entityData;
+    private readonly Dictionary<int, EntitySpatialData> EntityData;
 
-    // Exact position lookup
-    private readonly Dictionary<long, int> exactLookup;
+    private readonly Dictionary<long, int> ExactLookup;
 
-    // Result buffer - grows as needed
-    private int[] resultArray;
-    private int resultCount;
+    private int[] ResultArray;
+    private int ResultCount;
 
-    // Sorting buffers - grows as needed
-    private float[] distanceCache;
-    private int[] sortBuffer;
+    private float[] DistanceCache;
+    private int[] SortBuffer;
 
     private struct CellData
     {
@@ -55,17 +50,17 @@ public class SpatialIndex
 
     public SpatialIndex(ECS ecs, float cellSize = 64f)
     {
-        this.ecs = ecs;
-        this.cellSize = cellSize;
-        this.inverseCellSize = 1f / cellSize;
+        Ecs = ecs;
+        CellSize = cellSize;
+        InverseCellSize = 1f / cellSize;
 
-        cells = new Dictionary<long, CellData>(InitialCellCapacity);
-        entityData = new Dictionary<int, EntitySpatialData>();
-        exactLookup = new Dictionary<long, int>();
+        Cells = new Dictionary<long, CellData>(InitialCellCapacity);
+        EntityData = new Dictionary<int, EntitySpatialData>();
+        ExactLookup = new Dictionary<long, int>();
 
-        resultArray = new int[1024];
-        distanceCache = new float[1024];
-        sortBuffer = new int[1024];
+        ResultArray = new int[1024];
+        DistanceCache = new float[1024];
+        SortBuffer = new int[1024];
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -91,9 +86,9 @@ public class SpatialIndex
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ToCell(float px, float py, float pz, out int cx, out int cy, out int cz)
     {
-        cx = (int)MathF.Floor(px * inverseCellSize);
-        cy = (int)MathF.Floor(py * inverseCellSize);
-        cz = (int)MathF.Floor(pz * inverseCellSize);
+        cx = (int)MathF.Floor(px * InverseCellSize);
+        cy = (int)MathF.Floor(py * InverseCellSize);
+        cz = (int)MathF.Floor(pz * InverseCellSize);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -118,12 +113,12 @@ public class SpatialIndex
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void EnsureResultCapacity(int required)
     {
-        if (resultArray.Length < required)
+        if (ResultArray.Length < required)
         {
-            int newSize = Math.Max(resultArray.Length * 2, required);
-            Array.Resize(ref resultArray, newSize);
-            Array.Resize(ref distanceCache, newSize);
-            Array.Resize(ref sortBuffer, newSize);
+            int newSize = Math.Max(ResultArray.Length * 2, required);
+            Array.Resize(ref ResultArray, newSize);
+            Array.Resize(ref DistanceCache, newSize);
+            Array.Resize(ref SortBuffer, newSize);
         }
     }
 
@@ -139,39 +134,33 @@ public class SpatialIndex
         long newCellKey = ToCellKey(px, py, pz);
         long newExactKey = ToExactKey(px, py, pz);
 
-        if (entityData.TryGetValue(entity, out var existing))
+        if (EntityData.TryGetValue(entity, out var existing))
         {
-            // Already tracked - check if cell changed
             if (existing.CellKey == newCellKey)
             {
-                // Same cell, just update position
                 existing.Position = new Vector3(px, py, pz);
 
-                // Update exact lookup
                 if (existing.ExactKey != newExactKey)
                 {
-                    if (exactLookup.TryGetValue(existing.ExactKey, out int e) && e == entity)
-                        exactLookup.Remove(existing.ExactKey);
+                    if (ExactLookup.TryGetValue(existing.ExactKey, out int e) && e == entity)
+                        ExactLookup.Remove(existing.ExactKey);
                     existing.ExactKey = newExactKey;
-                    exactLookup[newExactKey] = entity;
+                    ExactLookup[newExactKey] = entity;
                 }
 
-                entityData[entity] = existing;
+                EntityData[entity] = existing;
                 return;
             }
 
-            // Cell changed - remove from old cell
             RemoveFromCell(entity, existing);
         }
 
-        // Add to new cell
-        if (!cells.TryGetValue(newCellKey, out var cell))
+        if (!Cells.TryGetValue(newCellKey, out var cell))
         {
             cell = new CellData(MaxEntitiesPerCell);
-            cells[newCellKey] = cell;
+            Cells[newCellKey] = cell;
         }
 
-        // Grow cell if needed
         if (cell.Count >= cell.Entities.Length)
         {
             Array.Resize(ref cell.Entities, cell.Entities.Length * 2);
@@ -179,9 +168,8 @@ public class SpatialIndex
 
         int indexInCell = cell.Count++;
         cell.Entities[indexInCell] = entity;
-        cells[newCellKey] = cell;
+        Cells[newCellKey] = cell;
 
-        // Update entity data
         var newData = new EntitySpatialData
         {
             CellKey = newCellKey,
@@ -189,18 +177,17 @@ public class SpatialIndex
             Position = new Vector3(px, py, pz),
             ExactKey = newExactKey
         };
-        entityData[entity] = newData;
+        EntityData[entity] = newData;
 
-        // Update exact lookup (remove old first if exists)
-        if (existing.ExactKey != 0 && exactLookup.TryGetValue(existing.ExactKey, out int old) && old == entity)
-            exactLookup.Remove(existing.ExactKey);
-        exactLookup[newExactKey] = entity;
+        if (existing.ExactKey != 0 && ExactLookup.TryGetValue(existing.ExactKey, out int old) && old == entity)
+            ExactLookup.Remove(existing.ExactKey);
+        ExactLookup[newExactKey] = entity;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void RemoveFromCell(int entity, EntitySpatialData data)
     {
-        if (!cells.TryGetValue(data.CellKey, out var cell))
+        if (!Cells.TryGetValue(data.CellKey, out var cell))
             return;
 
         int indexInCell = data.IndexInCell;
@@ -208,39 +195,35 @@ public class SpatialIndex
 
         if (indexInCell < lastIndex)
         {
-            // Swap with last entity
             int lastEntity = cell.Entities[lastIndex];
             cell.Entities[indexInCell] = lastEntity;
 
-            // Update the swapped entity's index
-            if (entityData.TryGetValue(lastEntity, out var lastData))
+            if (EntityData.TryGetValue(lastEntity, out var lastData))
             {
                 lastData.IndexInCell = indexInCell;
-                entityData[lastEntity] = lastData;
+                EntityData[lastEntity] = lastData;
             }
         }
 
         cell.Count--;
-        cells[data.CellKey] = cell;
+        Cells[data.CellKey] = cell;
 
-        // Remove empty cells
         if (cell.Count == 0)
-            cells.Remove(data.CellKey);
+            Cells.Remove(data.CellKey);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Remove(int entity)
     {
-        if (!entityData.TryGetValue(entity, out var data))
+        if (!EntityData.TryGetValue(entity, out var data))
             return;
 
         RemoveFromCell(entity, data);
 
-        // Remove from exact lookup
-        if (exactLookup.TryGetValue(data.ExactKey, out int e) && e == entity)
-            exactLookup.Remove(data.ExactKey);
+        if (ExactLookup.TryGetValue(data.ExactKey, out int e) && e == entity)
+            ExactLookup.Remove(data.ExactKey);
 
-        entityData.Remove(entity);
+        EntityData.Remove(entity);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -251,17 +234,17 @@ public class SpatialIndex
 
     public void Clear()
     {
-        cells.Clear();
-        entityData.Clear();
-        exactLookup.Clear();
+        Cells.Clear();
+        EntityData.Clear();
+        ExactLookup.Clear();
     }
 
     public void SyncAll()
     {
         Clear();
-        foreach (int entity in ecs.Query<Transform>())
+        foreach (int entity in Ecs.Query<Transform>())
         {
-            ref var t = ref ecs.GetComponent<Transform>(entity);
+            ref var t = ref Ecs.GetComponent<Transform>(entity);
             Insert(entity, t.Position.X, t.Position.Y, t.Position.Z);
         }
     }
@@ -270,20 +253,20 @@ public class SpatialIndex
     public int? AtExact(Vector3 position)
     {
         long key = ToExactKey(position.X, position.Y, position.Z);
-        return exactLookup.TryGetValue(key, out int entity) ? entity : null;
+        return ExactLookup.TryGetValue(key, out int entity) ? entity : null;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int? AtExact(float x, float y, float z)
     {
         long key = ToExactKey(x, y, z);
-        return exactLookup.TryGetValue(key, out int entity) ? entity : null;
+        return ExactLookup.TryGetValue(key, out int entity) ? entity : null;
     }
 
     public ReadOnlySpan<int> InCell(int cx, int cy, int cz)
     {
         long key = PackCell(cx, cy, cz);
-        if (!cells.TryGetValue(key, out var cell))
+        if (!Cells.TryGetValue(key, out var cell))
             return ReadOnlySpan<int>.Empty;
 
         return new ReadOnlySpan<int>(cell.Entities, 0, cell.Count);
@@ -302,15 +285,15 @@ public class SpatialIndex
 
     public ReadOnlySpan<int> InRadius(float cx, float cy, float cz, float radius)
     {
-        resultCount = 0;
+        ResultCount = 0;
         float radiusSq = radius * radius;
 
-        int minX = (int)MathF.Floor((cx - radius) * inverseCellSize);
-        int maxX = (int)MathF.Floor((cx + radius) * inverseCellSize);
-        int minY = (int)MathF.Floor((cy - radius) * inverseCellSize);
-        int maxY = (int)MathF.Floor((cy + radius) * inverseCellSize);
-        int minZ = (int)MathF.Floor((cz - radius) * inverseCellSize);
-        int maxZ = (int)MathF.Floor((cz + radius) * inverseCellSize);
+        int minX = (int)MathF.Floor((cx - radius) * InverseCellSize);
+        int maxX = (int)MathF.Floor((cx + radius) * InverseCellSize);
+        int minY = (int)MathF.Floor((cy - radius) * InverseCellSize);
+        int maxY = (int)MathF.Floor((cy + radius) * InverseCellSize);
+        int minZ = (int)MathF.Floor((cz - radius) * InverseCellSize);
+        int maxZ = (int)MathF.Floor((cz + radius) * InverseCellSize);
 
         for (int x = minX; x <= maxX; x++)
         {
@@ -319,14 +302,14 @@ public class SpatialIndex
                 for (int z = minZ; z <= maxZ; z++)
                 {
                     long key = PackCell(x, y, z);
-                    if (!cells.TryGetValue(key, out var cell)) continue;
+                    if (!Cells.TryGetValue(key, out var cell)) continue;
 
-                    EnsureResultCapacity(resultCount + cell.Count);
+                    EnsureResultCapacity(ResultCount + cell.Count);
 
                     for (int i = 0; i < cell.Count; i++)
                     {
                         int entity = cell.Entities[i];
-                        if (!entityData.TryGetValue(entity, out var data)) continue;
+                        if (!EntityData.TryGetValue(entity, out var data)) continue;
 
                         float dx = data.Position.X - cx;
                         float dy = data.Position.Y - cy;
@@ -334,50 +317,50 @@ public class SpatialIndex
                         float distSq = dx * dx + dy * dy + dz * dz;
 
                         if (distSq <= radiusSq)
-                            resultArray[resultCount++] = entity;
+                            ResultArray[ResultCount++] = entity;
                     }
                 }
             }
         }
 
-        return new ReadOnlySpan<int>(resultArray, 0, resultCount);
+        return new ReadOnlySpan<int>(ResultArray, 0, ResultCount);
     }
 
     public ReadOnlySpan<int> InRadius2D(float cx, float cz, float radius, float y = 0)
     {
-        resultCount = 0;
+        ResultCount = 0;
         float radiusSq = radius * radius;
 
-        int minX = (int)MathF.Floor((cx - radius) * inverseCellSize);
-        int maxX = (int)MathF.Floor((cx + radius) * inverseCellSize);
-        int minZ = (int)MathF.Floor((cz - radius) * inverseCellSize);
-        int maxZ = (int)MathF.Floor((cz + radius) * inverseCellSize);
-        int cellY = (int)MathF.Floor(y * inverseCellSize);
+        int minX = (int)MathF.Floor((cx - radius) * InverseCellSize);
+        int maxX = (int)MathF.Floor((cx + radius) * InverseCellSize);
+        int minZ = (int)MathF.Floor((cz - radius) * InverseCellSize);
+        int maxZ = (int)MathF.Floor((cz + radius) * InverseCellSize);
+        int cellY = (int)MathF.Floor(y * InverseCellSize);
 
         for (int x = minX; x <= maxX; x++)
         {
             for (int z = minZ; z <= maxZ; z++)
             {
                 long key = PackCell(x, cellY, z);
-                if (!cells.TryGetValue(key, out var cell)) continue;
+                if (!Cells.TryGetValue(key, out var cell)) continue;
 
-                EnsureResultCapacity(resultCount + cell.Count);
+                EnsureResultCapacity(ResultCount + cell.Count);
 
                 for (int i = 0; i < cell.Count; i++)
                 {
                     int entity = cell.Entities[i];
-                    if (!entityData.TryGetValue(entity, out var data)) continue;
+                    if (!EntityData.TryGetValue(entity, out var data)) continue;
 
                     float dx = data.Position.X - cx;
                     float dz = data.Position.Z - cz;
 
                     if (dx * dx + dz * dz <= radiusSq)
-                        resultArray[resultCount++] = entity;
+                        ResultArray[ResultCount++] = entity;
                 }
             }
         }
 
-        return new ReadOnlySpan<int>(resultArray, 0, resultCount);
+        return new ReadOnlySpan<int>(ResultArray, 0, ResultCount);
     }
 
     public ReadOnlySpan<int> InBox(Vector3 min, Vector3 max)
@@ -387,14 +370,14 @@ public class SpatialIndex
 
     public ReadOnlySpan<int> InBox(float minX, float minY, float minZ, float maxX, float maxY, float maxZ)
     {
-        resultCount = 0;
+        ResultCount = 0;
 
-        int minCX = (int)MathF.Floor(minX * inverseCellSize);
-        int maxCX = (int)MathF.Floor(maxX * inverseCellSize);
-        int minCY = (int)MathF.Floor(minY * inverseCellSize);
-        int maxCY = (int)MathF.Floor(maxY * inverseCellSize);
-        int minCZ = (int)MathF.Floor(minZ * inverseCellSize);
-        int maxCZ = (int)MathF.Floor(maxZ * inverseCellSize);
+        int minCX = (int)MathF.Floor(minX * InverseCellSize);
+        int maxCX = (int)MathF.Floor(maxX * InverseCellSize);
+        int minCY = (int)MathF.Floor(minY * InverseCellSize);
+        int maxCY = (int)MathF.Floor(maxY * InverseCellSize);
+        int minCZ = (int)MathF.Floor(minZ * InverseCellSize);
+        int maxCZ = (int)MathF.Floor(maxZ * InverseCellSize);
 
         for (int x = minCX; x <= maxCX; x++)
         {
@@ -403,27 +386,27 @@ public class SpatialIndex
                 for (int z = minCZ; z <= maxCZ; z++)
                 {
                     long key = PackCell(x, y, z);
-                    if (!cells.TryGetValue(key, out var cell)) continue;
+                    if (!Cells.TryGetValue(key, out var cell)) continue;
 
-                    EnsureResultCapacity(resultCount + cell.Count);
+                    EnsureResultCapacity(ResultCount + cell.Count);
 
                     for (int i = 0; i < cell.Count; i++)
                     {
                         int entity = cell.Entities[i];
-                        if (!entityData.TryGetValue(entity, out var data)) continue;
+                        if (!EntityData.TryGetValue(entity, out var data)) continue;
 
                         if (data.Position.X >= minX && data.Position.X <= maxX &&
                             data.Position.Y >= minY && data.Position.Y <= maxY &&
                             data.Position.Z >= minZ && data.Position.Z <= maxZ)
                         {
-                            resultArray[resultCount++] = entity;
+                            ResultArray[ResultCount++] = entity;
                         }
                     }
                 }
             }
         }
 
-        return new ReadOnlySpan<int>(resultArray, 0, resultCount);
+        return new ReadOnlySpan<int>(ResultArray, 0, ResultCount);
     }
 
     public ReadOnlySpan<int> Nearest(Vector3 center, int count, float maxRadius = float.MaxValue)
@@ -442,27 +425,27 @@ public class SpatialIndex
         for (int i = 0; i < candidates.Length; i++)
         {
             int entity = candidates[i];
-            if (entityData.TryGetValue(entity, out var data))
+            if (EntityData.TryGetValue(entity, out var data))
             {
                 float dx = data.Position.X - cx;
                 float dy = data.Position.Y - cy;
                 float dz = data.Position.Z - cz;
-                distanceCache[i] = dx * dx + dy * dy + dz * dz;
+                DistanceCache[i] = dx * dx + dy * dy + dz * dz;
             }
             else
             {
-                distanceCache[i] = float.MaxValue;
+                DistanceCache[i] = float.MaxValue;
             }
-            sortBuffer[i] = i;
+            SortBuffer[i] = i;
         }
 
         PartialSort(candidates.Length, count);
 
-        resultCount = 0;
+        ResultCount = 0;
         for (int i = 0; i < count; i++)
-            resultArray[resultCount++] = candidates[sortBuffer[i]];
+            ResultArray[ResultCount++] = candidates[SortBuffer[i]];
 
-        return new ReadOnlySpan<int>(resultArray, 0, resultCount);
+        return new ReadOnlySpan<int>(ResultArray, 0, ResultCount);
     }
 
     private void PartialSort(int length, int k)
@@ -485,19 +468,19 @@ public class SpatialIndex
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private int Partition(int left, int right)
     {
-        float pivot = distanceCache[sortBuffer[right]];
+        float pivot = DistanceCache[SortBuffer[right]];
         int i = left - 1;
 
         for (int j = left; j < right; j++)
         {
-            if (distanceCache[sortBuffer[j]] <= pivot)
+            if (DistanceCache[SortBuffer[j]] <= pivot)
             {
                 i++;
-                (sortBuffer[i], sortBuffer[j]) = (sortBuffer[j], sortBuffer[i]);
+                (SortBuffer[i], SortBuffer[j]) = (SortBuffer[j], SortBuffer[i]);
             }
         }
 
-        (sortBuffer[i + 1], sortBuffer[right]) = (sortBuffer[right], sortBuffer[i + 1]);
+        (SortBuffer[i + 1], SortBuffer[right]) = (SortBuffer[right], SortBuffer[i + 1]);
         return i + 1;
     }
 }

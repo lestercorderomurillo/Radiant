@@ -70,16 +70,16 @@ float3 ACESToneMapping(float3 color)
 
 float3 IntegrateSkyRadiance_Optimized(float2 angle)
 {
-    float cos_a0, cos_a1, sin_a0, sin_a1;
-    sincos(angle.x, sin_a0, cos_a0);
-    sincos(angle.y, sin_a1, cos_a1);
-    
-    float3 SI = PreCalcSkyColor * (angle.y - angle.x - 0.5 * (cos_a1 - cos_a0));
-    
-    float atan_term = (atan(PreCalcSSunS * (PreCalcSunAngle - angle.x)) - 
+    float cosA0, cosA1, sinA0, sinA1;
+    sincos(angle.x, sinA0, cosA0);
+    sincos(angle.y, sinA1, cosA1);
+
+    float3 SI = PreCalcSkyColor * (angle.y - angle.x - 0.5 * (cosA1 - cosA0));
+
+    float atanTerm = (atan(PreCalcSSunS * (PreCalcSunAngle - angle.x)) -
                       atan(PreCalcSSunS * (PreCalcSunAngle - angle.y))) * PreCalcISSunS;
-    
-    return mad(PreCalcSunColor, atan_term, SI) * 0.166667;
+
+    return mad(PreCalcSunColor, atanTerm, SI) * 0.166667;
 }
 
 float3 IntegrateSkyRadiance(float2 angle)

@@ -91,11 +91,11 @@ float4 MergeCone(float2 probe, float plane, float intrv, float vrays, float inde
         float2 probeFar = probe + (limit + float2(0.0, vrayI * 2.0));
         float2 probeNear = probe;
 
-        float4 vray_Ext = GetVolumeVrays(probeFar, vrayI, intrv, vrays, float4(0.0, 0.0, 0.0, 1.0));
+        float4 vrayExt = GetVolumeVrays(probeFar, vrayI, intrv, vrays, float4(0.0, 0.0, 0.0, 1.0));
         float4 coneNear = GetVolumePrev(probeNear, coneI, 1.0, 1.0, float4(0.0, 0.0, 0.0, 1.0));
 
         // Extend the ray first
-        vray = MergeRadiance(vray, vray_Ext);
+        vray = MergeRadiance(vray, vrayExt);
 
         // Merge with far cone (with cone weighting)
         float4 weighted = float4(vray.rgb * coneW, vray.a);

@@ -32,27 +32,28 @@ public sealed class SparseSet<T> : IComponentSet where T : struct
     private const int DenseChunkSize = 1 << DenseChunkShift;   // 8192
     private const int DenseChunkMask = DenseChunkSize - 1;
 
-    private int[][] sparsePages;
-    private int sparsePageCount;
+    private int[][] SparsePages;
+    private int SparsePageCount;
 
-    private int[][] denseChunks;
-    private T[][] componentChunks;
-    private int denseChunkCount;
+    private int[][] DenseChunks;
+    private T[][] ComponentChunks;
+    private int DenseChunkCount;
 
-    private int count;
+    private int Count;
 
-    public int Count => count;
+    public int EntityCount => Count;
+    int IComponentSet.Count => Count;
 
     public SparseSet()
     {
         // Start with 4 sparse pages (can address ~65K entities)
-        sparsePages = new int[4][];
-        sparsePageCount = 0;
+        SparsePages = new int[4][];
+        SparsePageCount = 0;
 
         // Start with 2 dense chunks
-        denseChunks = new int[2][];
-        componentChunks = new T[2][];
-        denseChunkCount = 0;
+        DenseChunks = new int[2][];
+        ComponentChunks = new T[2][];
+        DenseChunkCount = 0;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -60,17 +61,17 @@ public sealed class SparseSet<T> : IComponentSet where T : struct
     {
         int pageIndex = entityId >> SparsePageShift;
 
-        if (pageIndex >= sparsePages.Length)
+        if (pageIndex >= SparsePages.Length)
         {
-            int newSize = Math.Max(sparsePages.Length * 2, pageIndex + 1);
-            Array.Resize(ref sparsePages, newSize);
+            int newSize = Math.Max(SparsePages.Length * 2, pageIndex + 1);
+            Array.Resize(ref SparsePages, newSize);
         }
 
-        while (sparsePageCount <= pageIndex)
+        while (SparsePageCount <= pageIndex)
         {
             var page = new int[SparsePageSize];
             Array.Fill(page, InvalidIndex);
-            sparsePages[sparsePageCount++] = page;
+            SparsePages[SparsePageCount++] = page;
         }
     }
 
@@ -79,18 +80,18 @@ public sealed class SparseSet<T> : IComponentSet where T : struct
     {
         int chunkIndex = denseIndex >> DenseChunkShift;
 
-        if (chunkIndex >= denseChunks.Length)
+        if (chunkIndex >= DenseChunks.Length)
         {
-            int newSize = Math.Max(denseChunks.Length * 2, chunkIndex + 1);
-            Array.Resize(ref denseChunks, newSize);
-            Array.Resize(ref componentChunks, newSize);
+            int newSize = Math.Max(DenseChunks.Length * 2, chunkIndex + 1);
+            Array.Resize(ref DenseChunks, newSize);
+            Array.Resize(ref ComponentChunks, newSize);
         }
 
-        while (denseChunkCount <= chunkIndex)
+        while (DenseChunkCount <= chunkIndex)
         {
-            denseChunks[denseChunkCount] = new int[DenseChunkSize];
-            componentChunks[denseChunkCount] = new T[DenseChunkSize];
-            denseChunkCount++;
+            DenseChunks[DenseChunkCount] = new int[DenseChunkSize];
+            ComponentChunks[DenseChunkCount] = new T[DenseChunkSize];
+            DenseChunkCount++;
         }
     }
 
@@ -100,9 +101,9 @@ public sealed class SparseSet<T> : IComponentSet where T : struct
         if (entity < 0) return false;
 
         int pageIndex = entity >> SparsePageShift;
-        if (pageIndex >= sparsePageCount) return false;
+        if (pageIndex >= SparsePageCount) return false;
 
-        var page = sparsePages[pageIndex];
+        var page = SparsePages[pageIndex];
         if (page == null) return false;
 
         int localIndex = entity & SparsePageMask;
@@ -120,19 +121,19 @@ public sealed class SparseSet<T> : IComponentSet where T : struct
         int localIndex = entity & SparsePageMask;
 
         // Already exists?
-        if (sparsePages[pageIndex][localIndex] != InvalidIndex)
+        if (SparsePages[pageIndex][localIndex] != InvalidIndex)
             return;
 
-        int denseIndex = count;
+        int denseIndex = Count;
         EnsureDenseCapacity(denseIndex);
 
         int chunkIndex = denseIndex >> DenseChunkShift;
         int chunkLocal = denseIndex & DenseChunkMask;
 
-        sparsePages[pageIndex][localIndex] = denseIndex;
-        denseChunks[chunkIndex][chunkLocal] = entity;
-        componentChunks[chunkIndex][chunkLocal] = component;
-        count++;
+        SparsePages[pageIndex][localIndex] = denseIndex;
+        DenseChunks[chunkIndex][chunkLocal] = entity;
+        ComponentChunks[chunkIndex][chunkLocal] = component;
+        Count++;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -141,38 +142,38 @@ public sealed class SparseSet<T> : IComponentSet where T : struct
         if (entity < 0) return;
 
         int pageIndex = entity >> SparsePageShift;
-        if (pageIndex >= sparsePageCount) return;
+        if (pageIndex >= SparsePageCount) return;
 
-        var page = sparsePages[pageIndex];
+        var page = SparsePages[pageIndex];
         if (page == null) return;
 
         int localIndex = entity & SparsePageMask;
         int denseIndex = page[localIndex];
         if (denseIndex == InvalidIndex) return;
 
-        int lastDenseIndex = count - 1;
+        int lastDenseIndex = Count - 1;
 
         if (denseIndex != lastDenseIndex)
         {
             // Swap with last element
             int lastChunk = lastDenseIndex >> DenseChunkShift;
             int lastLocal = lastDenseIndex & DenseChunkMask;
-            int lastEntity = denseChunks[lastChunk][lastLocal];
-            T lastComponent = componentChunks[lastChunk][lastLocal];
+            int lastEntity = DenseChunks[lastChunk][lastLocal];
+            T lastComponent = ComponentChunks[lastChunk][lastLocal];
 
             int chunk = denseIndex >> DenseChunkShift;
             int local = denseIndex & DenseChunkMask;
-            denseChunks[chunk][local] = lastEntity;
-            componentChunks[chunk][local] = lastComponent;
+            DenseChunks[chunk][local] = lastEntity;
+            ComponentChunks[chunk][local] = lastComponent;
 
             // Update sparse for swapped entity
             int lastPageIndex = lastEntity >> SparsePageShift;
             int lastPageLocal = lastEntity & SparsePageMask;
-            sparsePages[lastPageIndex][lastPageLocal] = denseIndex;
+            SparsePages[lastPageIndex][lastPageLocal] = denseIndex;
         }
 
         page[localIndex] = InvalidIndex;
-        count--;
+        Count--;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -180,11 +181,11 @@ public sealed class SparseSet<T> : IComponentSet where T : struct
     {
         int pageIndex = entity >> SparsePageShift;
         int localIndex = entity & SparsePageMask;
-        int denseIndex = sparsePages[pageIndex][localIndex];
+        int denseIndex = SparsePages[pageIndex][localIndex];
 
         int chunkIndex = denseIndex >> DenseChunkShift;
         int chunkLocal = denseIndex & DenseChunkMask;
-        return ref componentChunks[chunkIndex][chunkLocal];
+        return ref ComponentChunks[chunkIndex][chunkLocal];
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -197,13 +198,13 @@ public sealed class SparseSet<T> : IComponentSet where T : struct
         }
 
         int pageIndex = entity >> SparsePageShift;
-        if (pageIndex >= sparsePageCount)
+        if (pageIndex >= SparsePageCount)
         {
             denseIndex = InvalidIndex;
             return false;
         }
 
-        var page = sparsePages[pageIndex];
+        var page = SparsePages[pageIndex];
         if (page == null)
         {
             denseIndex = InvalidIndex;
@@ -217,36 +218,36 @@ public sealed class SparseSet<T> : IComponentSet where T : struct
 
     public IEnumerable<int> GetEntityIds()
     {
-        for (int i = 0; i < count; i++)
+        for (int i = 0; i < Count; i++)
         {
             int chunk = i >> DenseChunkShift;
             int local = i & DenseChunkMask;
-            yield return denseChunks[chunk][local];
+            yield return DenseChunks[chunk][local];
         }
     }
 
     public void TrimExcess()
     {
-        int requiredChunks = count > 0 ? ((count - 1) >> DenseChunkShift) + 1 : 0;
-        while (denseChunkCount > requiredChunks)
+        int requiredChunks = Count > 0 ? ((Count - 1) >> DenseChunkShift) + 1 : 0;
+        while (DenseChunkCount > requiredChunks)
         {
-            denseChunkCount--;
-            denseChunks[denseChunkCount] = null;
-            componentChunks[denseChunkCount] = null;
+            DenseChunkCount--;
+            DenseChunks[DenseChunkCount] = null;
+            ComponentChunks[DenseChunkCount] = null;
         }
     }
 
     public void Clear()
     {
         // Reset sparse pages
-        for (int i = 0; i < sparsePageCount; i++)
+        for (int i = 0; i < SparsePageCount; i++)
         {
-            if (sparsePages[i] != null)
-                Array.Fill(sparsePages[i], InvalidIndex);
+            if (SparsePages[i] != null)
+                Array.Fill(SparsePages[i], InvalidIndex);
         }
 
         // Don't deallocate, just reset count
-        count = 0;
+        Count = 0;
     }
 
     // Direct iteration access - avoids GetComponent lookups
@@ -255,7 +256,7 @@ public sealed class SparseSet<T> : IComponentSet where T : struct
     {
         int chunk = denseIndex >> DenseChunkShift;
         int local = denseIndex & DenseChunkMask;
-        return denseChunks[chunk][local];
+        return DenseChunks[chunk][local];
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -263,7 +264,7 @@ public sealed class SparseSet<T> : IComponentSet where T : struct
     {
         int chunk = denseIndex >> DenseChunkShift;
         int local = denseIndex & DenseChunkMask;
-        return ref componentChunks[chunk][local];
+        return ref ComponentChunks[chunk][local];
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -272,9 +273,9 @@ public sealed class SparseSet<T> : IComponentSet where T : struct
         if (entity < 0) return InvalidIndex;
 
         int pageIndex = entity >> SparsePageShift;
-        if (pageIndex >= sparsePageCount) return InvalidIndex;
+        if (pageIndex >= SparsePageCount) return InvalidIndex;
 
-        var page = sparsePages[pageIndex];
+        var page = SparsePages[pageIndex];
         if (page == null) return InvalidIndex;
 
         int localIndex = entity & SparsePageMask;
@@ -287,7 +288,7 @@ public sealed class SparseSet<T> : IComponentSet where T : struct
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void GetChunkData(int chunkIndex, out ReadOnlySpan<int> entities, out Span<T> components, out int chunkCount)
     {
-        if (chunkIndex >= denseChunkCount)
+        if (chunkIndex >= DenseChunkCount)
         {
             entities = ReadOnlySpan<int>.Empty;
             components = Span<T>.Empty;
@@ -296,12 +297,12 @@ public sealed class SparseSet<T> : IComponentSet where T : struct
         }
 
         int startIndex = chunkIndex << DenseChunkShift;
-        int endIndex = Math.Min(startIndex + DenseChunkSize, count);
+        int endIndex = Math.Min(startIndex + DenseChunkSize, Count);
         chunkCount = endIndex - startIndex;
 
-        entities = new ReadOnlySpan<int>(denseChunks[chunkIndex], 0, chunkCount);
-        components = new Span<T>(componentChunks[chunkIndex], 0, chunkCount);
+        entities = new ReadOnlySpan<int>(DenseChunks[chunkIndex], 0, chunkCount);
+        components = new Span<T>(ComponentChunks[chunkIndex], 0, chunkCount);
     }
 
-    public int ChunkCount => denseChunkCount;
+    public int ChunkCount => DenseChunkCount;
 }

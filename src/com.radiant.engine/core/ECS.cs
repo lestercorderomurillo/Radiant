@@ -303,7 +303,7 @@ public class ECS : IGameObject
         }
         else
         {
-            var smallest = set1.Count <= set2.Count ? set1 : (IComponentSet)set2;
+            var smallest = set1.EntityCount <= set2.EntityCount ? set1 : (IComponentSet)set2;
 
             foreach (int entityId in smallest.GetEntityIds())
             {
@@ -345,8 +345,8 @@ public class ECS : IGameObject
         else
         {
             IComponentSet smallest = set1;
-            if (set2.Count < smallest.Count) smallest = set2;
-            if (set3.Count < smallest.Count) smallest = set3;
+            if (set2.EntityCount < smallest.Count) smallest = set2;
+            if (set3.EntityCount < smallest.Count) smallest = set3;
 
             foreach (int entityId in smallest.GetEntityIds())
             {
@@ -391,9 +391,9 @@ public class ECS : IGameObject
         else
         {
             IComponentSet smallest = set1;
-            if (set2.Count < smallest.Count) smallest = set2;
-            if (set3.Count < smallest.Count) smallest = set3;
-            if (set4.Count < smallest.Count) smallest = set4;
+            if (set2.EntityCount < smallest.Count) smallest = set2;
+            if (set3.EntityCount < smallest.Count) smallest = set3;
+            if (set4.EntityCount < smallest.Count) smallest = set4;
 
             foreach (int entityId in smallest.GetEntityIds())
             {
@@ -450,7 +450,7 @@ public class ECS : IGameObject
         where T1 : struct, Component
     {
         var set1 = GetComponentSet<T1>();
-        int count = set1.Count;
+        int count = set1.EntityCount;
 
         for (int i = 0; i < count; i++)
         {
@@ -470,9 +470,9 @@ public class ECS : IGameObject
         var set2 = GetComponentSet<T2>();
 
         // Iterate smallest set
-        if (set1.Count <= set2.Count)
+        if (set1.EntityCount <= set2.EntityCount)
         {
-            int count = set1.Count;
+            int count = set1.EntityCount;
             for (int i = 0; i < count; i++)
             {
                 int entity = set1.GetEntityAt(i);
@@ -484,7 +484,7 @@ public class ECS : IGameObject
         }
         else
         {
-            int count = set2.Count;
+            int count = set2.EntityCount;
             for (int i = 0; i < count; i++)
             {
                 int entity = set2.GetEntityAt(i);
@@ -508,9 +508,9 @@ public class ECS : IGameObject
         var set3 = GetComponentSet<T3>();
 
         int smallestIdx = 1;
-        int smallestCount = set1.Count;
-        if (set2.Count < smallestCount) { smallestCount = set2.Count; smallestIdx = 2; }
-        if (set3.Count < smallestCount) { smallestCount = set3.Count; smallestIdx = 3; }
+        int smallestCount = set1.EntityCount;
+        if (set2.EntityCount < smallestCount) { smallestCount = set2.EntityCount; smallestIdx = 2; }
+        if (set3.EntityCount < smallestCount) { smallestCount = set3.EntityCount; smallestIdx = 3; }
 
         for (int i = 0; i < smallestCount; i++)
         {
@@ -559,10 +559,10 @@ public class ECS : IGameObject
 
         // Find smallest set index
         int smallestIdx = 1;
-        int smallestCount = set1.Count;
-        if (set2.Count < smallestCount) { smallestCount = set2.Count; smallestIdx = 2; }
-        if (set3.Count < smallestCount) { smallestCount = set3.Count; smallestIdx = 3; }
-        if (set4.Count < smallestCount) { smallestCount = set4.Count; smallestIdx = 4; }
+        int smallestCount = set1.EntityCount;
+        if (set2.EntityCount < smallestCount) { smallestCount = set2.EntityCount; smallestIdx = 2; }
+        if (set3.EntityCount < smallestCount) { smallestCount = set3.EntityCount; smallestIdx = 3; }
+        if (set4.EntityCount < smallestCount) { smallestCount = set4.EntityCount; smallestIdx = 4; }
 
         for (int i = 0; i < smallestCount; i++)
         {

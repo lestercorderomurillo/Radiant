@@ -57,13 +57,13 @@ float4 GetVolume(float2 probe, float index, float interval, float lookupWidth,
     return lerp(PrevCascade.Sample(SamplerPrev, samplePos), defVal, weight);
 }
 
-float4 ExtendRay(float2 probe, float lo_index, float hi_index,
-                 float prev_intrv, float prev_vrays)
+float4 ExtendRay(float2 probe, float loIndex, float hiIndex,
+                 float prevIntrv, float prevVrays)
 {
-    float2 merge = probe + float2(prev_intrv, -prev_intrv + (lo_index * 2.0));
+    float2 merge = probe + float2(prevIntrv, -prevIntrv + (loIndex * 2.0));
 
-    float4 near = GetVolume(probe, lo_index, prev_intrv, prev_vrays, PrevSize, float4(0.0, 0.0, 0.0, 1.0));
-    float4 far = GetVolume(merge, hi_index, prev_intrv, prev_vrays, PrevSize, float4(0.0, 0.0, 0.0, 1.0));
+    float4 near = GetVolume(probe, loIndex, prevIntrv, prevVrays, PrevSize, float4(0.0, 0.0, 0.0, 1.0));
+    float4 far = GetVolume(merge, hiIndex, prevIntrv, prevVrays, PrevSize, float4(0.0, 0.0, 0.0, 1.0));
 
     return MergeRadiance(near, far);
 }
@@ -79,14 +79,14 @@ PixelShaderOutput MainPS(PixelShaderInput input)
     float index = floor(texel.x - (plane * vrays));
     float2 probe = float2(plane * intrv, texel.y * ProbeScale) + float2(0.5, 0.0);
 
-    float prev_intrv = exp2(CascadeIndex.x - 1.0);
-    float prev_vrays = prev_intrv + 1.0;
+    float prevIntrv = exp2(CascadeIndex.x - 1.0);
+    float prevVrays = prevIntrv + 1.0;
 
     float lower = floor(index * 0.5);
     float upper = ceil(index * 0.5);
 
-    float4 resultL = ExtendRay(probe, lower, upper, prev_intrv, prev_vrays);
-    float4 resultU = ExtendRay(probe, upper, lower, prev_intrv, prev_vrays);
+    float4 resultL = ExtendRay(probe, lower, upper, prevIntrv, prevVrays);
+    float4 resultU = ExtendRay(probe, upper, lower, prevIntrv, prevVrays);
 
     output.Radiance = lerp(resultL, resultU, 0.5);
     return output;

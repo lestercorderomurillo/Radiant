@@ -17,17 +17,17 @@ public sealed class PagedBitSet
     private const int BitMask = BitsPerUlong - 1;
     private const int BitsPerPage = PageSize * BitsPerUlong; // 262,144 entities per page
 
-    private ulong[][] pages;
-    private int pageCount;
-    private int count;
+    private ulong[][] Pages;
+    private int PageCount;
+    private int EntityCount;
 
-    public int Count => count;
+    public int Count => EntityCount;
 
     public PagedBitSet(int initialCapacity = 65536)
     {
         int requiredPages = Math.Max(1, (initialCapacity + BitsPerPage - 1) / BitsPerPage);
-        pages = new ulong[requiredPages][];
-        pageCount = 0;
+        Pages = new ulong[requiredPages][];
+        PageCount = 0;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -35,15 +35,15 @@ public sealed class PagedBitSet
     {
         int pageIndex = entityId / BitsPerPage;
 
-        if (pageIndex >= pages.Length)
+        if (pageIndex >= Pages.Length)
         {
-            int newSize = Math.Max(pages.Length * 2, pageIndex + 1);
-            Array.Resize(ref pages, newSize);
+            int newSize = Math.Max(Pages.Length * 2, pageIndex + 1);
+            Array.Resize(ref Pages, newSize);
         }
 
-        while (pageCount <= pageIndex)
+        while (PageCount <= pageIndex)
         {
-            pages[pageCount++] = new ulong[PageSize];
+            Pages[PageCount++] = new ulong[PageSize];
         }
     }
 
@@ -53,9 +53,9 @@ public sealed class PagedBitSet
         if (entityId < 0) return false;
 
         int pageIndex = entityId / BitsPerPage;
-        if (pageIndex >= pageCount) return false;
+        if (pageIndex >= PageCount) return false;
 
-        var page = pages[pageIndex];
+        var page = Pages[pageIndex];
         if (page == null) return false;
 
         int localBit = entityId % BitsPerPage;
@@ -78,11 +78,11 @@ public sealed class PagedBitSet
         int bitIndex = localBit & BitMask;
         ulong mask = 1UL << bitIndex;
 
-        ref ulong slot = ref pages[pageIndex][ulongIndex];
-        if ((slot & mask) != 0) return false; // Already set
+        ref ulong slot = ref Pages[pageIndex][ulongIndex];
+        if ((slot & mask) != 0) return false;
 
         slot |= mask;
-        count++;
+        EntityCount++;
         return true;
     }
 
@@ -92,9 +92,9 @@ public sealed class PagedBitSet
         if (entityId < 0) return false;
 
         int pageIndex = entityId / BitsPerPage;
-        if (pageIndex >= pageCount) return false;
+        if (pageIndex >= PageCount) return false;
 
-        var page = pages[pageIndex];
+        var page = Pages[pageIndex];
         if (page == null) return false;
 
         int localBit = entityId % BitsPerPage;
@@ -103,21 +103,21 @@ public sealed class PagedBitSet
         ulong mask = 1UL << bitIndex;
 
         ref ulong slot = ref page[ulongIndex];
-        if ((slot & mask) == 0) return false; // Not set
+        if ((slot & mask) == 0) return false;
 
         slot &= ~mask;
-        count--;
+        EntityCount--;
         return true;
     }
 
     public void Clear()
     {
-        for (int i = 0; i < pageCount; i++)
+        for (int i = 0; i < PageCount; i++)
         {
-            if (pages[i] != null)
-                Array.Clear(pages[i], 0, PageSize);
+            if (Pages[i] != null)
+                Array.Clear(Pages[i], 0, PageSize);
         }
-        count = 0;
+        EntityCount = 0;
     }
 
     /// <summary>
@@ -160,17 +160,16 @@ public sealed class PagedBitSet
                 // Move to next ulong
                 ulongIndex++;
 
-                // Check if we need to move to next page
-                while (ulongIndex >= PageSize || (pageIndex < bitset.pageCount && bitset.pages[pageIndex] == null))
+                while (ulongIndex >= PageSize || (pageIndex < bitset.PageCount && bitset.Pages[pageIndex] == null))
                 {
                     pageIndex++;
                     ulongIndex = 0;
-                    if (pageIndex >= bitset.pageCount) return false;
+                    if (pageIndex >= bitset.PageCount) return false;
                 }
 
-                if (pageIndex >= bitset.pageCount) return false;
+                if (pageIndex >= bitset.PageCount) return false;
 
-                currentBits = bitset.pages[pageIndex][ulongIndex];
+                currentBits = bitset.Pages[pageIndex][ulongIndex];
             }
         }
 

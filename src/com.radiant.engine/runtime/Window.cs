@@ -1,4 +1,3 @@
-// Window.cs - Ensure proper presentation
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
@@ -15,8 +14,7 @@ public class Window : Game
 
     public SpriteBatch SpriteBatch;
 
-    // Resize handling
-    private WinForms.Form _form;
+    private WinForms.Form Form;
     public bool ResizePending { get; private set; }
 
     public Window(GameLoop gameLoop)
@@ -54,19 +52,19 @@ public class Window : Game
         GameLoop.SpriteBatch = SpriteBatch;
 
         // Hook into Form resize events for WindowsDX
-        _form = (WinForms.Form)WinForms.Form.FromHandle(Window.Handle);
-        _form.Resize += OnFormResize;
+        Form = (WinForms.Form)WinForms.Form.FromHandle(Window.Handle);
+        Form.Resize += OnFormResize;
 
         GameLoop.Initialize(this);
     }
 
     private void OnFormResize(object sender, EventArgs e)
     {
-        if (_form.ClientSize.Width > 0 && _form.ClientSize.Height > 0)
+        if (Form.ClientSize.Width > 0 && Form.ClientSize.Height > 0)
         {
             // Update backbuffer to match window size
-            GraphicsDeviceManager.PreferredBackBufferWidth = _form.ClientSize.Width;
-            GraphicsDeviceManager.PreferredBackBufferHeight = _form.ClientSize.Height;
+            GraphicsDeviceManager.PreferredBackBufferWidth = Form.ClientSize.Width;
+            GraphicsDeviceManager.PreferredBackBufferHeight = Form.ClientSize.Height;
             GraphicsDeviceManager.ApplyChanges();
 
             // Signal resize to systems

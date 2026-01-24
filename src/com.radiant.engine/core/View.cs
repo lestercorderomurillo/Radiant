@@ -6,65 +6,64 @@ public ref struct View<T1, T2>
     where T1 : struct, Component
     where T2 : struct, Component
 {
-    private readonly SparseSet<T1> set1;
-    private readonly SparseSet<T2> set2;
-    private readonly PagedBitSet activeEntities;
+    private readonly SparseSet<T1> Set1;
+    private readonly SparseSet<T2> Set2;
+    private readonly PagedBitSet ActiveEntities;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal View(SparseSet<T1> set1, SparseSet<T2> set2, PagedBitSet activeEntities)
     {
-        this.set1 = set1;
-        this.set2 = set2;
-        this.activeEntities = activeEntities;
+        Set1 = set1;
+        Set2 = set2;
+        ActiveEntities = activeEntities;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public Enumerator GetEnumerator() => new Enumerator(set1, set2, activeEntities);
+    public Enumerator GetEnumerator() => new Enumerator(Set1, Set2, ActiveEntities);
 
     public ref struct Enumerator
     {
-        private readonly SparseSet<T1> set1;
-        private readonly SparseSet<T2> set2;
-        private readonly PagedBitSet activeEntities;
-        private readonly int count;
-        private int index;
-        private int currentEntity;
-        private int idx1, idx2;
+        private readonly SparseSet<T1> Set1;
+        private readonly SparseSet<T2> Set2;
+        private readonly PagedBitSet ActiveEntities;
+        private readonly int Count;
+        private int Index;
+        private int CurrentEntity;
+        private int Idx1, Idx2;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal Enumerator(SparseSet<T1> set1, SparseSet<T2> set2, PagedBitSet activeEntities)
         {
-            this.set1 = set1;
-            this.set2 = set2;
-            this.activeEntities = activeEntities;
-            // Iterate smaller set
-            count = set1.Count <= set2.Count ? set1.Count : set2.Count;
-            index = -1;
-            currentEntity = -1;
-            idx1 = idx2 = -1;
+            Set1 = set1;
+            Set2 = set2;
+            ActiveEntities = activeEntities;
+            Count = set1.EntityCount <= set2.EntityCount ? set1.EntityCount : set2.EntityCount;
+            Index = -1;
+            CurrentEntity = -1;
+            Idx1 = Idx2 = -1;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool MoveNext()
         {
-            while (++index < count)
+            while (++Index < Count)
             {
-                if (set1.Count <= set2.Count)
+                if (Set1.EntityCount <= Set2.EntityCount)
                 {
-                    currentEntity = set1.GetEntityAt(index);
-                    idx1 = index;
-                    idx2 = set2.GetDenseIndex(currentEntity);
-                    if (idx2 < 0) continue;
+                    CurrentEntity = Set1.GetEntityAt(Index);
+                    Idx1 = Index;
+                    Idx2 = Set2.GetDenseIndex(CurrentEntity);
+                    if (Idx2 < 0) continue;
                 }
                 else
                 {
-                    currentEntity = set2.GetEntityAt(index);
-                    idx2 = index;
-                    idx1 = set1.GetDenseIndex(currentEntity);
-                    if (idx1 < 0) continue;
+                    CurrentEntity = Set2.GetEntityAt(Index);
+                    Idx2 = Index;
+                    Idx1 = Set1.GetDenseIndex(CurrentEntity);
+                    if (Idx1 < 0) continue;
                 }
 
-                if (!activeEntities.Contains(currentEntity)) continue;
+                if (!ActiveEntities.Contains(CurrentEntity)) continue;
                 return true;
             }
             return false;
@@ -73,25 +72,25 @@ public ref struct View<T1, T2>
         public int Entity
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => currentEntity;
+            get => CurrentEntity;
         }
 
         public ref T1 Component1
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => ref set1.GetComponentAt(idx1);
+            get => ref Set1.GetComponentAt(Idx1);
         }
 
         public ref T2 Component2
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => ref set2.GetComponentAt(idx2);
+            get => ref Set2.GetComponentAt(Idx2);
         }
 
         public Entry Current
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => new Entry(currentEntity, ref set1.GetComponentAt(idx1), ref set2.GetComponentAt(idx2));
+            get => new Entry(CurrentEntity, ref Set1.GetComponentAt(Idx1), ref Set2.GetComponentAt(Idx2));
         }
     }
 
@@ -136,82 +135,81 @@ public ref struct View<T1, T2, T3>
     where T2 : struct, Component
     where T3 : struct, Component
 {
-    private readonly SparseSet<T1> set1;
-    private readonly SparseSet<T2> set2;
-    private readonly SparseSet<T3> set3;
-    private readonly PagedBitSet activeEntities;
+    private readonly SparseSet<T1> Set1;
+    private readonly SparseSet<T2> Set2;
+    private readonly SparseSet<T3> Set3;
+    private readonly PagedBitSet ActiveEntities;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal View(SparseSet<T1> set1, SparseSet<T2> set2, SparseSet<T3> set3, PagedBitSet activeEntities)
     {
-        this.set1 = set1;
-        this.set2 = set2;
-        this.set3 = set3;
-        this.activeEntities = activeEntities;
+        Set1 = set1;
+        Set2 = set2;
+        Set3 = set3;
+        ActiveEntities = activeEntities;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public Enumerator GetEnumerator() => new Enumerator(set1, set2, set3, activeEntities);
+    public Enumerator GetEnumerator() => new Enumerator(Set1, Set2, Set3, ActiveEntities);
 
     public ref struct Enumerator
     {
-        private readonly SparseSet<T1> set1;
-        private readonly SparseSet<T2> set2;
-        private readonly SparseSet<T3> set3;
-        private readonly PagedBitSet activeEntities;
-        private readonly int smallestIdx;
-        private readonly int count;
-        private int index;
-        private int currentEntity;
-        private int idx1, idx2, idx3;
+        private readonly SparseSet<T1> Set1;
+        private readonly SparseSet<T2> Set2;
+        private readonly SparseSet<T3> Set3;
+        private readonly PagedBitSet ActiveEntities;
+        private readonly int SmallestIdx;
+        private readonly int Count;
+        private int Index;
+        private int CurrentEntity;
+        private int Idx1, Idx2, Idx3;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal Enumerator(SparseSet<T1> set1, SparseSet<T2> set2, SparseSet<T3> set3, PagedBitSet activeEntities)
         {
-            this.set1 = set1;
-            this.set2 = set2;
-            this.set3 = set3;
-            this.activeEntities = activeEntities;
+            Set1 = set1;
+            Set2 = set2;
+            Set3 = set3;
+            ActiveEntities = activeEntities;
 
-            // Find smallest
-            smallestIdx = 1;
-            count = set1.Count;
-            if (set2.Count < count) { count = set2.Count; smallestIdx = 2; }
-            if (set3.Count < count) { count = set3.Count; smallestIdx = 3; }
+            SmallestIdx = 1;
+            Count = set1.EntityCount;
+            if (set2.EntityCount < Count) { Count = set2.EntityCount; SmallestIdx = 2; }
+            if (set3.EntityCount < Count) { Count = set3.EntityCount; SmallestIdx = 3; }
 
-            index = -1;
-            currentEntity = -1;
-            idx1 = idx2 = idx3 = -1;
+            Index = -1;
+            CurrentEntity = -1;
+            Idx1 = Idx2 = Idx3 = -1;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool MoveNext()
         {
-            while (++index < count)
+            while (++Index < Count)
             {
-                switch (smallestIdx)
+                switch (SmallestIdx)
                 {
                     case 1:
-                        currentEntity = set1.GetEntityAt(index);
-                        idx1 = index;
-                        idx2 = set2.GetDenseIndex(currentEntity); if (idx2 < 0) continue;
-                        idx3 = set3.GetDenseIndex(currentEntity); if (idx3 < 0) continue;
+                        CurrentEntity = Set1.GetEntityAt(Index);
+                        Idx1 = Index;
+                        Idx2 = Set2.GetDenseIndex(CurrentEntity); if (Idx2 < 0) continue;
+                        Idx3 = Set3.GetDenseIndex(CurrentEntity); if (Idx3 < 0) continue;
                         break;
                     case 2:
-                        currentEntity = set2.GetEntityAt(index);
-                        idx2 = index;
-                        idx1 = set1.GetDenseIndex(currentEntity); if (idx1 < 0) continue;
-                        idx3 = set3.GetDenseIndex(currentEntity); if (idx3 < 0) continue;
+                        CurrentEntity = Set2.GetEntityAt(Index);
+                        Idx2 = Index;
+                        Idx1 = Set1.GetDenseIndex(CurrentEntity); if (Idx1 < 0) continue;
+                        Idx3 = Set3.GetDenseIndex(CurrentEntity); if (Idx3 < 0) continue;
                         break;
                     default:
-                        currentEntity = set3.GetEntityAt(index);
-                        idx3 = index;
-                        idx1 = set1.GetDenseIndex(currentEntity); if (idx1 < 0) continue;
-                        idx2 = set2.GetDenseIndex(currentEntity); if (idx2 < 0) continue;
+                        CurrentEntity = Set3.GetEntityAt(Index);
+                        Idx3 = Index;
+                        Idx1 = Set1.GetDenseIndex(CurrentEntity); if (Idx1 < 0) continue;
+                        Idx2 = Set2.GetDenseIndex(CurrentEntity); if (Idx2 < 0) continue;
                         break;
                 }
 
-                if (!activeEntities.Contains(currentEntity)) continue;
+                if (!ActiveEntities.Contains(CurrentEntity)) continue;
                 return true;
             }
             return false;
@@ -220,31 +218,31 @@ public ref struct View<T1, T2, T3>
         public int Entity
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => currentEntity;
+            get => CurrentEntity;
         }
 
         public ref T1 Component1
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => ref set1.GetComponentAt(idx1);
+            get => ref Set1.GetComponentAt(Idx1);
         }
 
         public ref T2 Component2
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => ref set2.GetComponentAt(idx2);
+            get => ref Set2.GetComponentAt(Idx2);
         }
 
         public ref T3 Component3
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => ref set3.GetComponentAt(idx3);
+            get => ref Set3.GetComponentAt(Idx3);
         }
 
         public Entry Current
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => new Entry(currentEntity, ref set1.GetComponentAt(idx1), ref set2.GetComponentAt(idx2), ref set3.GetComponentAt(idx3));
+            get => new Entry(CurrentEntity, ref Set1.GetComponentAt(Idx1), ref Set2.GetComponentAt(Idx2), ref Set3.GetComponentAt(Idx3));
         }
     }
 
