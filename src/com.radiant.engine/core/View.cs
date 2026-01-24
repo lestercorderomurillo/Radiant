@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 
 namespace com.radiant.engine.core;
@@ -9,10 +8,10 @@ public ref struct View<T1, T2>
 {
     private readonly SparseSet<T1> set1;
     private readonly SparseSet<T2> set2;
-    private readonly HashSet<int> activeEntities;
+    private readonly PagedBitSet activeEntities;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal View(SparseSet<T1> set1, SparseSet<T2> set2, HashSet<int> activeEntities)
+    internal View(SparseSet<T1> set1, SparseSet<T2> set2, PagedBitSet activeEntities)
     {
         this.set1 = set1;
         this.set2 = set2;
@@ -26,14 +25,14 @@ public ref struct View<T1, T2>
     {
         private readonly SparseSet<T1> set1;
         private readonly SparseSet<T2> set2;
-        private readonly HashSet<int> activeEntities;
+        private readonly PagedBitSet activeEntities;
         private readonly int count;
         private int index;
         private int currentEntity;
         private int idx1, idx2;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal Enumerator(SparseSet<T1> set1, SparseSet<T2> set2, HashSet<int> activeEntities)
+        internal Enumerator(SparseSet<T1> set1, SparseSet<T2> set2, PagedBitSet activeEntities)
         {
             this.set1 = set1;
             this.set2 = set2;
@@ -140,10 +139,10 @@ public ref struct View<T1, T2, T3>
     private readonly SparseSet<T1> set1;
     private readonly SparseSet<T2> set2;
     private readonly SparseSet<T3> set3;
-    private readonly HashSet<int> activeEntities;
+    private readonly PagedBitSet activeEntities;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal View(SparseSet<T1> set1, SparseSet<T2> set2, SparseSet<T3> set3, HashSet<int> activeEntities)
+    internal View(SparseSet<T1> set1, SparseSet<T2> set2, SparseSet<T3> set3, PagedBitSet activeEntities)
     {
         this.set1 = set1;
         this.set2 = set2;
@@ -159,7 +158,7 @@ public ref struct View<T1, T2, T3>
         private readonly SparseSet<T1> set1;
         private readonly SparseSet<T2> set2;
         private readonly SparseSet<T3> set3;
-        private readonly HashSet<int> activeEntities;
+        private readonly PagedBitSet activeEntities;
         private readonly int smallestIdx;
         private readonly int count;
         private int index;
@@ -167,7 +166,7 @@ public ref struct View<T1, T2, T3>
         private int idx1, idx2, idx3;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal Enumerator(SparseSet<T1> set1, SparseSet<T2> set2, SparseSet<T3> set3, HashSet<int> activeEntities)
+        internal Enumerator(SparseSet<T1> set1, SparseSet<T2> set2, SparseSet<T3> set3, PagedBitSet activeEntities)
         {
             this.set1 = set1;
             this.set2 = set2;

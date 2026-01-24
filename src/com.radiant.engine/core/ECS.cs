@@ -8,7 +8,7 @@ namespace com.radiant.engine.core;
 
 public class ECS : IGameObject
 {
-    private readonly HashSet<int> ActiveEntities;
+    private readonly PagedBitSet ActiveEntities;
     private readonly Stack<int> RecycledIds;
     private readonly List<System> Systems;
     private readonly Dictionary<Type, IComponentSet> ComponentSets;
@@ -28,7 +28,7 @@ public class ECS : IGameObject
     {
         Scene = scene;
         Renderer = renderer;
-        ActiveEntities = new HashSet<int>();
+        ActiveEntities = new PagedBitSet();
         RecycledIds = new Stack<int>();
         Systems = new List<System>();
         ComponentSets = new Dictionary<Type, IComponentSet>();
