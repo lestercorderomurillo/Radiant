@@ -8,8 +8,8 @@ namespace com.radiant.engine.bundle;
 public class RCGI : core.System
 {
     private const float CascadeLinear = 1.0f;
-    private const float CascadeInterval = 1.0f;
-    private const int MaxCascades = 8;
+    private const float CascadeInterval = 2.0f;
+    private const int MaxCascades = 10;
 
     private Geometry Geometry;
     private GizmosRenderer Gizmos;

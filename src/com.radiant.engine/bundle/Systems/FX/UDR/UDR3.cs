@@ -11,6 +11,9 @@ public class UDR3 : core.System
     public float DetailCorrection = 0f;
     public bool DebugRays = false;
 
+    // Temporal parameters
+    public int FramesToAccumulate = 16;
+
     private RenderTarget2D SpatialTexture;
     private RenderTarget2D TemporalTexture;
     private RenderTarget2D LastFrameTexture;
@@ -21,7 +24,7 @@ public class UDR3 : core.System
     private GizmosRenderer Gizmos;
     private KeyboardState PrevKeyState;
 
-    private int FrameCount = 0;
+    private int FrameIndex = 0;
 
     public override void Initialize()
     {
@@ -36,7 +39,7 @@ public class UDR3 : core.System
         ApplyRenderScale();
         UDRQuality.Changed += _ => ApplyRenderScale();
         PrevKeyState = Keyboard.GetState();
-        FrameCount = 0;
+        FrameIndex = 0;
     }
 
     public void SetInputSource(Func<Texture2D> source)
@@ -104,12 +107,16 @@ public class UDR3 : core.System
             .SetParameter("InputSize", inputSize)
             .SetParameter("OutputSize", OutputSize)
             .SetParameter("DebugRays", DebugRays ? 1f : 0f)
-            .SetParameter("FrameCount", (float)FrameCount)
+            .SetParameter("FrameIndex", (float)FrameIndex)
             .Draw()
             .Commit()
             .SetTarget(null);
 
         // Pass 2: Temporal accumulation
+        // Weight for current frame: 1/N where N = min(FrameIndex+1, FramesToAccumulate)
+        int effectiveFrames = Math.Min(FrameIndex + 1, FramesToAccumulate);
+        float currentWeight = 1.0f / effectiveFrames;
+
         Renderer
             .Reset()
             .SetShader("UDR/UDR3")
@@ -122,7 +129,8 @@ public class UDR3 : core.System
             .SetParameter("SDFTexture", Geometry?.SDFTexture)
             .SetParameter("LastFrame", LastFrameTexture)
             .SetParameter("OutputSize", OutputSize)
-            .SetParameter("FrameCount", (float)FrameCount)
+            .SetParameter("CurrentWeight", currentWeight)
+            .SetParameter("FrameCount", (float)effectiveFrames)
             .Draw()
             .Commit()
             .SetTarget(null);
@@ -140,13 +148,14 @@ public class UDR3 : core.System
             .Commit()
             .SetTarget(null);
 
-        FrameCount++;
+        if (FrameIndex < FramesToAccumulate)
+            FrameIndex++;
 
         Gizmos?.Set("UDR3", $"Quality: {UDRQuality.Names[UDRQuality.Index]} ({UDRQuality.ScaleNormalized:P0}) [F4]");
         Gizmos?.Set("UDR3", $"Input Size: {input.Width}x{input.Height}");
         Gizmos?.Set("UDR3", $"Output Size: {OutputSize.X}x{OutputSize.Y}");
+        Gizmos?.Set("UDR3", $"Frames to Accumulate: {FramesToAccumulate} (current: {effectiveFrames})");
         Gizmos?.Set("UDR3", $"Debug Rays: {(DebugRays ? "On" : "Off")} [F10]");
-        Gizmos?.Set("UDR3", $"Frame Count: {FrameCount}");
     }
 
     private void HandleInput()
@@ -187,7 +196,7 @@ public class UDR3 : core.System
         DisposeRenderTargets();
         OutputSize = newSize;
         CreateRenderTargets();
-        FrameCount = 0;
+        FrameIndex = 0;
     }
 
     private void DisposeRenderTargets()
