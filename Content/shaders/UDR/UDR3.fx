@@ -68,15 +68,44 @@ float DetectSDFEdge(float2 uv)
     return sdfDist;
 }
 
+// Lanczos3 kernel (6x6, higher quality)
+float Lanczos3(float x)
+{
+    if (x == 0.0) return 1.0;
+    if (abs(x) >= 3.0) return 0.0;
+    float pi_x = 3.14159265359 * x;
+    return (sin(pi_x) * sin(pi_x / 3.0)) / (pi_x * pi_x / 3.0);
+}
+
 // Simple bilinear upscaling with edge correction
 float4 UDR3(PixelShaderInput input) : SV_Target0
 {
     float2 uv = input.UV;
     float2 texelSize = 1.0 / InputSize;
 
-    // Simple bilinear sampling - the hardware does the work
-    float3 result = InputTexture.Sample(Sampler, uv).rgb;
-    float3 emissive = EmissiveTexture.Sample(Sampler, uv).rgb;
+    // Lanczos3 sampling (6x6 kernel)
+    float2 srcPos = uv * InputSize - 0.5;
+    float2 srcBase = floor(srcPos);
+    float2 f = srcPos - srcBase;
+
+    float3 result = 0;
+    float3 emissive = 0;
+    float totalWeight = 0;
+
+    [unroll] for (int ky = -2; ky <= 3; ky++)
+    {
+        [unroll] for (int kx = -2; kx <= 3; kx++)
+        {
+            float2 samplePos = (srcBase + float2(kx, ky) + 0.5) / InputSize;
+            float weight = Lanczos3(kx - f.x) * Lanczos3(ky - f.y);
+            result += InputTexture.SampleLevel(Sampler, samplePos, 0).rgb * weight;
+            emissive += EmissiveTexture.SampleLevel(Sampler, samplePos, 0).rgb * weight;
+            totalWeight += weight;
+        }
+    }
+    
+    result /= totalWeight;
+    emissive /= totalWeight;
 
     const float indoorThreshold = 0.0045;   // how far correction extends INTO the body
     const float outdoorThreshold = 0.001;   // how far correction extends OUT of the body
