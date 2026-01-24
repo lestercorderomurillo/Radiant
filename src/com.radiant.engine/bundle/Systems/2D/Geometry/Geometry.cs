@@ -13,6 +13,8 @@ public class Geometry : core.System
 
     private RenderTarget2D JFATexture1;
     private RenderTarget2D JFATexture2;
+    private RenderTarget2D JFATextureInterior1;
+    private RenderTarget2D JFATextureInterior2;
 
     private Vector2 WorldBounds;
     private Vector2 SDFBounds;
@@ -20,6 +22,7 @@ public class Geometry : core.System
     private int JFAPassCount;
 
     private RenderTarget2D JFAResult;
+    private RenderTarget2D JFAResultInterior;
     public RenderTarget2D EmissiveTexture { get; private set; }
     public RenderTarget2D AbsorptionTexture { get; private set; }
     public RenderTarget2D SDFTexture { get; private set; }
@@ -43,11 +46,12 @@ public class Geometry : core.System
         ScreenDiagonal = Renderer.ScreenDiagonal;
 
         float sdfDiagonal = SDFBounds.Length();
-        JFAPassCount = (int)Math.Ceiling(Math.Log(sdfDiagonal, 2)) + 1;
+        JFAPassCount = (int)Math.Ceiling(Math.Log(sdfDiagonal, 2));
 
         InitializeGeometryBuffers();
 
         JFAResult = JFATexture1;
+        JFAResultInterior = JFATextureInterior1;
 
         Gizmos = Scene.ECS.GetSystem<GizmosRenderer>();
         PrevKeyState = Keyboard.GetState();
@@ -55,11 +59,26 @@ public class Geometry : core.System
 
     private void InitializeJFA()
     {
+        // Initialize exterior JFA (seeds surface pixels, floods outward)
         Renderer
             .Reset()
             .SetShader("Geometry")
             .SetTechnique("InitializeJFA")
             .SetTarget(JFATexture1)
+            .Clear(Color.Black)
+            .SetParameter("EmissiveTexture", EmissiveTexture)
+            .SetParameter("WorldsBounds", SDFBounds)
+            .SetParameter("ScreenDiagonal", ScreenDiagonal)
+            .Draw()
+            .Commit()
+            .SetTarget(null);
+
+        // Initialize interior JFA (seeds non-surface pixels, floods inward)
+        Renderer
+            .Reset()
+            .SetShader("Geometry")
+            .SetTechnique("InitializeJFAInterior")
+            .SetTarget(JFATextureInterior1)
             .Clear(Color.Black)
             .SetParameter("EmissiveTexture", EmissiveTexture)
             .SetParameter("WorldsBounds", SDFBounds)
@@ -88,6 +107,14 @@ public class Geometry : core.System
             false, SurfaceFormat.Vector4, DepthFormat.None);
 
         JFATexture2 = new RenderTarget2D(
+            Renderer.Device, (int)SDFBounds.X, (int)SDFBounds.Y,
+            false, SurfaceFormat.Vector4, DepthFormat.None);
+
+        JFATextureInterior1 = new RenderTarget2D(
+            Renderer.Device, (int)SDFBounds.X, (int)SDFBounds.Y,
+            false, SurfaceFormat.Vector4, DepthFormat.None);
+
+        JFATextureInterior2 = new RenderTarget2D(
             Renderer.Device, (int)SDFBounds.X, (int)SDFBounds.Y,
             false, SurfaceFormat.Vector4, DepthFormat.None);
     }
@@ -206,6 +233,7 @@ public class Geometry : core.System
     {
         InitializeJFA();
         RunJFAPasses();
+        RunJFAPassesInterior();
         GenerateFinalSDF();
     }
 
@@ -232,6 +260,29 @@ public class Geometry : core.System
         );
     }
 
+    private void RunJFAPassesInterior()
+    {
+        Renderer
+            .Reset()
+            .SetShader("Geometry")
+            .SetTechnique("JFAPass")
+            .SetParameter("WorldsBounds", SDFBounds)
+            .SetParameter("ScreenDiagonal", ScreenDiagonal);
+
+        JFAResultInterior = Renderer.PingPong(
+            JFATextureInterior1, JFATextureInterior2,
+            JFAPassCount,
+            beforePass: (pass, input) =>
+            {
+                int jump = 1 << (JFAPassCount - pass - 1);
+                Renderer
+                    .SetParameter("JFATexture", input)
+                    .SetParameter("JumpDistance", (float)jump);
+            },
+            clearColor: Color.Black
+        );
+    }
+
     private void GenerateFinalSDF()
     {
         Renderer
@@ -241,7 +292,9 @@ public class Geometry : core.System
             .SetTarget(SDFTexture)
             .SetParameter("EmissiveTexture", EmissiveTexture)
             .SetParameter("JFATexture", JFAResult)
+            .SetParameter("JFATextureInterior", JFAResultInterior)
             .SetParameter("WorldsBounds", WorldBounds)
+            .SetParameter("JFASize", SDFBounds)
             .SetParameter("ScreenDiagonal", ScreenDiagonal)
             .Draw()
             .Commit()
@@ -302,8 +355,10 @@ public class Geometry : core.System
                     .SetTechnique("DebugSDFVisible")
                     .SetTarget(null)
                     .SetParameter("JFATexture", JFAResult)
+                    .SetParameter("JFATextureInterior", JFAResultInterior)
                     .SetParameter("EmissiveTexture", EmissiveTexture)
-                    .SetParameter("WorldsBounds", SDFBounds)
+                    .SetParameter("WorldsBounds", WorldBounds)
+                    .SetParameter("JFASize", SDFBounds)
                     .SetParameter("ScreenDiagonal", ScreenDiagonal)
                     .Draw()
                     .Commit();
@@ -316,7 +371,10 @@ public class Geometry : core.System
                     .SetTechnique("DebugJFA")
                     .SetTarget(null)
                     .SetParameter("JFATexture", JFAResult)
-                    .SetParameter("WorldsBounds", SDFBounds)
+                    .SetParameter("JFATextureInterior", JFAResultInterior)
+                    .SetParameter("EmissiveTexture", EmissiveTexture)
+                    .SetParameter("WorldsBounds", WorldBounds)
+                    .SetParameter("JFASize", SDFBounds)
                     .SetParameter("ScreenDiagonal", ScreenDiagonal)
                     .Draw()
                     .Commit();
@@ -348,6 +406,8 @@ public class Geometry : core.System
         SDFTexture?.Dispose();
         JFATexture1?.Dispose();
         JFATexture2?.Dispose();
+        JFATextureInterior1?.Dispose();
+        JFATextureInterior2?.Dispose();
 
         WorldBounds = newSize;
         SDFBounds = new Vector2(
@@ -356,10 +416,11 @@ public class Geometry : core.System
         ScreenDiagonal = Renderer.ScreenDiagonal;
 
         float sdfDiagonal = SDFBounds.Length();
-        JFAPassCount = (int)Math.Ceiling(Math.Log(sdfDiagonal, 2)) + 1;
+        JFAPassCount = (int)Math.Ceiling(Math.Log(sdfDiagonal, 2));
 
         InitializeGeometryBuffers();
         JFAResult = JFATexture1;
+        JFAResultInterior = JFATextureInterior1;
     }
 
     public override void Dispose()
@@ -369,5 +430,7 @@ public class Geometry : core.System
         SDFTexture?.Dispose();
         JFATexture1?.Dispose();
         JFATexture2?.Dispose();
+        JFATextureInterior1?.Dispose();
+        JFATextureInterior2?.Dispose();
     }
 }

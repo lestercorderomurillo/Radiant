@@ -3,11 +3,13 @@ static const float EPSILON = 0.00001;
 
 Texture2D EmissiveTexture : register(t0);
 Texture2D JFATexture : register(t1);
+Texture2D JFATextureInterior : register(t2);
 
 SamplerState SceneColorSampler : register(s0);
 SamplerState JFASampler : register(s1);
 
 float2 WorldsBounds;
+float2 JFASize;
 float ScreenDiagonal;
 float JumpDistance;
 
@@ -58,9 +60,18 @@ float UVDistanceSq(float2 uv1, float2 uv2)
     return dot(deltaPixels, deltaPixels);
 }
 
+// Initialize exterior JFA: seed surface pixels, flood outward
 float4 InitializeJFAPS(PixelShaderInput input) : COLOR
 {
     if (IsSurface(input.UV))
+        return EncodePositionPacked(input.UV, true);
+    return float4(0.0, 0.0, 0.0, 0.0);
+}
+
+// Initialize interior JFA: seed non-surface pixels, flood inward
+float4 InitializeJFAInteriorPS(PixelShaderInput input) : COLOR
+{
+    if (!IsSurface(input.UV))
         return EncodePositionPacked(input.UV, true);
     return float4(0.0, 0.0, 0.0, 0.0);
 }
@@ -98,7 +109,7 @@ float4 JFAPassPS(PixelShaderInput input) : COLOR
         if (neighborHasSurface)
         {
             float distSq = UVDistanceSq(neighborStoredUV, input.UV);
-            
+
             if (distSq < minDistanceSq)
             {
                 minDistanceSq = distSq;
@@ -111,43 +122,163 @@ float4 JFAPassPS(PixelShaderInput input) : COLOR
     return EncodePositionPacked(closestUV, foundSurface);
 }
 
-float4 GenerateSDFFromJFAPS(PixelShaderInput input) : COLOR
+// Sample 2x2 JFA texels and return minimum distance (fixes Voronoi boundary artifacts at lower resolution)
+float SampleJFAMinDistance(Texture2D jfaTex, float2 uv, float2 currentPixelUV)
 {
-    if (IsSurface(input.UV))
-        return float4(0.0, 0.0, 0.0, 1.0);
-    
-    bool hasSurface;
-    float2 closestUV = DecodePositionPacked(JFATexture.Sample(JFASampler, input.UV), hasSurface);
-    
-    if (!hasSurface)
-        return float4(1.0, 0.0, 0.0, 1.0);
-    
-    float2 deltaUV = closestUV - input.UV;
-    float2 deltaSDF = deltaUV * WorldsBounds;
-    
-    float sdfScale = ScreenDiagonal / length(WorldsBounds);
-    float screenDistance = length(deltaSDF) * sdfScale;
-    float normalizedDistance = saturate(screenDistance / ScreenDiagonal);
-    
-    return float4(normalizedDistance, 0.0, 0.0, 1.0);
+    // Convert UV to JFA texel coordinate
+    float2 texelCoordF = uv * JFASize;
+
+    // Find base texel (the 4 texels whose centers surround this point)
+    int2 baseTexel = int2(floor(texelCoordF - 0.5));
+
+    float minDist = 999999.0;
+
+    // Sample 2x2 neighborhood
+    [unroll]
+    for (int y = 0; y <= 1; y++)
+    {
+        [unroll]
+        for (int x = 0; x <= 1; x++)
+        {
+            int2 texel = baseTexel + int2(x, y);
+
+            // Clamp to valid range
+            texel = clamp(texel, int2(0, 0), int2(JFASize) - 1);
+
+            // Load exact texel value (no filtering)
+            float4 data = jfaTex.Load(int3(texel, 0));
+
+            bool hasSeed;
+            float2 seedUV = DecodePositionPacked(data, hasSeed);
+
+            if (hasSeed)
+            {
+                float2 delta = (seedUV - currentPixelUV) * WorldsBounds;
+                float dist = length(delta);
+                minDist = min(minDist, dist);
+            }
+        }
+    }
+
+    return minDist;
 }
 
+// Signed SDF: -1 to 1, where 0 = surface boundary
+// Negative = inside geometry, Positive = outside geometry
+float4 GenerateSDFFromJFAPS(PixelShaderInput input) : COLOR
+{
+    bool isInside = IsSurface(input.UV);
+
+    if (isInside)
+    {
+        // Inside geometry - use interior JFA to find distance to boundary (negative)
+        float pixelDistance = SampleJFAMinDistance(JFATextureInterior, input.UV, input.UV);
+
+        if (pixelDistance > 999998.0)
+            return float4(-1.0, 0.0, 0.0, 1.0); // Deep inside, max negative
+
+        float normalizedDistance = saturate(pixelDistance / ScreenDiagonal);
+
+        if (normalizedDistance < EPSILON)
+            return float4(0.0, 0.0, 0.0, 1.0); // On boundary
+
+        return float4(-normalizedDistance, 0.0, 0.0, 1.0); // Negative = inside
+    }
+    else
+    {
+        // Outside geometry - use exterior JFA to find distance to surface (positive)
+        float pixelDistance = SampleJFAMinDistance(JFATexture, input.UV, input.UV);
+
+        if (pixelDistance > 999998.0)
+            return float4(1.0, 0.0, 0.0, 1.0); // Far outside, max positive
+
+        float normalizedDistance = saturate(pixelDistance / ScreenDiagonal);
+
+        return float4(normalizedDistance, 0.0, 0.0, 1.0); // Positive = outside
+    }
+}
+
+// Convert angle to rainbow color (hue wheel)
+float3 AngleToColor(float angle)
+{
+    float h = angle / (2.0 * PI); // 0-1
+    float3 rgb = saturate(abs(fmod(h * 6.0 + float3(0, 4, 2), 6.0) - 3.0) - 1.0);
+    return rgb;
+}
+
+// Sample JFA with multi-sample and return closest seed UV and distance
+float2 SampleJFAClosestSeed(Texture2D jfaTex, float2 uv, float2 currentPixelUV, out float outDist)
+{
+    float2 texelCoordF = uv * JFASize;
+    int2 baseTexel = int2(floor(texelCoordF - 0.5));
+
+    float minDist = 999999.0;
+    float2 bestSeed = float2(0, 0);
+
+    [unroll]
+    for (int y = 0; y <= 1; y++)
+    {
+        [unroll]
+        for (int x = 0; x <= 1; x++)
+        {
+            int2 texel = baseTexel + int2(x, y);
+            texel = clamp(texel, int2(0, 0), int2(JFASize) - 1);
+
+            float4 data = jfaTex.Load(int3(texel, 0));
+            bool hasSeed;
+            float2 seedUV = DecodePositionPacked(data, hasSeed);
+
+            if (hasSeed)
+            {
+                float2 delta = (seedUV - currentPixelUV) * WorldsBounds;
+                float dist = length(delta);
+                if (dist < minDist)
+                {
+                    minDist = dist;
+                    bestSeed = seedUV;
+                }
+            }
+        }
+    }
+
+    outDist = minDist;
+    return bestSeed;
+}
+
+// JFA Direction debug: shows direction to nearest boundary as color wheel + distance as brightness
 float4 DebugJFAPS(PixelShaderInput input) : COLOR
 {
-    bool hasSurface;
-    float2 closestUV = DecodePositionPacked(JFATexture.Sample(JFASampler, input.UV), hasSurface);
-    
-    if (!hasSurface)
-        return float4(0.0, 0.0, 0.0, 1.0);
-    
-    float2 deltaUV = closestUV - input.UV;
-    float2 deltaPixels = deltaUV * WorldsBounds;
-    
-    if (dot(deltaPixels, deltaPixels) < 0.5)
+    bool isInside = IsSurface(input.UV);
+    float dist;
+    float2 closestUV;
+
+    if (isInside)
+        closestUV = SampleJFAClosestSeed(JFATextureInterior, input.UV, input.UV, dist);
+    else
+        closestUV = SampleJFAClosestSeed(JFATexture, input.UV, input.UV, dist);
+
+    if (dist > 999998.0)
+        return float4(0.1, 0.1, 0.1, 1.0); // Dark gray = no data
+
+    // Boundary = yellow
+    if (dist < 2.0)
         return float4(1.0, 1.0, 0.0, 1.0);
-    
-    float2 direction = normalize(deltaPixels);
-    return float4(direction * 0.5 + 0.5, 0.0, 1.0);
+
+    // Direction as angle -> rainbow color
+    float2 deltaPixels = (closestUV - input.UV) * WorldsBounds;
+    float angle = atan2(deltaPixels.y, deltaPixels.x) + PI; // 0 to 2PI
+    float3 dirColor = AngleToColor(angle);
+
+    // Brightness based on distance (bright near, dim far)
+    float brightness = 1.0 - saturate(dist / 150.0) * 0.6;
+
+    // Tint inside slightly blue, outside slightly warm
+    if (isInside)
+        dirColor = lerp(dirColor, float3(0.3, 0.5, 1.0), 0.2);
+    else
+        dirColor = lerp(dirColor, float3(1.0, 0.7, 0.4), 0.15);
+
+    return float4(dirColor * brightness, 1.0);
 }
 
 float4 DebugJFARawPS(PixelShaderInput input) : COLOR
@@ -161,25 +292,38 @@ float4 DebugJFARawPS(PixelShaderInput input) : COLOR
     return float4(storedUV.x, storedUV.y, 0.5, 1.0);
 }
 
+// Debug signed SDF: Cyan->Blue = inside, Yellow = boundary, Orange->Red = outside
 float4 DebugSDFVisiblePS(PixelShaderInput input) : COLOR
 {
-    if (IsSurface(input.UV))
-        return float4(1.0, 1.0, 0.0, 1.0);
-    
-    bool hasSurface;
-    float2 closestUV = DecodePositionPacked(JFATexture.Sample(JFASampler, input.UV), hasSurface);
-    
-    if (!hasSurface)
-        return float4(0.0, 0.0, 0.0, 1.0);
-    
-    float2 deltaUV = closestUV - input.UV;
-    float2 deltaSDF = deltaUV * WorldsBounds;
-    
-    float sdfScale = ScreenDiagonal / length(WorldsBounds);
-    float screenDistance = length(deltaSDF) * sdfScale;
-    float v = saturate(screenDistance / (ScreenDiagonal * 0.5));
-    
-    return float4(v, v, v, 1.0);
+    bool isInside = IsSurface(input.UV);
+
+    if (isInside)
+    {
+        // Inside geometry
+        float pixelDist = SampleJFAMinDistance(JFATextureInterior, input.UV, input.UV);
+
+        if (pixelDist > 999998.0)
+            return float4(1.0, 0.0, 1.0, 1.0); // Magenta = ERROR: no exterior found
+
+        if (pixelDist < 1.5)
+            return float4(1.0, 1.0, 0.0, 1.0); // Yellow = boundary
+
+        // Cyan (near) -> Blue (far)
+        float t = saturate(pixelDist / 50.0);
+        return float4(0.0, 1.0 - t, 1.0, 1.0);
+    }
+    else
+    {
+        // Outside geometry
+        float pixelDist = SampleJFAMinDistance(JFATexture, input.UV, input.UV);
+
+        if (pixelDist > 999998.0)
+            return float4(0.2, 0.0, 0.0, 1.0); // Dark red = no surface
+
+        // Orange (near) -> Red (far)
+        float t = saturate(pixelDist / 50.0);
+        return float4(1.0, 0.5 * (1.0 - t), 0.0, 1.0);
+    }
 }
 
 float4 DebugEmissivePS(PixelShaderInput input) : COLOR
@@ -189,10 +333,19 @@ float4 DebugEmissivePS(PixelShaderInput input) : COLOR
 
 technique InitializeJFA
 {
-    pass P0 
-    { 
+    pass P0
+    {
         VertexShader = compile vs_4_0 MainVS();
-        PixelShader = compile ps_4_0 InitializeJFAPS(); 
+        PixelShader = compile ps_4_0 InitializeJFAPS();
+    }
+}
+
+technique InitializeJFAInterior
+{
+    pass P0
+    {
+        VertexShader = compile vs_4_0 MainVS();
+        PixelShader = compile ps_4_0 InitializeJFAInteriorPS();
     }
 }
 
