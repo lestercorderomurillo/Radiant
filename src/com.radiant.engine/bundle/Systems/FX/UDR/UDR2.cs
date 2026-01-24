@@ -48,6 +48,19 @@ public class UDR2 : core.System
     public void SetInputSource(Func<Texture2D> source)
     {
         InputSource = source;
+        ResetAccumulation();
+    }
+
+    public void ResetAccumulation()
+    {
+        FrameIndex = 0;
+        // Clear the accumulation buffer to avoid showing stale history
+        if (AccumulationTexture != null)
+        {
+            Renderer.Device.SetRenderTarget(AccumulationTexture);
+            Renderer.Device.Clear(Color.Black);
+            Renderer.Device.SetRenderTarget(null);
+        }
     }
 
     private void CreateRenderTargets()
