@@ -50,8 +50,9 @@ float4 MainPS(PSInput input) : SV_Target
     if (type == 1) // Circle
     {
         float dist = length(center);
-        // Anti-aliased edge
-        alpha = 1.0 - smoothstep(0.48, 0.5, dist);
+        // Screen-space anti-aliasing using derivatives
+        float pixelWidth = fwidth(dist);
+        alpha = 1.0 - smoothstep(0.5 - pixelWidth, 0.5, dist);
         if (alpha < 0.001)
             discard;
     }
@@ -60,7 +61,9 @@ float4 MainPS(PSInput input) : SV_Target
         // Triangle SDF
         float2 p = float2(abs(center.x), -center.y + 0.15);
         float d = max(p.x * 0.866 + p.y * 0.5, p.y) - 0.35;
-        alpha = 1.0 - smoothstep(-0.01, 0.01, d);
+        // Screen-space anti-aliasing using derivatives
+        float pixelWidth = fwidth(d);
+        alpha = 1.0 - smoothstep(-pixelWidth, pixelWidth, d);
         if (alpha < 0.001)
             discard;
     }
@@ -118,3 +121,4 @@ technique Sharp
         PixelShader = compile ps_4_0 SharpPS();
     }
 }
+

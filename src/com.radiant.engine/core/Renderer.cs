@@ -384,7 +384,8 @@ public class Renderer : IDisposable
     /// </summary>
     /// <param name="target">Render target (null for backbuffer).</param>
     /// <param name="clearColor">Optional clear color before rendering.</param>
-    public Renderer FlushShapes(RenderTarget2D target = null, Color? clearColor = null)
+    /// <param name="technique">Shader technique: "Default" (AA), "Sharp" (no AA), or "Emissive" (sharp SDF for light sources).</param>
+    public Renderer FlushShapes(RenderTarget2D target = null, Color? clearColor = null, string technique = "Default")
     {
         CommitTextures();
 
@@ -412,7 +413,7 @@ public class Renderer : IDisposable
             var viewProjection = Matrix.CreateOrthographicOffCenter(0, width, height, 0, 0, 1);
 
             ShapeShader ??= GetShaderEffect("InstancedShapes");
-            ShapeShader.CurrentTechnique = ShapeShader.Techniques["Sharp"];
+            ShapeShader.CurrentTechnique = ShapeShader.Techniques[technique];
             ShapeShader.Parameters["ViewProjection"]?.SetValue(viewProjection);
 
             foreach (var pass in ShapeShader.CurrentTechnique.Passes)

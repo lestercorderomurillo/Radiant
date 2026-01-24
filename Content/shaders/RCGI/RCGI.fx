@@ -119,8 +119,11 @@ float4 Raymarch(float2 probeOrigin, float rayAngle)
 
             float t = prevDistance / (prevDistance + 0.01);
             float2 hitPos = lerp(prevPos, rayPos, t);
-            
-            return float4(EmissiveTexture.SampleLevel(SceneColorSampler, hitPos, 0).rgb, 0.0);
+
+            // Un-premultiply alpha to get true emissive color (avoids flicker from AA edges)
+            float4 emissRaw = EmissiveTexture.SampleLevel(SceneColorSampler, hitPos, 0);
+            float3 emiss = emissRaw.a > 0.001 ? emissRaw.rgb / emissRaw.a : float3(0, 0, 0);
+            return float4(emiss, 0.0);
         }
         
         prevDistance = worldDistance;

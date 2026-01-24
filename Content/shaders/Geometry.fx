@@ -38,7 +38,15 @@ bool IsSurface(float2 uv)
     if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)
         return false;
     float4 color = EmissiveTexture.Sample(SceneColorSampler, uv);
-    return color.a > 0.0;
+    return color.a > 0.5; // Threshold at 50% for consistent surface detection
+}
+
+// Get alpha value for subpixel distance refinement
+float GetSurfaceAlpha(float2 uv)
+{
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)
+        return 0.0;
+    return EmissiveTexture.Sample(SceneColorSampler, uv).a;
 }
 
 float4 EncodePositionPacked(float2 uv, bool hasSurface)
@@ -165,9 +173,15 @@ float SampleJFAMinDistance(Texture2D jfaTex, float2 uv, float2 currentPixelUV)
 
 // Signed SDF: -1 to 1, where 0 = surface boundary
 // Negative = inside geometry, Positive = outside geometry
+// Uses alpha for subpixel distance refinement
 float4 GenerateSDFFromJFAPS(PixelShaderInput input) : COLOR
 {
-    bool isInside = IsSurface(input.UV);
+    float alpha = GetSurfaceAlpha(input.UV);
+    bool isInside = alpha > 0.5;
+
+    // Subpixel offset based on alpha gradient (alpha 0.5 = on boundary)
+    // alpha 1.0 = ~0.5 pixels inside, alpha 0.0 = ~0.5 pixels outside
+    float subpixelOffset = (alpha - 0.5);
 
     if (isInside)
     {
@@ -176,6 +190,9 @@ float4 GenerateSDFFromJFAPS(PixelShaderInput input) : COLOR
 
         if (pixelDistance > 999998.0)
             return float4(-1.0, 0.0, 0.0, 1.0); // Deep inside, max negative
+
+        // Refine with subpixel offset (more alpha = further inside)
+        pixelDistance = max(0.0, pixelDistance + subpixelOffset);
 
         float normalizedDistance = saturate(pixelDistance / ScreenDiagonal);
 
@@ -191,6 +208,9 @@ float4 GenerateSDFFromJFAPS(PixelShaderInput input) : COLOR
 
         if (pixelDistance > 999998.0)
             return float4(1.0, 0.0, 0.0, 1.0); // Far outside, max positive
+
+        // Refine with subpixel offset (less alpha = further outside)
+        pixelDistance = max(0.0, pixelDistance - subpixelOffset);
 
         float normalizedDistance = saturate(pixelDistance / ScreenDiagonal);
 

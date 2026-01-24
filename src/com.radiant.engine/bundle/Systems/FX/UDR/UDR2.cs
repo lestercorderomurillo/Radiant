@@ -142,6 +142,8 @@ public class UDR2 : core.System
             .SetTarget(SmoothTexture)
             .Clear(Color.Black)
             .SetParameter("InputTexture", SpatialTexture)
+            .SetParameter("EmissiveTexture", Geometry?.EmissiveTexture)
+            .SetParameter("SDFTexture", Geometry?.SDFTexture)
             .SetParameter("HistoryTexture", AccumulationTexture)
             .SetParameter("OutputSize", OutputSize)
             .SetParameter("CurrentWeight", currentWeight)

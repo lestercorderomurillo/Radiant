@@ -43,6 +43,12 @@ float GetLuminance(float3 color)
     return dot(color, float3(0.299, 0.587, 0.114));
 }
 
+// Un-premultiply alpha to get true color from premultiplied texture
+float3 UnpremultiplyRGB(float4 premultiplied)
+{
+    return premultiplied.a > 0.001 ? premultiplied.rgb / premultiplied.a : float3(0, 0, 0);
+}
+
 static const float PI = 3.14159265359;
 
 // Get Lanczos weight
@@ -300,7 +306,8 @@ float4 CorrectEdgesWithDebug(float3 color, float2 uv)
 
         // Blend: emissive fills holes near edge, original color preserved inside
         // debug = emissiveAmount remapped to show correction intensity (positive = on surface)
-        return float4(lerp(color, emissive.rgb, emissiveAmount), emissiveAmount + 0.5);
+        float3 emissiveColor = UnpremultiplyRGB(emissive);
+        return float4(lerp(color, emissiveColor, emissiveAmount), emissiveAmount + 0.5);
     }
     else
     {
@@ -318,14 +325,14 @@ float4 CorrectEdgesWithDebug(float3 color, float2 uv)
         float4 emissiveU = EmissiveTexture.Sample(Sampler, uv + float2(0, -texelSize.y));
         float4 emissiveD = EmissiveTexture.Sample(Sampler, uv + float2(0,  texelSize.y));
 
-        // Weighted average from neighbors on surface
+        // Weighted average from neighbors on surface (un-premultiply to get true colors)
         float3 surfaceColor = float3(0, 0, 0);
         float surfaceWeight = 0.0;
 
-        if (emissiveL.a > 0.0) { surfaceColor += emissiveL.rgb; surfaceWeight += 1.0; }
-        if (emissiveR.a > 0.0) { surfaceColor += emissiveR.rgb; surfaceWeight += 1.0; }
-        if (emissiveU.a > 0.0) { surfaceColor += emissiveU.rgb; surfaceWeight += 1.0; }
-        if (emissiveD.a > 0.0) { surfaceColor += emissiveD.rgb; surfaceWeight += 1.0; }
+        if (emissiveL.a > 0.0) { surfaceColor += UnpremultiplyRGB(emissiveL); surfaceWeight += 1.0; }
+        if (emissiveR.a > 0.0) { surfaceColor += UnpremultiplyRGB(emissiveR); surfaceWeight += 1.0; }
+        if (emissiveU.a > 0.0) { surfaceColor += UnpremultiplyRGB(emissiveU); surfaceWeight += 1.0; }
+        if (emissiveD.a > 0.0) { surfaceColor += UnpremultiplyRGB(emissiveD); surfaceWeight += 1.0; }
 
         // No nearby surface - no correction
         if (surfaceWeight < 0.001)

@@ -66,7 +66,9 @@ PixelShaderOutput MainPS(PixelShaderInput input)
         return output;
     }
 
-    float3 emiss = ToLinear(Emissivity.Sample(EmissiveSampler, sampleCoord).rgb);
+    float4 emissRaw = Emissivity.Sample(EmissiveSampler, sampleCoord);
+    // Un-premultiply alpha to get true emissive color (avoids flicker from AA edges)
+    float3 emiss = emissRaw.a > 0.001 ? ToLinear(emissRaw.rgb / emissRaw.a) : float3(0, 0, 0);
     float3 absrp = Absorption.Sample(AbsorptionSampler, sampleCoord).rgb * 5.0;
 
     // Beer's Law with luminance-weighted single-channel transmittance
