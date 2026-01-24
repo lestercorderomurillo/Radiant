@@ -79,21 +79,27 @@ float4 UDR3(PixelShaderInput input) : SV_Target0
 
     if (DebugRays > 0.5)
     {
-        const float threshold = 0.001;
+        const float indoorThreshold = 0.005;   // how far green extends INTO the body
+        const float outdoorThreshold = 0.00125;  // how far green extends OUT of the body
 
         // Sample SDF: negative = inside, 0 = edge, positive = outside
         float sdfDist = DetectSDFEdge(uv);
 
-        // Show green ring near edge (where abs(sdf) is small)
-        if (abs(sdfDist) < threshold)
+        // Inside the body (negative SDF)
+        if (sdfDist < 0 && sdfDist > -indoorThreshold)
         {
-            // Near edge - show as green
-            return float4(lerp(result, float3(0.0, 1.0, 0.0), 0.8), 1.0);
+            // Gradient: 1.0 at edge (sdfDist=0), fading to 0.0 at -indoorThreshold
+            float intensity = 1.0 - abs(sdfDist) / indoorThreshold;
+            intensity = smoothstep(0.0, 1.0, intensity);
+            return float4(lerp(result, float3(0.0, 1.0, 0.0), intensity * 0.8), 1.0);
         }
-        else
+        // Outside the body (positive SDF)
+        else if (sdfDist > 0 && sdfDist < outdoorThreshold)
         {
-            // Not near edge - darken slightly
-            return float4(result * 0.7, 1.0);
+            // Gradient: 1.0 at edge (sdfDist=0), fading to 0.0 at outdoorThreshold
+            float intensity = 1.0 - sdfDist / outdoorThreshold;
+            intensity = smoothstep(0.0, 1.0, intensity);
+            return float4(lerp(result, float3(0.0, 1.0, 0.0), intensity * 0.8), 1.0);
         }
     }
 
