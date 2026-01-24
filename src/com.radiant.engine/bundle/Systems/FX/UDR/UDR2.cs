@@ -8,10 +8,6 @@ namespace com.radiant.engine.bundle;
 
 public class UDR2 : core.System
 {
-    private static readonly int[] ScaleFactors = { 25, 50, 100 };
-    private static readonly string[] QualityNames = { "Performance", "Balanced", "Native" };
-    private int QualityIndex = 1;
-    private int ScaleFactor => ScaleFactors[QualityIndex];
 
     // Spatial parameters
     public float Sharpness = 0.6f;
@@ -41,6 +37,7 @@ public class UDR2 : core.System
         OutputSize = Renderer.ScreenSize;
         CreateRenderTargets();
         ApplyRenderScale();
+        UDRQuality.Changed += _ => ApplyRenderScale();
         PrevKeyState = Keyboard.GetState();
         FrameIndex = 0;
 
@@ -93,22 +90,9 @@ public class UDR2 : core.System
             DepthFormat.None);
     }
 
-    private float GetScaleFactorNormalized() => ScaleFactor / 100f;
-
     private void ApplyRenderScale()
     {
-        Renderer.RenderScale = GetScaleFactorNormalized();
-    }
-
-    public void SetQuality(int index)
-    {
-        index = Math.Clamp(index, 0, ScaleFactors.Length - 1);
-
-        if (QualityIndex != index)
-        {
-            QualityIndex = index;
-            ApplyRenderScale();
-        }
+        Renderer.RenderScale = UDRQuality.ScaleNormalized;
     }
 
     public override void Update()
@@ -183,7 +167,7 @@ public class UDR2 : core.System
 
         FrameIndex++;
 
-        Gizmos?.Set("UDR2", $"Quality: {QualityNames[QualityIndex]} ({GetScaleFactorNormalized():P0}) [F4]");
+        Gizmos?.Set("UDR2", $"Quality: {UDRQuality.Names[UDRQuality.Index]} ({UDRQuality.ScaleNormalized:P0}) [F4]");
         Gizmos?.Set("UDR2", $"Input Size: {input.Width}x{input.Height}");
         Gizmos?.Set("UDR2", $"Output Size: {OutputSize.X}x{OutputSize.Y}");
         Gizmos?.Set("UDR2", $"Sharpness: {Sharpness:F2} [F7/F8]");
@@ -199,8 +183,7 @@ public class UDR2 : core.System
         // F4 to cycle quality
         if (key.IsKeyDown(Keys.F4) && !PrevKeyState.IsKeyDown(Keys.F4))
         {
-            QualityIndex = (QualityIndex + 1) % ScaleFactors.Length;
-            ApplyRenderScale();
+            UDRQuality.Cycle();
         }
 
         // T/Y to adjust frames to accumulate
@@ -242,7 +225,7 @@ public class UDR2 : core.System
 
     public override void Render()
     {
-        if (InputSource == null || ScaleFactor == 100)
+        if (InputSource == null || UDRQuality.ScaleFactor == 100)
             return;
 
         Renderer.SpriteBatch.Begin(SpriteSortMode.Immediate, BlendState.AlphaBlend, SamplerState.LinearClamp);
