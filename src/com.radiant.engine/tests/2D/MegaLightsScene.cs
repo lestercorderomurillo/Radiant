@@ -232,7 +232,7 @@ public class MegaLightsScene : Scene
 
         // X to spawn 10,000 random debug entities
         if (keyboard.IsKeyDown(Keys.X) && PrevKeyboard.IsKeyUp(Keys.X))
-            SpawnDebugEntities(10000);
+            SpawnDebugEntities(25000);
 
         PrevKeyboard = keyboard;
         PrevMouse = mouse;
