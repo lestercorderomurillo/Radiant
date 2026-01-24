@@ -230,6 +230,10 @@ public class MegaLightsScene : Scene
         if (keyboard.IsKeyDown(Keys.F11) && PrevKeyboard.IsKeyUp(Keys.F11))
             ToggleUDRSystem();
 
+        // X to spawn 10,000 random debug entities
+        if (keyboard.IsKeyDown(Keys.X) && PrevKeyboard.IsKeyUp(Keys.X))
+            SpawnDebugEntities(10000);
+
         PrevKeyboard = keyboard;
         PrevMouse = mouse;
 
@@ -355,5 +359,19 @@ public class MegaLightsScene : Scene
             (byte)(Math.Clamp(g, 0f, 1f) * 255),
             (byte)(Math.Clamp(b, 0f, 1f) * 255)
         );
+    }
+
+    private void SpawnDebugEntities(int count)
+    {
+        var screen = Renderer.Window.GetScreenSize();
+
+        for (int i = 0; i < count; i++)
+        {
+            float x = (float)Rng.NextDouble() * screen.X;
+            float y = (float)Rng.NextDouble() * screen.Y;
+            var color = HueToRGB((float)Rng.NextDouble());
+
+            CreateLight(new Vector2(x, y), 3f, color);
+        }
     }
 }
