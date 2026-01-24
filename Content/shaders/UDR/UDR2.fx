@@ -243,7 +243,7 @@ float4 CorrectEdgesWithDebug(float3 color, float2 uv)
 {
     // Adjustable constants
     static const float OUTER_MARGIN = 0.05;  // SDF is now -1 to 1
-    static const float INNER_MARGIN = 24.0;
+    static const float INNER_MARGIN = 18.0;
     static const float EDGE_BLEND = 0.55;
 
     float4 emissive = EmissiveTexture.Sample(Sampler, uv);

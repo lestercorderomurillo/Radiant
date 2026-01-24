@@ -15,7 +15,7 @@ public class UDR3 : core.System
 
     // Parameters
     public float DetailCorrection = 0f;
-    public bool DebugRays = true;
+    public bool DebugRays = false;
 
     private RenderTarget2D OutputTexture;
     private Vector2 OutputSize;

@@ -15,7 +15,7 @@ public class UDR1 : core.System
 
     public float Sharpness = 0.5f;
     public bool EdgeCorrection = true;
-    public bool DebugRays = true;
+    public bool DebugRays = false;
 
     private RenderTarget2D OutputTexture;
     private RenderTarget2D SmoothTexture;

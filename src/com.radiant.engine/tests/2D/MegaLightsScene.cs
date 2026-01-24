@@ -20,8 +20,8 @@ public class MegaLightsScene : Scene
     private float Rotation;
     private float RainbowHue = 0f;
     private const float HueSpeed = 0.008f;
-    private const float PaintRadius = 10f;
-    private const float PaintSpacing = 5f; // Spacing between painted lights (half radius for overlap)
+    private const float PaintRadius = 8f;
+    private const float PaintSpacing = 3f; // Spacing between painted lights (half radius for overlap)
     private Vector2 LastPaintPos;
     private bool HasLastPaintPos = false;
     private bool IsAnimating = true;

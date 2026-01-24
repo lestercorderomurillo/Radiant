@@ -68,7 +68,7 @@ float DetectSDFEdge(float2 uv)
     return sdfDist;
 }
 
-// Simple bilinear upscaling with edge debug
+// Simple bilinear upscaling with edge correction
 float4 UDR3(PixelShaderInput input) : SV_Target0
 {
     float2 uv = input.UV;
@@ -76,30 +76,48 @@ float4 UDR3(PixelShaderInput input) : SV_Target0
 
     // Simple bilinear sampling - the hardware does the work
     float3 result = InputTexture.Sample(Sampler, uv).rgb;
+    float3 emissive = EmissiveTexture.Sample(Sampler, uv).rgb;
 
-    if (DebugRays > 0.5)
+    const float indoorThreshold = 0.0045;   // how far correction extends INTO the body
+    const float outdoorThreshold = 0.001;   // how far correction extends OUT of the body
+
+    // Sample SDF: negative = inside, 0 = edge, positive = outside
+    float sdfDist = DetectSDFEdge(uv);
+
+    float edgeIntensity = 0.0;
+
+    // Inside the body (negative SDF)
+    if (sdfDist < 0 && sdfDist > -indoorThreshold)
     {
-        const float indoorThreshold = 0.005;   // how far green extends INTO the body
-        const float outdoorThreshold = 0.00125;  // how far green extends OUT of the body
+        // Gradient: 1.0 at edge (sdfDist=0), fading to 0.0 at -indoorThreshold
+        edgeIntensity = 1.0 - abs(sdfDist) / indoorThreshold;
+        edgeIntensity = smoothstep(0.0, 1.0, edgeIntensity);
+    }
+    // Outside the body (positive SDF)
+    else if (sdfDist > 0 && sdfDist < outdoorThreshold)
+    {
+        // Gradient: 1.0 at edge (sdfDist=0), fading to 0.0 at outdoorThreshold
+        edgeIntensity = 1.0 - sdfDist / outdoorThreshold;
+        edgeIntensity = smoothstep(0.0, 1.0, edgeIntensity);
+    }
 
-        // Sample SDF: negative = inside, 0 = edge, positive = outside
-        float sdfDist = DetectSDFEdge(uv);
-
-        // Inside the body (negative SDF)
-        if (sdfDist < 0 && sdfDist > -indoorThreshold)
+    // Edge correction: alpha blend emissive over result based on edge intensity
+    if (edgeIntensity > 0.0)
+    {
+        float4 emissiveSample = EmissiveTexture.Sample(Sampler, uv);
+        if (emissiveSample.a > 0.0)
         {
-            // Gradient: 1.0 at edge (sdfDist=0), fading to 0.0 at -indoorThreshold
-            float intensity = 1.0 - abs(sdfDist) / indoorThreshold;
-            intensity = smoothstep(0.0, 1.0, intensity);
-            return float4(lerp(result, float3(0.0, 1.0, 0.0), intensity * 0.8), 1.0);
+            // Un-premultiply to get true color
+            float3 emissiveColor = emissiveSample.rgb / emissiveSample.a;
+            // Blend: replace result with emissive based on edge intensity
+            float blendAmount = edgeIntensity * 0.45;  // EDGE_BLEND like UDR2
+            result = lerp(result, emissiveColor, blendAmount);
         }
-        // Outside the body (positive SDF)
-        else if (sdfDist > 0 && sdfDist < outdoorThreshold)
+
+        // Debug mode: show green overlay on top of corrected result
+        if (DebugRays > 0.5)
         {
-            // Gradient: 1.0 at edge (sdfDist=0), fading to 0.0 at outdoorThreshold
-            float intensity = 1.0 - sdfDist / outdoorThreshold;
-            intensity = smoothstep(0.0, 1.0, intensity);
-            return float4(lerp(result, float3(0.0, 1.0, 0.0), intensity * 0.8), 1.0);
+            return float4(lerp(result, float3(0.0, 1.0, 0.0), edgeIntensity * 0.8), 1.0);
         }
     }
 
