@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using System.Threading.Tasks;
 using com.radiant.engine.bundle;
 using Microsoft.Xna.Framework;
 
@@ -418,6 +419,12 @@ public class ECS : IGameObject
     /// <summary>Action delegate for four-component ForEach iteration.</summary>
     public delegate void ForEachAction<T1, T2, T3, T4>(int entity, ref T1 c1, ref T2 c2, ref T3 c3, ref T4 c4) where T1 : struct where T2 : struct where T3 : struct where T4 : struct;
 
+    /// <summary>Parallel action delegate with thread index for ordered collection.</summary>
+    public delegate void ForEachParallelAction<T1>(int threadIdx, int entity, ref T1 c1) where T1 : struct;
+    public delegate void ForEachParallelAction<T1, T2>(int threadIdx, int entity, ref T1 c1, ref T2 c2) where T1 : struct where T2 : struct;
+    public delegate void ForEachParallelAction<T1, T2, T3>(int threadIdx, int entity, ref T1 c1, ref T2 c2, ref T3 c3) where T1 : struct where T2 : struct where T3 : struct;
+    public delegate void ForEachParallelAction<T1, T2, T3, T4>(int threadIdx, int entity, ref T1 c1, ref T2 c2, ref T3 c3, ref T4 c4) where T1 : struct where T2 : struct where T3 : struct where T4 : struct;
+
     /// <summary>Creates a view for iterating entities with three components. Supports early exit via foreach.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public View<T1, T2, T3> View<T1, T2, T3>()
@@ -604,6 +611,203 @@ public class ECS : IGameObject
             if (!ActiveEntities.Contains(entity)) continue;
             action(entity, ref set1.GetComponentAt(idx1), ref set2.GetComponentAt(idx2), ref set3.GetComponentAt(idx3), ref set4.GetComponentAt(idx4));
         }
+    }
+
+    /// <summary>Parallel ForEach - divides entities across threads by range. Thread 0: 0-N, Thread 1: N-M, etc.</summary>
+    public void ForEachParallel<T1>(ForEachParallelAction<T1> action)
+        where T1 : struct, Component
+    {
+        var set1 = GetComponentSet<T1>();
+        int count = set1.EntityCount;
+        if (count == 0) return;
+
+        int threadCount = Environment.ProcessorCount;
+        int chunkSize = (count + threadCount - 1) / threadCount;
+
+        Parallel.For(0, threadCount, threadIdx =>
+        {
+            int start = threadIdx * chunkSize;
+            int end = Math.Min(start + chunkSize, count);
+
+            for (int i = start; i < end; i++)
+            {
+                int entity = set1.GetEntityAt(i);
+                if (!ActiveEntities.Contains(entity)) continue;
+                action(threadIdx, entity, ref set1.GetComponentAt(i));
+            }
+        });
+    }
+
+    /// <summary>Parallel ForEach for two components.</summary>
+    public void ForEachParallel<T1, T2>(ForEachParallelAction<T1, T2> action)
+        where T1 : struct, Component
+        where T2 : struct, Component
+    {
+        var set1 = GetComponentSet<T1>();
+        var set2 = GetComponentSet<T2>();
+
+        bool iterateSet1 = set1.EntityCount <= set2.EntityCount;
+        int count = iterateSet1 ? set1.EntityCount : set2.EntityCount;
+        if (count == 0) return;
+
+        int threadCount = Environment.ProcessorCount;
+        int chunkSize = (count + threadCount - 1) / threadCount;
+
+        Parallel.For(0, threadCount, threadIdx =>
+        {
+            int start = threadIdx * chunkSize;
+            int end = Math.Min(start + chunkSize, count);
+
+            if (iterateSet1)
+            {
+                for (int i = start; i < end; i++)
+                {
+                    int entity = set1.GetEntityAt(i);
+                    if (!ActiveEntities.Contains(entity)) continue;
+                    int idx2 = set2.GetDenseIndex(entity);
+                    if (idx2 < 0) continue;
+                    action(threadIdx, entity, ref set1.GetComponentAt(i), ref set2.GetComponentAt(idx2));
+                }
+            }
+            else
+            {
+                for (int i = start; i < end; i++)
+                {
+                    int entity = set2.GetEntityAt(i);
+                    if (!ActiveEntities.Contains(entity)) continue;
+                    int idx1 = set1.GetDenseIndex(entity);
+                    if (idx1 < 0) continue;
+                    action(threadIdx, entity, ref set1.GetComponentAt(idx1), ref set2.GetComponentAt(i));
+                }
+            }
+        });
+    }
+
+    /// <summary>Parallel ForEach for three components.</summary>
+    public void ForEachParallel<T1, T2, T3>(ForEachParallelAction<T1, T2, T3> action)
+        where T1 : struct, Component
+        where T2 : struct, Component
+        where T3 : struct, Component
+    {
+        var set1 = GetComponentSet<T1>();
+        var set2 = GetComponentSet<T2>();
+        var set3 = GetComponentSet<T3>();
+
+        int smallestIdx = 1;
+        int count = set1.EntityCount;
+        if (set2.EntityCount < count) { count = set2.EntityCount; smallestIdx = 2; }
+        if (set3.EntityCount < count) { count = set3.EntityCount; smallestIdx = 3; }
+        if (count == 0) return;
+
+        int threadCount = Environment.ProcessorCount;
+        int chunkSize = (count + threadCount - 1) / threadCount;
+
+        Parallel.For(0, threadCount, threadIdx =>
+        {
+            int start = threadIdx * chunkSize;
+            int end = Math.Min(start + chunkSize, count);
+
+            for (int i = start; i < end; i++)
+            {
+                int entity;
+                int idx1, idx2, idx3;
+
+                if (smallestIdx == 1)
+                {
+                    entity = set1.GetEntityAt(i);
+                    idx1 = i;
+                    idx2 = set2.GetDenseIndex(entity); if (idx2 < 0) continue;
+                    idx3 = set3.GetDenseIndex(entity); if (idx3 < 0) continue;
+                }
+                else if (smallestIdx == 2)
+                {
+                    entity = set2.GetEntityAt(i);
+                    idx2 = i;
+                    idx1 = set1.GetDenseIndex(entity); if (idx1 < 0) continue;
+                    idx3 = set3.GetDenseIndex(entity); if (idx3 < 0) continue;
+                }
+                else
+                {
+                    entity = set3.GetEntityAt(i);
+                    idx3 = i;
+                    idx1 = set1.GetDenseIndex(entity); if (idx1 < 0) continue;
+                    idx2 = set2.GetDenseIndex(entity); if (idx2 < 0) continue;
+                }
+
+                if (!ActiveEntities.Contains(entity)) continue;
+                action(threadIdx, entity, ref set1.GetComponentAt(idx1), ref set2.GetComponentAt(idx2), ref set3.GetComponentAt(idx3));
+            }
+        });
+    }
+
+    /// <summary>Parallel ForEach for four components.</summary>
+    public void ForEachParallel<T1, T2, T3, T4>(ForEachParallelAction<T1, T2, T3, T4> action)
+        where T1 : struct, Component
+        where T2 : struct, Component
+        where T3 : struct, Component
+        where T4 : struct, Component
+    {
+        var set1 = GetComponentSet<T1>();
+        var set2 = GetComponentSet<T2>();
+        var set3 = GetComponentSet<T3>();
+        var set4 = GetComponentSet<T4>();
+
+        int smallestIdx = 1;
+        int count = set1.EntityCount;
+        if (set2.EntityCount < count) { count = set2.EntityCount; smallestIdx = 2; }
+        if (set3.EntityCount < count) { count = set3.EntityCount; smallestIdx = 3; }
+        if (set4.EntityCount < count) { count = set4.EntityCount; smallestIdx = 4; }
+        if (count == 0) return;
+
+        int threadCount = Environment.ProcessorCount;
+        int chunkSize = (count + threadCount - 1) / threadCount;
+
+        Parallel.For(0, threadCount, threadIdx =>
+        {
+            int start = threadIdx * chunkSize;
+            int end = Math.Min(start + chunkSize, count);
+
+            for (int i = start; i < end; i++)
+            {
+                int entity;
+                int idx1, idx2, idx3, idx4;
+
+                switch (smallestIdx)
+                {
+                    case 1:
+                        entity = set1.GetEntityAt(i);
+                        idx1 = i;
+                        idx2 = set2.GetDenseIndex(entity); if (idx2 < 0) continue;
+                        idx3 = set3.GetDenseIndex(entity); if (idx3 < 0) continue;
+                        idx4 = set4.GetDenseIndex(entity); if (idx4 < 0) continue;
+                        break;
+                    case 2:
+                        entity = set2.GetEntityAt(i);
+                        idx2 = i;
+                        idx1 = set1.GetDenseIndex(entity); if (idx1 < 0) continue;
+                        idx3 = set3.GetDenseIndex(entity); if (idx3 < 0) continue;
+                        idx4 = set4.GetDenseIndex(entity); if (idx4 < 0) continue;
+                        break;
+                    case 3:
+                        entity = set3.GetEntityAt(i);
+                        idx3 = i;
+                        idx1 = set1.GetDenseIndex(entity); if (idx1 < 0) continue;
+                        idx2 = set2.GetDenseIndex(entity); if (idx2 < 0) continue;
+                        idx4 = set4.GetDenseIndex(entity); if (idx4 < 0) continue;
+                        break;
+                    default:
+                        entity = set4.GetEntityAt(i);
+                        idx4 = i;
+                        idx1 = set1.GetDenseIndex(entity); if (idx1 < 0) continue;
+                        idx2 = set2.GetDenseIndex(entity); if (idx2 < 0) continue;
+                        idx3 = set3.GetDenseIndex(entity); if (idx3 < 0) continue;
+                        break;
+                }
+
+                if (!ActiveEntities.Contains(entity)) continue;
+                action(threadIdx, entity, ref set1.GetComponentAt(idx1), ref set2.GetComponentAt(idx2), ref set3.GetComponentAt(idx3), ref set4.GetComponentAt(idx4));
+            }
+        });
     }
 
     public void Update()

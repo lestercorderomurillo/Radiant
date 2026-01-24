@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using com.radiant.engine.core;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -35,6 +36,28 @@ public class Geometry : core.System
     private KeyboardState PrevKeyState;
     private GizmosRenderer Gizmos;
 
+    // Parallel shape collection
+    private readonly struct ShapeData
+    {
+        public readonly Vector2 Position;
+        public readonly Vector2 Size;
+        public readonly float Radius;
+        public readonly Color Color;
+        public readonly bool IsCircle;
+
+        public ShapeData(Vector2 pos, Vector2 size, Color color)
+        {
+            Position = pos; Size = size; Radius = 0; Color = color; IsCircle = false;
+        }
+        public ShapeData(Vector2 pos, float radius, Color color)
+        {
+            Position = pos; Size = default; Radius = radius; Color = color; IsCircle = true;
+        }
+    }
+    private List<ShapeData>[] EmissiveShapesByThread;
+    private List<ShapeData>[] AbsorptionShapesByThread;
+    private int ThreadCount;
+
     public override void Initialize()
     {
         WorldBounds = Renderer.ScreenSize;
@@ -52,6 +75,16 @@ public class Geometry : core.System
 
         JFAResult = JFATexture1;
         JFAResultInterior = JFATextureInterior1;
+
+        // Initialize thread-local shape lists
+        ThreadCount = Environment.ProcessorCount;
+        EmissiveShapesByThread = new List<ShapeData>[ThreadCount];
+        AbsorptionShapesByThread = new List<ShapeData>[ThreadCount];
+        for (int i = 0; i < ThreadCount; i++)
+        {
+            EmissiveShapesByThread[i] = new List<ShapeData>();
+            AbsorptionShapesByThread[i] = new List<ShapeData>();
+        }
 
         Gizmos = Scene.ECS.GetSystem<GizmosRenderer>();
         PrevKeyState = Keyboard.GetState();
@@ -149,37 +182,49 @@ public class Geometry : core.System
     {
         Renderer.ClearShapes();
 
-        foreach (var e in Scene.ECS.View<Transform, Rectangle2D, Material>())
-        {
-            ref var transform = ref e.C1;
-            ref var rect = ref e.C2;
-            ref var mat = ref e.C3;
+        // Clear thread-local lists
+        for (int i = 0; i < ThreadCount; i++)
+            EmissiveShapesByThread[i].Clear();
 
-            if (mat.Emissive.A == 0) continue;
+        // Parallel visibility filter for rectangles
+        Scene.ECS.ForEachParallel<Transform, Rectangle2D, Material>((int threadIdx, int entity, ref Transform transform, ref Rectangle2D rect, ref Material mat) =>
+        {
+            if (mat.Emissive.A == 0) return;
 
             Vector2 position = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
 
             if (position.X + rect.Size.X >= 0 && position.X < WorldBounds.X &&
                 position.Y + rect.Size.Y >= 0 && position.Y < WorldBounds.Y)
             {
-                Renderer.DrawRect(position, rect.Size, mat.Emissive);
+                EmissiveShapesByThread[threadIdx].Add(new ShapeData(position, rect.Size, mat.Emissive));
             }
-        }
+        });
 
-        foreach (var e in Scene.ECS.View<Transform, Circle2D, Material>())
+        // Parallel visibility filter for circles
+        Scene.ECS.ForEachParallel<Transform, Circle2D, Material>((int threadIdx, int entity, ref Transform transform, ref Circle2D circle, ref Material mat) =>
         {
-            ref var transform = ref e.C1;
-            ref var circle = ref e.C2;
-            ref var mat = ref e.C3;
-
-            if (mat.Emissive.A == 0) continue;
+            if (mat.Emissive.A == 0) return;
 
             Vector2 center = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
 
             if (center.X + circle.Radius >= 0 && center.X - circle.Radius < WorldBounds.X &&
                 center.Y + circle.Radius >= 0 && center.Y - circle.Radius < WorldBounds.Y)
             {
-                Renderer.DrawCircle(center, circle.Radius, mat.Emissive);
+                EmissiveShapesByThread[threadIdx].Add(new ShapeData(center, circle.Radius, mat.Emissive));
+            }
+        });
+
+        // Sequential draw in thread order (deterministic)
+        for (int t = 0; t < ThreadCount; t++)
+        {
+            var shapes = EmissiveShapesByThread[t];
+            for (int i = 0; i < shapes.Count; i++)
+            {
+                var shape = shapes[i];
+                if (shape.IsCircle)
+                    Renderer.DrawCircle(shape.Position, shape.Radius, shape.Color);
+                else
+                    Renderer.DrawRect(shape.Position, shape.Size, shape.Color);
             }
         }
 
@@ -191,37 +236,49 @@ public class Geometry : core.System
     {
         Renderer.ClearShapes();
 
-        foreach (var e in Scene.ECS.View<Transform, Rectangle2D, Material>())
-        {
-            ref var transform = ref e.C1;
-            ref var rect = ref e.C2;
-            ref var mat = ref e.C3;
+        // Clear thread-local lists
+        for (int i = 0; i < ThreadCount; i++)
+            AbsorptionShapesByThread[i].Clear();
 
-            if (mat.Albedo.A == 0) continue;
+        // Parallel visibility filter for rectangles
+        Scene.ECS.ForEachParallel<Transform, Rectangle2D, Material>((int threadIdx, int entity, ref Transform transform, ref Rectangle2D rect, ref Material mat) =>
+        {
+            if (mat.Albedo.A == 0) return;
 
             Vector2 position = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
 
             if (position.X + rect.Size.X >= 0 && position.X < WorldBounds.X &&
                 position.Y + rect.Size.Y >= 0 && position.Y < WorldBounds.Y)
             {
-                Renderer.DrawRect(position, rect.Size, mat.Albedo);
+                AbsorptionShapesByThread[threadIdx].Add(new ShapeData(position, rect.Size, mat.Albedo));
             }
-        }
+        });
 
-        foreach (var e in Scene.ECS.View<Transform, Circle2D, Material>())
+        // Parallel visibility filter for circles
+        Scene.ECS.ForEachParallel<Transform, Circle2D, Material>((int threadIdx, int entity, ref Transform transform, ref Circle2D circle, ref Material mat) =>
         {
-            ref var transform = ref e.C1;
-            ref var circle = ref e.C2;
-            ref var mat = ref e.C3;
-
-            if (mat.Albedo.A == 0) continue;
+            if (mat.Albedo.A == 0) return;
 
             Vector2 center = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
 
             if (center.X + circle.Radius >= 0 && center.X - circle.Radius < WorldBounds.X &&
                 center.Y + circle.Radius >= 0 && center.Y - circle.Radius < WorldBounds.Y)
             {
-                Renderer.DrawCircle(center, circle.Radius, mat.Albedo);
+                AbsorptionShapesByThread[threadIdx].Add(new ShapeData(center, circle.Radius, mat.Albedo));
+            }
+        });
+
+        // Sequential draw in thread order (deterministic)
+        for (int t = 0; t < ThreadCount; t++)
+        {
+            var shapes = AbsorptionShapesByThread[t];
+            for (int i = 0; i < shapes.Count; i++)
+            {
+                var shape = shapes[i];
+                if (shape.IsCircle)
+                    Renderer.DrawCircle(shape.Position, shape.Radius, shape.Color);
+                else
+                    Renderer.DrawRect(shape.Position, shape.Size, shape.Color);
             }
         }
 
