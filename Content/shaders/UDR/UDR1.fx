@@ -397,7 +397,7 @@ float4 UDR1_PS(PixelShaderInput input) : SV_Target0
     // Correct edges (optional)
     if (EdgeCorrection > 0.0)
     {
-        if (DebugRays > 0.0)
+        if (DebugRays > 0.5)
         {
             // Debug mode: visualize edge correction areas
             float4 corrected = CorrectEdgesWithDebug(result, uv);
