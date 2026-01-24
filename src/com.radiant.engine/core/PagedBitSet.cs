@@ -11,9 +11,7 @@ namespace com.radiant.engine.core;
 public sealed class PagedBitSet
 {
     // 4096 ulongs per page = 262,144 bits per page = 32KB per page (L1 cache friendly)
-    private const int PageShift = 12;
-    private const int PageSize = 1 << PageShift;           // 4096 ulongs
-    private const int PageMask = PageSize - 1;
+    private const int PageSize = 4096;
     private const int BitsPerUlong = 64;
     private const int BitShift = 6;
     private const int BitMask = BitsPerUlong - 1;

@@ -14,11 +14,8 @@ public class ECS : IGameObject
     private readonly Dictionary<Type, IComponentSet> ComponentSets;
     private readonly List<int> QueryResult;
     private int NextEntityId;
-
     private Vector2 ViewportCenter;
     private Vector2 ViewportSize;
-
-
     public int EntityCount => ActiveEntities.Count;
     public Scene Scene { get; set; }
     public Renderer Renderer { get; private set; }
@@ -412,15 +409,16 @@ public class ECS : IGameObject
 
         return QueryResult;
     }
-    // ========== ForEach API - Direct component access without GetComponent lookups ==========
-
+    /// <summary>Action delegate for single-component ForEach iteration.</summary>
     public delegate void ForEachAction<T1>(int entity, ref T1 c1) where T1 : struct;
+    /// <summary>Action delegate for two-component ForEach iteration.</summary>
     public delegate void ForEachAction<T1, T2>(int entity, ref T1 c1, ref T2 c2) where T1 : struct where T2 : struct;
+    /// <summary>Action delegate for three-component ForEach iteration.</summary>
     public delegate void ForEachAction<T1, T2, T3>(int entity, ref T1 c1, ref T2 c2, ref T3 c3) where T1 : struct where T2 : struct where T3 : struct;
+    /// <summary>Action delegate for four-component ForEach iteration.</summary>
     public delegate void ForEachAction<T1, T2, T3, T4>(int entity, ref T1 c1, ref T2 c2, ref T3 c3, ref T4 c4) where T1 : struct where T2 : struct where T3 : struct where T4 : struct;
 
-    // ========== View API - Struct enumerator for foreach with early exit support ==========
-
+    /// <summary>Creates a view for iterating entities with three components. Supports early exit via foreach.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public View<T1, T2, T3> View<T1, T2, T3>()
         where T1 : struct, Component
@@ -434,6 +432,7 @@ public class ECS : IGameObject
             ActiveEntities);
     }
 
+    /// <summary>Creates a view for iterating entities with two components. Supports early exit via foreach.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public View<T1, T2> View<T1, T2>()
         where T1 : struct, Component
@@ -445,6 +444,7 @@ public class ECS : IGameObject
             ActiveEntities);
     }
 
+    /// <summary>Iterates all active entities with the specified component, providing direct ref access.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void ForEach<T1>(ForEachAction<T1> action)
         where T1 : struct, Component
@@ -460,6 +460,7 @@ public class ECS : IGameObject
         }
     }
 
+    /// <summary>Iterates all active entities with two components, providing direct ref access.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void ForEach<T1, T2>(ForEachAction<T1, T2> action)
         where T1 : struct, Component
@@ -495,6 +496,7 @@ public class ECS : IGameObject
         }
     }
 
+    /// <summary>Iterates all active entities with three components, providing direct ref access.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void ForEach<T1, T2, T3>(ForEachAction<T1, T2, T3> action)
         where T1 : struct, Component
@@ -505,7 +507,6 @@ public class ECS : IGameObject
         var set2 = GetComponentSet<T2>();
         var set3 = GetComponentSet<T3>();
 
-        // Find smallest set index
         int smallestIdx = 1;
         int smallestCount = set1.Count;
         if (set2.Count < smallestCount) { smallestCount = set2.Count; smallestIdx = 2; }
@@ -543,6 +544,7 @@ public class ECS : IGameObject
         }
     }
 
+    /// <summary>Iterates all active entities with four components, providing direct ref access.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void ForEach<T1, T2, T3, T4>(ForEachAction<T1, T2, T3, T4> action)
         where T1 : struct, Component
@@ -603,8 +605,6 @@ public class ECS : IGameObject
             action(entity, ref set1.GetComponentAt(idx1), ref set2.GetComponentAt(idx2), ref set3.GetComponentAt(idx3), ref set4.GetComponentAt(idx4));
         }
     }
-
-    // ========== End ForEach API ==========
 
     public void Update()
     {
