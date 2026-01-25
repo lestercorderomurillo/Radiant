@@ -67,6 +67,10 @@ public class Geometry : core.System
     private (float z, int thread)[] MergeHeap;
     private int HeapSize;
 
+    // Single-thread buffer for small counts
+    private List<ShapeData> SingleBuffer;
+    private const int ParallelThreshold = 16000;
+
     public override void Initialize()
     {
         WorldBounds = Renderer.ScreenSize;
@@ -91,6 +95,7 @@ public class Geometry : core.System
         AbsorptionShapesByThread = new List<ShapeData>[ThreadCount];
         MergeIndices = new int[ThreadCount];
         MergeHeap = new (float, int)[ThreadCount];
+        SingleBuffer = new List<ShapeData>();
         for (int i = 0; i < ThreadCount; i++)
         {
             EmissiveShapesByThread[i] = new List<ShapeData>();
@@ -225,13 +230,21 @@ public class Geometry : core.System
             }
         });
 
-        // Parallel sort each thread's list
-        Parallel.For(0, ThreadCount, t =>
-        {
-            EmissiveShapesByThread[t].Sort();
-        });
+        // Count total for threshold check
+        int total = 0;
+        for (int t = 0; t < ThreadCount; t++)
+            total += EmissiveShapesByThread[t].Count;
 
-        // K-way merge draw
+        // Only parallel sort if above threshold (heap merge needs sorted lists)
+        if (total >= ParallelThreshold)
+        {
+            Parallel.For(0, ThreadCount, t =>
+            {
+                EmissiveShapesByThread[t].Sort();
+            });
+        }
+
+        // Merge and draw
         DrawShapesMerged(EmissiveShapesByThread);
 
         EmissiveCount = Renderer.ShapeBatchCount;
@@ -274,13 +287,21 @@ public class Geometry : core.System
             }
         });
 
-        // Parallel sort each thread's list
-        Parallel.For(0, ThreadCount, t =>
-        {
-            AbsorptionShapesByThread[t].Sort();
-        });
+        // Count total for threshold check
+        int total = 0;
+        for (int t = 0; t < ThreadCount; t++)
+            total += AbsorptionShapesByThread[t].Count;
 
-        // K-way merge draw
+        // Only parallel sort if above threshold (heap merge needs sorted lists)
+        if (total >= ParallelThreshold)
+        {
+            Parallel.For(0, ThreadCount, t =>
+            {
+                AbsorptionShapesByThread[t].Sort();
+            });
+        }
+
+        // Merge and draw
         DrawShapesMerged(AbsorptionShapesByThread);
 
         AbsorptionCount = Renderer.ShapeBatchCount;
@@ -289,47 +310,73 @@ public class Geometry : core.System
 
     private void DrawShapesMerged(List<ShapeData>[] shapesByThread)
     {
-        // Reset merge indices and build min-heap
-        Array.Clear(MergeIndices, 0, ThreadCount);
-        HeapSize = 0;
-
-        // Initialize heap with first element from each non-empty list
+        // Count total
+        int total = 0;
         for (int t = 0; t < ThreadCount; t++)
+            total += shapesByThread[t].Count;
+
+        if (total == 0) return;
+
+        if (total < ParallelThreshold)
         {
-            if (shapesByThread[t].Count > 0)
+            // Small count: single buffer + sort (no parallel overhead)
+            SingleBuffer.Clear();
+            for (int t = 0; t < ThreadCount; t++)
             {
-                MergeHeap[HeapSize++] = (shapesByThread[t][0].Z, t);
+                var list = shapesByThread[t];
+                for (int i = 0; i < list.Count; i++)
+                    SingleBuffer.Add(list[i]);
+            }
+            SingleBuffer.Sort();
+
+            for (int i = 0; i < SingleBuffer.Count; i++)
+            {
+                var shape = SingleBuffer[i];
+                if (shape.IsCircle)
+                    Renderer.DrawCircle(shape.Position, shape.Radius, shape.Color);
+                else
+                    Renderer.DrawRect(shape.Position, shape.Size, shape.Color);
             }
         }
-
-        // Heapify - build min-heap
-        for (int i = HeapSize / 2 - 1; i >= 0; i--)
-            HeapifyDown(i);
-
-        // K-way merge using min-heap: O(N log K)
-        while (HeapSize > 0)
+        else
         {
-            // Extract min
-            var (_, bestThread) = MergeHeap[0];
-            var shape = shapesByThread[bestThread][MergeIndices[bestThread]++];
+            // Large count: parallel sort already done, use heap merge
+            Array.Clear(MergeIndices, 0, ThreadCount);
+            HeapSize = 0;
 
-            if (shape.IsCircle)
-                Renderer.DrawCircle(shape.Position, shape.Radius, shape.Color);
-            else
-                Renderer.DrawRect(shape.Position, shape.Size, shape.Color);
-
-            // Replace root with next from same thread, or remove if exhausted
-            if (MergeIndices[bestThread] < shapesByThread[bestThread].Count)
+            // Initialize heap with first element from each non-empty list
+            for (int t = 0; t < ThreadCount; t++)
             {
-                MergeHeap[0] = (shapesByThread[bestThread][MergeIndices[bestThread]].Z, bestThread);
-                HeapifyDown(0);
+                if (shapesByThread[t].Count > 0)
+                    MergeHeap[HeapSize++] = (shapesByThread[t][0].Z, t);
             }
-            else
+
+            // Heapify - build min-heap
+            for (int i = HeapSize / 2 - 1; i >= 0; i--)
+                HeapifyDown(i);
+
+            // K-way merge using min-heap: O(N log K)
+            while (HeapSize > 0)
             {
-                // Remove root by replacing with last element
-                MergeHeap[0] = MergeHeap[--HeapSize];
-                if (HeapSize > 0)
+                var (_, bestThread) = MergeHeap[0];
+                var shape = shapesByThread[bestThread][MergeIndices[bestThread]++];
+
+                if (shape.IsCircle)
+                    Renderer.DrawCircle(shape.Position, shape.Radius, shape.Color);
+                else
+                    Renderer.DrawRect(shape.Position, shape.Size, shape.Color);
+
+                if (MergeIndices[bestThread] < shapesByThread[bestThread].Count)
+                {
+                    MergeHeap[0] = (shapesByThread[bestThread][MergeIndices[bestThread]].Z, bestThread);
                     HeapifyDown(0);
+                }
+                else
+                {
+                    MergeHeap[0] = MergeHeap[--HeapSize];
+                    if (HeapSize > 0)
+                        HeapifyDown(0);
+                }
             }
         }
     }
