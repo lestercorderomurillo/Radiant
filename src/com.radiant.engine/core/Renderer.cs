@@ -173,6 +173,15 @@ public class Renderer : IDisposable
     private readonly Stack<RenderTargetBinding[]> RenderTargetStack = new();
     private RenderTargetBinding[] CurrentTargets = null;
 
+    // Pooled arrays for render target bindings (avoids Clone() allocations)
+    private const int BindingPoolSize = 16;
+    private readonly RenderTargetBinding[][] BindingPool2 = new RenderTargetBinding[BindingPoolSize][];
+    private readonly RenderTargetBinding[][] BindingPool3 = new RenderTargetBinding[BindingPoolSize][];
+    private readonly RenderTargetBinding[][] BindingPool4 = new RenderTargetBinding[BindingPoolSize][];
+    private int BindingPool2Index = 0;
+    private int BindingPool3Index = 0;
+    private int BindingPool4Index = 0;
+
     // Instanced shape rendering
     private const int DefaultShapeCapacity = 65536;
     private const int MaxShapeCapacity = 4_000_000;
@@ -200,6 +209,14 @@ public class Renderer : IDisposable
 
         for (int i = 0; i < SamplerStates.Length; i++)
             SamplerStates[i] = SamplerState.LinearClamp;
+
+        // Pre-allocate binding pools
+        for (int i = 0; i < BindingPoolSize; i++)
+        {
+            BindingPool2[i] = new RenderTargetBinding[2];
+            BindingPool3[i] = new RenderTargetBinding[3];
+            BindingPool4[i] = new RenderTargetBinding[4];
+        }
 
         InitializeQuad();
         InitializeShapes();
@@ -702,7 +719,12 @@ public class Renderer : IDisposable
         TwoTargetBindings[0] = new RenderTargetBinding(target0);
         TwoTargetBindings[1] = new RenderTargetBinding(target1);
         Device.SetRenderTargets(TwoTargetBindings);
-        CurrentTargets = (RenderTargetBinding[])TwoTargetBindings.Clone();
+        // Use pooled array instead of Clone()
+        var pooled = BindingPool2[BindingPool2Index];
+        BindingPool2Index = (BindingPool2Index + 1) & (BindingPoolSize - 1);
+        pooled[0] = TwoTargetBindings[0];
+        pooled[1] = TwoTargetBindings[1];
+        CurrentTargets = pooled;
         return this;
     }
 
@@ -714,7 +736,13 @@ public class Renderer : IDisposable
         ThreeTargetBindings[1] = new RenderTargetBinding(target1);
         ThreeTargetBindings[2] = new RenderTargetBinding(target2);
         Device.SetRenderTargets(ThreeTargetBindings);
-        CurrentTargets = (RenderTargetBinding[])ThreeTargetBindings.Clone();
+        // Use pooled array instead of Clone()
+        var pooled = BindingPool3[BindingPool3Index];
+        BindingPool3Index = (BindingPool3Index + 1) & (BindingPoolSize - 1);
+        pooled[0] = ThreeTargetBindings[0];
+        pooled[1] = ThreeTargetBindings[1];
+        pooled[2] = ThreeTargetBindings[2];
+        CurrentTargets = pooled;
         return this;
     }
 
@@ -727,7 +755,14 @@ public class Renderer : IDisposable
         FourTargetBindings[2] = new RenderTargetBinding(target2);
         FourTargetBindings[3] = new RenderTargetBinding(target3);
         Device.SetRenderTargets(FourTargetBindings);
-        CurrentTargets = (RenderTargetBinding[])FourTargetBindings.Clone();
+        // Use pooled array instead of Clone()
+        var pooled = BindingPool4[BindingPool4Index];
+        BindingPool4Index = (BindingPool4Index + 1) & (BindingPoolSize - 1);
+        pooled[0] = FourTargetBindings[0];
+        pooled[1] = FourTargetBindings[1];
+        pooled[2] = FourTargetBindings[2];
+        pooled[3] = FourTargetBindings[3];
+        CurrentTargets = pooled;
         return this;
     }
 
