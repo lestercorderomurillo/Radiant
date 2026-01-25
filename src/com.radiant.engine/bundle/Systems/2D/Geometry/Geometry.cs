@@ -63,6 +63,10 @@ public class Geometry : core.System
     private int[] MergeIndices;
     private int ThreadCount;
 
+    // Min-heap for O(N log K) k-way merge
+    private (float z, int thread)[] MergeHeap;
+    private int HeapSize;
+
     public override void Initialize()
     {
         WorldBounds = Renderer.ScreenSize;
@@ -86,6 +90,7 @@ public class Geometry : core.System
         EmissiveShapesByThread = new List<ShapeData>[ThreadCount];
         AbsorptionShapesByThread = new List<ShapeData>[ThreadCount];
         MergeIndices = new int[ThreadCount];
+        MergeHeap = new (float, int)[ThreadCount];
         for (int i = 0; i < ThreadCount; i++)
         {
             EmissiveShapesByThread[i] = new List<ShapeData>();
@@ -284,40 +289,68 @@ public class Geometry : core.System
 
     private void DrawShapesMerged(List<ShapeData>[] shapesByThread)
     {
-        // Reset merge indices
+        // Reset merge indices and build min-heap
         Array.Clear(MergeIndices, 0, ThreadCount);
+        HeapSize = 0;
 
-        // Count total
-        int total = 0;
+        // Initialize heap with first element from each non-empty list
         for (int t = 0; t < ThreadCount; t++)
-            total += shapesByThread[t].Count;
-
-        // K-way merge: find min Z across all threads, draw, advance
-        for (int drawn = 0; drawn < total; drawn++)
         {
-            int bestThread = -1;
-            float bestZ = float.MaxValue;
-
-            for (int t = 0; t < ThreadCount; t++)
+            if (shapesByThread[t].Count > 0)
             {
-                var list = shapesByThread[t];
-                int idx = MergeIndices[t];
-                if (idx < list.Count)
-                {
-                    float z = list[idx].Z;
-                    if (z < bestZ)
-                    {
-                        bestZ = z;
-                        bestThread = t;
-                    }
-                }
+                MergeHeap[HeapSize++] = (shapesByThread[t][0].Z, t);
             }
+        }
 
+        // Heapify - build min-heap
+        for (int i = HeapSize / 2 - 1; i >= 0; i--)
+            HeapifyDown(i);
+
+        // K-way merge using min-heap: O(N log K)
+        while (HeapSize > 0)
+        {
+            // Extract min
+            var (_, bestThread) = MergeHeap[0];
             var shape = shapesByThread[bestThread][MergeIndices[bestThread]++];
+
             if (shape.IsCircle)
                 Renderer.DrawCircle(shape.Position, shape.Radius, shape.Color);
             else
                 Renderer.DrawRect(shape.Position, shape.Size, shape.Color);
+
+            // Replace root with next from same thread, or remove if exhausted
+            if (MergeIndices[bestThread] < shapesByThread[bestThread].Count)
+            {
+                MergeHeap[0] = (shapesByThread[bestThread][MergeIndices[bestThread]].Z, bestThread);
+                HeapifyDown(0);
+            }
+            else
+            {
+                // Remove root by replacing with last element
+                MergeHeap[0] = MergeHeap[--HeapSize];
+                if (HeapSize > 0)
+                    HeapifyDown(0);
+            }
+        }
+    }
+
+    private void HeapifyDown(int i)
+    {
+        while (true)
+        {
+            int left = 2 * i + 1;
+            int right = 2 * i + 2;
+            int smallest = i;
+
+            if (left < HeapSize && MergeHeap[left].z < MergeHeap[smallest].z)
+                smallest = left;
+            if (right < HeapSize && MergeHeap[right].z < MergeHeap[smallest].z)
+                smallest = right;
+
+            if (smallest == i) break;
+
+            (MergeHeap[i], MergeHeap[smallest]) = (MergeHeap[smallest], MergeHeap[i]);
+            i = smallest;
         }
     }
 
