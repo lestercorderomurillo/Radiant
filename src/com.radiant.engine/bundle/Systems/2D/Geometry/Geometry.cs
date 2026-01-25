@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using com.radiant.engine.core;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -37,25 +38,29 @@ public class Geometry : core.System
     private GizmosRenderer Gizmos;
 
     // Parallel shape collection
-    private readonly struct ShapeData
+    private readonly struct ShapeData : IComparable<ShapeData>
     {
         public readonly Vector2 Position;
         public readonly Vector2 Size;
         public readonly float Radius;
         public readonly Color Color;
+        public readonly float Z;
         public readonly bool IsCircle;
 
-        public ShapeData(Vector2 pos, Vector2 size, Color color)
+        public ShapeData(Vector2 pos, Vector2 size, Color color, float z)
         {
-            Position = pos; Size = size; Radius = 0; Color = color; IsCircle = false;
+            Position = pos; Size = size; Radius = 0; Color = color; Z = z; IsCircle = false;
         }
-        public ShapeData(Vector2 pos, float radius, Color color)
+        public ShapeData(Vector2 pos, float radius, Color color, float z)
         {
-            Position = pos; Size = default; Radius = radius; Color = color; IsCircle = true;
+            Position = pos; Size = default; Radius = radius; Color = color; Z = z; IsCircle = true;
         }
+
+        public int CompareTo(ShapeData other) => Z.CompareTo(other.Z);
     }
     private List<ShapeData>[] EmissiveShapesByThread;
     private List<ShapeData>[] AbsorptionShapesByThread;
+    private int[] MergeIndices;
     private int ThreadCount;
 
     public override void Initialize()
@@ -80,6 +85,7 @@ public class Geometry : core.System
         ThreadCount = Environment.ProcessorCount;
         EmissiveShapesByThread = new List<ShapeData>[ThreadCount];
         AbsorptionShapesByThread = new List<ShapeData>[ThreadCount];
+        MergeIndices = new int[ThreadCount];
         for (int i = 0; i < ThreadCount; i++)
         {
             EmissiveShapesByThread[i] = new List<ShapeData>();
@@ -196,7 +202,7 @@ public class Geometry : core.System
             if (position.X + rect.Size.X >= 0 && position.X < WorldBounds.X &&
                 position.Y + rect.Size.Y >= 0 && position.Y < WorldBounds.Y)
             {
-                EmissiveShapesByThread[threadIdx].Add(new ShapeData(position, rect.Size, mat.Emissive));
+                EmissiveShapesByThread[threadIdx].Add(new ShapeData(position, rect.Size, mat.Emissive, transform.Position.Z));
             }
         });
 
@@ -210,23 +216,18 @@ public class Geometry : core.System
             if (center.X + circle.Radius >= 0 && center.X - circle.Radius < WorldBounds.X &&
                 center.Y + circle.Radius >= 0 && center.Y - circle.Radius < WorldBounds.Y)
             {
-                EmissiveShapesByThread[threadIdx].Add(new ShapeData(center, circle.Radius, mat.Emissive));
+                EmissiveShapesByThread[threadIdx].Add(new ShapeData(center, circle.Radius, mat.Emissive, transform.Position.Z));
             }
         });
 
-        // Sequential draw in thread order (deterministic)
-        for (int t = 0; t < ThreadCount; t++)
+        // Parallel sort each thread's list
+        Parallel.For(0, ThreadCount, t =>
         {
-            var shapes = EmissiveShapesByThread[t];
-            for (int i = 0; i < shapes.Count; i++)
-            {
-                var shape = shapes[i];
-                if (shape.IsCircle)
-                    Renderer.DrawCircle(shape.Position, shape.Radius, shape.Color);
-                else
-                    Renderer.DrawRect(shape.Position, shape.Size, shape.Color);
-            }
-        }
+            EmissiveShapesByThread[t].Sort();
+        });
+
+        // K-way merge draw
+        DrawShapesMerged(EmissiveShapesByThread);
 
         EmissiveCount = Renderer.ShapeBatchCount;
         Renderer.Configure(BlendState.AlphaBlend).FlushShapes(EmissiveTexture, Color.Transparent);
@@ -250,7 +251,7 @@ public class Geometry : core.System
             if (position.X + rect.Size.X >= 0 && position.X < WorldBounds.X &&
                 position.Y + rect.Size.Y >= 0 && position.Y < WorldBounds.Y)
             {
-                AbsorptionShapesByThread[threadIdx].Add(new ShapeData(position, rect.Size, mat.Albedo));
+                AbsorptionShapesByThread[threadIdx].Add(new ShapeData(position, rect.Size, mat.Albedo, transform.Position.Z));
             }
         });
 
@@ -264,26 +265,60 @@ public class Geometry : core.System
             if (center.X + circle.Radius >= 0 && center.X - circle.Radius < WorldBounds.X &&
                 center.Y + circle.Radius >= 0 && center.Y - circle.Radius < WorldBounds.Y)
             {
-                AbsorptionShapesByThread[threadIdx].Add(new ShapeData(center, circle.Radius, mat.Albedo));
+                AbsorptionShapesByThread[threadIdx].Add(new ShapeData(center, circle.Radius, mat.Albedo, transform.Position.Z));
             }
         });
 
-        // Sequential draw in thread order (deterministic)
-        for (int t = 0; t < ThreadCount; t++)
+        // Parallel sort each thread's list
+        Parallel.For(0, ThreadCount, t =>
         {
-            var shapes = AbsorptionShapesByThread[t];
-            for (int i = 0; i < shapes.Count; i++)
-            {
-                var shape = shapes[i];
-                if (shape.IsCircle)
-                    Renderer.DrawCircle(shape.Position, shape.Radius, shape.Color);
-                else
-                    Renderer.DrawRect(shape.Position, shape.Size, shape.Color);
-            }
-        }
+            AbsorptionShapesByThread[t].Sort();
+        });
+
+        // K-way merge draw
+        DrawShapesMerged(AbsorptionShapesByThread);
 
         AbsorptionCount = Renderer.ShapeBatchCount;
         Renderer.Configure(BlendState.AlphaBlend).FlushShapes(AbsorptionTexture, Color.Transparent);
+    }
+
+    private void DrawShapesMerged(List<ShapeData>[] shapesByThread)
+    {
+        // Reset merge indices
+        Array.Clear(MergeIndices, 0, ThreadCount);
+
+        // Count total
+        int total = 0;
+        for (int t = 0; t < ThreadCount; t++)
+            total += shapesByThread[t].Count;
+
+        // K-way merge: find min Z across all threads, draw, advance
+        for (int drawn = 0; drawn < total; drawn++)
+        {
+            int bestThread = -1;
+            float bestZ = float.MaxValue;
+
+            for (int t = 0; t < ThreadCount; t++)
+            {
+                var list = shapesByThread[t];
+                int idx = MergeIndices[t];
+                if (idx < list.Count)
+                {
+                    float z = list[idx].Z;
+                    if (z < bestZ)
+                    {
+                        bestZ = z;
+                        bestThread = t;
+                    }
+                }
+            }
+
+            var shape = shapesByThread[bestThread][MergeIndices[bestThread]++];
+            if (shape.IsCircle)
+                Renderer.DrawCircle(shape.Position, shape.Radius, shape.Color);
+            else
+                Renderer.DrawRect(shape.Position, shape.Size, shape.Color);
+        }
     }
 
     private void RenderSDFTexture()

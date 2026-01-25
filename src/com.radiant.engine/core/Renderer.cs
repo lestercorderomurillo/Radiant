@@ -193,6 +193,15 @@ public class Renderer : IDisposable
     private int ShapeCount;
     private int ShapeCapacity;
 
+    // Parallel shape collection
+    private int ParallelThreadCount;
+    private Shape[][] ParallelShapeBuffers;
+    private float[][] ParallelZBuffers;
+    private int[][] ParallelSortIndices;
+    private int[] ParallelShapeCounts;
+    private int[] ParallelMergeIndices;
+    private int ParallelCapacityPerThread;
+
     #endregion
 
     #region Constructor
@@ -458,6 +467,232 @@ public class Renderer : IDisposable
     /// Current number of shapes in the batch.
     /// </summary>
     public int ShapeBatchCount => ShapeCount;
+
+    #endregion
+
+    #region Parallel Shape Collection
+
+    /// <summary>
+    /// Initializes parallel shape buffers for multi-threaded shape collection.
+    /// Call once at startup or when thread count changes.
+    /// </summary>
+    /// <param name="threadCount">Number of worker threads.</param>
+    /// <param name="capacityPerThread">Initial capacity per thread buffer.</param>
+    public Renderer InitializeParallelShapes(int threadCount, int capacityPerThread = 16384)
+    {
+        ParallelThreadCount = threadCount;
+        ParallelCapacityPerThread = capacityPerThread;
+        ParallelShapeBuffers = new Shape[threadCount][];
+        ParallelZBuffers = new float[threadCount][];
+        ParallelSortIndices = new int[threadCount][];
+        ParallelShapeCounts = new int[threadCount];
+        ParallelMergeIndices = new int[threadCount];
+
+        for (int i = 0; i < threadCount; i++)
+        {
+            ParallelShapeBuffers[i] = new Shape[capacityPerThread];
+            ParallelZBuffers[i] = new float[capacityPerThread];
+            ParallelSortIndices[i] = new int[capacityPerThread];
+        }
+
+        return this;
+    }
+
+    /// <summary>
+    /// Ensures all parallel buffers have at least the specified capacity.
+    /// Call when entity count grows.
+    /// </summary>
+    public Renderer EnsureParallelCapacity(int capacityPerThread)
+    {
+        if (capacityPerThread <= ParallelCapacityPerThread) return this;
+
+        ParallelCapacityPerThread = capacityPerThread;
+        for (int i = 0; i < ParallelThreadCount; i++)
+        {
+            Array.Resize(ref ParallelShapeBuffers[i], capacityPerThread);
+            Array.Resize(ref ParallelZBuffers[i], capacityPerThread);
+            Array.Resize(ref ParallelSortIndices[i], capacityPerThread);
+        }
+
+        return this;
+    }
+
+    /// <summary>
+    /// Ensures parallel buffers can hold totalEntities divided across threads.
+    /// Also ensures the main Shapes array can hold the total.
+    /// Call when entity count grows: EnsureParallelCapacityForEntities(entityCount)
+    /// </summary>
+    public Renderer EnsureParallelCapacityForEntities(int totalEntities)
+    {
+        EnsureShapeCapacity(totalEntities);
+        int perThread = (totalEntities + ParallelThreadCount - 1) / ParallelThreadCount;
+        return EnsureParallelCapacity(perThread);
+    }
+
+    /// <summary>
+    /// Gets the shape buffer for a specific thread for direct indexed writes.
+    /// Thread writes directly: buffer[localIndex] = shape;
+    /// </summary>
+    public Shape[] GetParallelBuffer(int threadIndex) => ParallelShapeBuffers[threadIndex];
+
+    /// <summary>
+    /// Gets the Z buffer for a specific thread for direct indexed writes.
+    /// Thread writes directly: zBuffer[localIndex] = z;
+    /// </summary>
+    public float[] GetParallelZBuffer(int threadIndex) => ParallelZBuffers[threadIndex];
+
+    /// <summary>
+    /// Sets the shape count for a thread after direct indexed writes.
+    /// </summary>
+    public void SetParallelCount(int threadIndex, int count)
+    {
+        ParallelShapeCounts[threadIndex] = count;
+    }
+
+    /// <summary>
+    /// Adds a shape to a thread's buffer (append style).
+    /// Thread-local, no synchronization needed.
+    /// </summary>
+    public void DrawShapeParallel(int threadIndex, Shape shape)
+    {
+        var buffer = ParallelShapeBuffers[threadIndex];
+        var count = ParallelShapeCounts[threadIndex];
+
+        if (count >= buffer.Length)
+        {
+            int newCapacity = Math.Min(buffer.Length * 2, MaxShapeCapacity);
+            Array.Resize(ref ParallelShapeBuffers[threadIndex], newCapacity);
+            buffer = ParallelShapeBuffers[threadIndex];
+        }
+
+        buffer[count] = shape;
+        ParallelShapeCounts[threadIndex] = count + 1;
+    }
+
+    /// <summary>
+    /// Collects all parallel thread buffers into the main Shapes array in order.
+    /// Call on main thread after parallel work completes, before FlushShapes.
+    /// </summary>
+    public Renderer CollectParallelShapes()
+    {
+        int totalCount = 0;
+        for (int i = 0; i < ParallelThreadCount; i++)
+            totalCount += ParallelShapeCounts[i];
+
+        EnsureShapeCapacity(totalCount);
+
+        int offset = 0;
+        for (int t = 0; t < ParallelThreadCount; t++)
+        {
+            var buffer = ParallelShapeBuffers[t];
+            var count = ParallelShapeCounts[t];
+
+            Array.Copy(buffer, 0, Shapes, offset, count);
+            offset += count;
+
+            ParallelShapeCounts[t] = 0;
+        }
+
+        ShapeCount = totalCount;
+        return this;
+    }
+
+    /// <summary>
+    /// Clears all parallel shape buffers without collecting.
+    /// </summary>
+    public Renderer ClearParallelShapes()
+    {
+        for (int i = 0; i < ParallelThreadCount; i++)
+            ParallelShapeCounts[i] = 0;
+        return this;
+    }
+
+    /// <summary>
+    /// Sorts a thread's shapes by Z. Call from within parallel work after populating.
+    /// Cache-friendly: sorts locally within thread's buffer.
+    /// </summary>
+    public void SortParallelBufferByZ(int threadIndex)
+    {
+        int count = ParallelShapeCounts[threadIndex];
+        if (count <= 1) return;
+
+        var shapes = ParallelShapeBuffers[threadIndex];
+        var zValues = ParallelZBuffers[threadIndex];
+        var indices = ParallelSortIndices[threadIndex];
+
+        // Initialize indices
+        for (int i = 0; i < count; i++)
+            indices[i] = i;
+
+        // Sort indices by Z
+        Array.Sort(indices, 0, count, Comparer<int>.Create((a, b) => zValues[a].CompareTo(zValues[b])));
+
+        // Reorder shapes in-place using cycle sort to avoid allocation
+        for (int i = 0; i < count; i++)
+        {
+            while (indices[i] != i)
+            {
+                int target = indices[i];
+                (shapes[i], shapes[target]) = (shapes[target], shapes[i]);
+                (zValues[i], zValues[target]) = (zValues[target], zValues[i]);
+                (indices[i], indices[target]) = (indices[target], indices[i]);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Collects all parallel thread buffers with k-way merge by Z order.
+    /// Each thread's buffer must be pre-sorted via SortParallelBufferByZ.
+    /// Call on main thread after parallel work completes.
+    /// </summary>
+    public Renderer CollectParallelShapesSorted()
+    {
+        int totalCount = 0;
+        for (int i = 0; i < ParallelThreadCount; i++)
+            totalCount += ParallelShapeCounts[i];
+
+        if (totalCount == 0)
+        {
+            ShapeCount = 0;
+            return this;
+        }
+
+        EnsureShapeCapacity(totalCount);
+
+        // Reset merge indices
+        Array.Clear(ParallelMergeIndices, 0, ParallelThreadCount);
+
+        int outputIndex = 0;
+        while (outputIndex < totalCount)
+        {
+            int bestThread = -1;
+            float bestZ = float.MaxValue;
+
+            // Find thread with smallest current Z
+            for (int t = 0; t < ParallelThreadCount; t++)
+            {
+                int idx = ParallelMergeIndices[t];
+                if (idx < ParallelShapeCounts[t])
+                {
+                    float z = ParallelZBuffers[t][idx];
+                    if (z < bestZ)
+                    {
+                        bestZ = z;
+                        bestThread = t;
+                    }
+                }
+            }
+
+            Shapes[outputIndex++] = ParallelShapeBuffers[bestThread][ParallelMergeIndices[bestThread]++];
+        }
+
+        // Reset counts
+        for (int i = 0; i < ParallelThreadCount; i++)
+            ParallelShapeCounts[i] = 0;
+
+        ShapeCount = totalCount;
+        return this;
+    }
 
     #endregion
 
@@ -1314,6 +1549,12 @@ public class Renderer : IDisposable
         foreach (var shader in ShaderCache.Values)
             shader?.Dispose();
         ShaderCache.Clear();
+
+        ParallelShapeBuffers = null;
+        ParallelZBuffers = null;
+        ParallelSortIndices = null;
+        ParallelShapeCounts = null;
+        ParallelMergeIndices = null;
     }
 
     #endregion
