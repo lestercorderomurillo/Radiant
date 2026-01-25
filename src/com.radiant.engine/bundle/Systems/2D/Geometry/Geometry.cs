@@ -212,7 +212,14 @@ public class Geometry : core.System
             if (position.X + rect.Size.X >= 0 && position.X < WorldBounds.X &&
                 position.Y + rect.Size.Y >= 0 && position.Y < WorldBounds.Y)
             {
-                EmissiveShapesByThread[threadIdx].Add(new ShapeData(position, rect.Size, mat.Emissive, transform.Position.Z));
+                // Scale emissive color by alpha (intensity)
+                float intensity = mat.Emissive.A / 255f;
+                Color emissive = new Color(
+                    (int)(mat.Emissive.R * intensity),
+                    (int)(mat.Emissive.G * intensity),
+                    (int)(mat.Emissive.B * intensity),
+                    mat.Albedo.A);
+                EmissiveShapesByThread[threadIdx].Add(new ShapeData(position, rect.Size, emissive, transform.Position.Z));
             }
         });
 
@@ -226,7 +233,14 @@ public class Geometry : core.System
             if (center.X + circle.Radius >= 0 && center.X - circle.Radius < WorldBounds.X &&
                 center.Y + circle.Radius >= 0 && center.Y - circle.Radius < WorldBounds.Y)
             {
-                EmissiveShapesByThread[threadIdx].Add(new ShapeData(center, circle.Radius, mat.Emissive, transform.Position.Z));
+                // Scale emissive color by alpha (intensity)
+                float intensity = mat.Emissive.A / 255f;
+                Color emissive = new Color(
+                    (int)(mat.Emissive.R * intensity),
+                    (int)(mat.Emissive.G * intensity),
+                    (int)(mat.Emissive.B * intensity),
+                    mat.Albedo.A);
+                EmissiveShapesByThread[threadIdx].Add(new ShapeData(center, circle.Radius, emissive, transform.Position.Z));
             }
         });
 
@@ -251,6 +265,40 @@ public class Geometry : core.System
         Renderer.Configure(BlendState.AlphaBlend).FlushShapes(EmissiveTexture, Color.Transparent);
     }
 
+    /// <summary>
+    /// Converts intuitive material properties to HRC absorption format.
+    /// - Emissive objects: absorption = emissive color (required for emission)
+    /// - Non-emissive objects: base opacity + color filtering
+    /// Alpha controls opacity, color controls tint.
+    /// </summary>
+    private static Color CalculateAbsorption(ref Material mat)
+    {
+        bool isEmissive = mat.Emissive.R > 0 || mat.Emissive.G > 0 || mat.Emissive.B > 0;
+        float alpha = mat.Albedo.A / 255f;
+
+        if (isEmissive)
+        {
+            // Lights: absorption = emissive color scaled by intensity
+            float intensity = mat.Emissive.A / 255f;
+            return new Color(
+                (int)(mat.Emissive.R * intensity),
+                (int)(mat.Emissive.G * intensity),
+                (int)(mat.Emissive.B * intensity),
+                mat.Albedo.A);  // Use alpha for proper blending, shaders use RGB
+        }
+        else
+        {
+            // Non-emissive: color filtering based on albedo
+            // Albedo 255 = 0 absorption (full pass), Albedo 0 = 255 absorption (full block)
+            // Cyan (0,255,255) → blocks red, passes green/blue
+            return new Color(
+                (int)((255 - mat.Albedo.R) * alpha),
+                (int)((255 - mat.Albedo.G) * alpha),
+                (int)((255 - mat.Albedo.B) * alpha),
+                mat.Albedo.A);
+        }
+    }
+
     private void RenderAbsorptionTexture()
     {
         Renderer.ClearShapes();
@@ -269,7 +317,8 @@ public class Geometry : core.System
             if (position.X + rect.Size.X >= 0 && position.X < WorldBounds.X &&
                 position.Y + rect.Size.Y >= 0 && position.Y < WorldBounds.Y)
             {
-                AbsorptionShapesByThread[threadIdx].Add(new ShapeData(position, rect.Size, mat.Albedo, transform.Position.Z));
+                Color absorption = CalculateAbsorption(ref mat);
+                AbsorptionShapesByThread[threadIdx].Add(new ShapeData(position, rect.Size, absorption, transform.Position.Z));
             }
         });
 
@@ -283,7 +332,8 @@ public class Geometry : core.System
             if (center.X + circle.Radius >= 0 && center.X - circle.Radius < WorldBounds.X &&
                 center.Y + circle.Radius >= 0 && center.Y - circle.Radius < WorldBounds.Y)
             {
-                AbsorptionShapesByThread[threadIdx].Add(new ShapeData(center, circle.Radius, mat.Albedo, transform.Position.Z));
+                Color absorption = CalculateAbsorption(ref mat);
+                AbsorptionShapesByThread[threadIdx].Add(new ShapeData(center, circle.Radius, absorption, transform.Position.Z));
             }
         });
 

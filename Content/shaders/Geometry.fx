@@ -38,7 +38,7 @@ bool IsSurface(float2 uv)
     if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)
         return false;
     float4 color = EmissiveTexture.Sample(SceneColorSampler, uv);
-    return color.a > 0.5; // Threshold at 50% for consistent surface detection
+    return color.a > EPSILON;
 }
 
 // Get alpha value for subpixel distance refinement
@@ -177,7 +177,7 @@ float SampleJFAMinDistance(Texture2D jfaTex, float2 uv, float2 currentPixelUV)
 float4 GenerateSDFFromJFAPS(PixelShaderInput input) : COLOR
 {
     float alpha = GetSurfaceAlpha(input.UV);
-    bool isInside = alpha > 0.5;
+    bool isInside = IsSurface(input.UV);
 
     // Subpixel offset based on alpha gradient (alpha 0.5 = on boundary)
     // alpha 1.0 = ~0.5 pixels inside, alpha 0.0 = ~0.5 pixels outside

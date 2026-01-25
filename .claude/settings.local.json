@@ -9,7 +9,9 @@
       "Bash(dotnet msbuild:*)",
       "Bash(git -C \"e:\\\\code\\\\beyond_proyects\\\\radiant\" log --oneline -10 -- Content/shaders/UDR/UDR1.fx)",
       "Bash(git log:*)",
-      "Bash(del \"e:\\\\code\\\\beyond_proyects\\\\radiant\\\\Content\\\\shaders\\\\UDR\\\\HR3.fx\")"
+      "Bash(del \"e:\\\\code\\\\beyond_proyects\\\\radiant\\\\Content\\\\shaders\\\\UDR\\\\HR3.fx\")",
+      "Bash(gh api:*)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ]
   }
 }

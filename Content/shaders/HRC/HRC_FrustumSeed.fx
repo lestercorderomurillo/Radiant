@@ -1,5 +1,6 @@
 /* HRC_FrustumSeed.fx - MRT Output
-   Seeds cascade 0 with emissivity/absorption from scene textures. */
+   Seeds cascade 0 with emissivity/absorption from scene textures.
+   Outputs two targets: Radiance (RGB) and Transmittance (RGB) for stained glass. */
 
 Texture2D Emissivity : register(t0);
 Texture2D Absorption : register(t1);
@@ -33,9 +34,11 @@ PixelShaderInput MainVS(VertexShaderInput input)
     return output;
 }
 
+// MRT Output - matching GLSL reference
 struct PixelShaderOutput
 {
-    float4 Radiance : COLOR0;  // RGB = radiance, A = transmittance
+    float4 Radiance     : SV_Target0;  // RGB = radiance
+    float4 Transmittance: SV_Target1;  // RGB = transmittance (for stained glass)
 };
 
 float2 TransformProbeToFrustum(float2 probe)
@@ -46,6 +49,7 @@ float2 TransformProbeToFrustum(float2 probe)
     ) + FrustumOffset;
 }
 
+// sRGB to Linear conversion (matching GLSL LINEAR macro)
 float3 ToLinear(float3 srgb) { return pow(abs(srgb), 2.2); }
 
 PixelShaderOutput MainPS(PixelShaderInput input)
@@ -62,21 +66,27 @@ PixelShaderOutput MainPS(PixelShaderInput input)
 
     if (sampleCoord.x < 0.0 || sampleCoord.x > 1.0 || sampleCoord.y < 0.0 || sampleCoord.y > 1.0)
     {
-        output.Radiance = float4(0.0, 0.0, 0.0, 1.0);  // full transmittance
+        output.Radiance = float4(0.0, 0.0, 0.0, 1.0);      // no radiance
+        output.Transmittance = float4(1.0, 1.0, 1.0, 1.0); // full transmittance
         return output;
     }
 
-    float4 emissRaw = Emissivity.Sample(EmissiveSampler, sampleCoord);
-    // Un-premultiply alpha to get true emissive color (avoids flicker from AA edges)
-    float3 emiss = emissRaw.a > 0.001 ? ToLinear(emissRaw.rgb / emissRaw.a) : float3(0, 0, 0);
-    float3 absrp = Absorption.Sample(AbsorptionSampler, sampleCoord).rgb * 5.0;
+    // Sample textures (stored in sRGB)
+    float3 emissRaw = Emissivity.Sample(EmissiveSampler, sampleCoord).rgb;
+    float3 absrpRaw = Absorption.Sample(AbsorptionSampler, sampleCoord).rgb;
 
-    // Beer's Law with luminance-weighted single-channel transmittance
-    float absrpLum = dot(absrp, float3(0.299, 0.587, 0.114));
-    float transmit = exp(-absrpLum);
-    float3 radiance = (1.0 - transmit) * emiss;
+    // Convert to linear (matching GLSL: LINEAR(texture2D(...).rgb))
+    float3 emiss = ToLinear(emissRaw);
+    float3 absrp = ToLinear(absrpRaw);
 
-    output.Radiance = float4(radiance, transmit);
+    // Linear transmittance: absrp 0 = full pass, absrp 1 = full block
+    float3 trans = saturate(1.0 - absrp);
+
+    // Radiance from participating media (matching GLSL: (1.0 - trans) * emiss)
+    float3 radiance = (1.0 - trans) * emiss;
+
+    output.Radiance = float4(radiance, 1.0);
+    output.Transmittance = float4(trans, 1.0);
     return output;
 }
 

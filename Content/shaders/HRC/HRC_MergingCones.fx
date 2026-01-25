@@ -1,6 +1,10 @@
-// RGB = radiance, A = transmittance (single-channel)
-Texture2D VraysCascade : register(t0);
-Texture2D PrevCascade : register(t1);
+/* HRC_MergingCones.fx
+   Merges cascade rays with RGB transmittance for stained glass support. */
+
+Texture2D VraysRadiance : register(t0);      // RGB = radiance
+Texture2D VraysTransmittance : register(t1); // RGB = transmittance
+Texture2D PrevRadiance : register(t2);       // RGB = radiance
+Texture2D PrevTransmittance : register(t3);  // RGB = transmittance
 
 SamplerState SamplerVrays : register(s0);
 SamplerState SamplerPrev : register(s1);
@@ -10,7 +14,6 @@ float2 PrevSize;
 float2 CascadeSize;
 float2 CascadeIndex;
 float ProbeScale;
-
 
 struct VertexShaderInput
 {
@@ -32,42 +35,49 @@ PixelShaderInput MainVS(VertexShaderInput input)
     return output;
 }
 
+// MRT Output
 struct PixelShaderOutput
 {
-    float4 Radiance : SV_Target0;  // RGB = radiance, A = transmittance
+    float4 Radiance     : SV_Target0;  // RGB = radiance
+    float4 Transmittance: SV_Target1;  // RGB = transmittance
 };
 
-// Merge radiance with single-channel transmittance in alpha
-float4 MergeRadiance(float4 near, float4 far)
+// Merge with RGB transmittance
+void MergeRadiance(float3 nearRad, float3 nearTrans, float3 farRad, float3 farTrans,
+                   out float3 outRad, out float3 outTrans)
 {
-    return float4(near.rgb + far.rgb * near.a, near.a * far.a);
+    outRad = nearRad + farRad * nearTrans;
+    outTrans = nearTrans * farTrans;
 }
 
-float4 GetVolumeVrays(float2 probe, float index, float interval, float lookupWidth, float4 defVal)
+void GetVolumeVrays(float2 probe, float index, float interval, float lookupWidth,
+                    out float3 rad, out float3 trans)
 {
-    // probe.y is in world space, scale down for half-height texture
     float2 samplePos = float2(floor(probe.x / interval) * lookupWidth, probe.y / ProbeScale) + float2(0.5, 0.0);
     samplePos = float2(samplePos.x + index, samplePos.y) / VraysSize;
 
     float2 floorPos = floor(samplePos);
     float weight = (floorPos.x != 0.0 || floorPos.y != 0.0) ? 1.0 : 0.0;
 
-    return lerp(VraysCascade.Sample(SamplerVrays, samplePos), defVal, weight);
+    rad = lerp(VraysRadiance.Sample(SamplerVrays, samplePos).rgb, float3(0, 0, 0), weight);
+    trans = lerp(VraysTransmittance.Sample(SamplerVrays, samplePos).rgb, float3(1, 1, 1), weight);
 }
 
-float4 GetVolumePrev(float2 probe, float index, float interval, float lookupWidth, float4 defVal)
+void GetVolumePrev(float2 probe, float index, float interval, float lookupWidth,
+                   out float3 rad, out float3 trans)
 {
-    // probe.y is in world space, scale down for half-height texture
     float2 samplePos = float2(floor(probe.x / interval) * lookupWidth, probe.y / ProbeScale) + float2(0.5, 0.0);
     samplePos = float2(samplePos.x + index, samplePos.y) / PrevSize;
 
     float2 floorPos = floor(samplePos);
     float weight = (floorPos.x != 0.0 || floorPos.y != 0.0) ? 1.0 : 0.0;
 
-    return lerp(PrevCascade.Sample(SamplerPrev, samplePos), defVal, weight);
+    rad = lerp(PrevRadiance.Sample(SamplerPrev, samplePos).rgb, float3(0, 0, 0), weight);
+    trans = lerp(PrevTransmittance.Sample(SamplerPrev, samplePos).rgb, float3(1, 1, 1), weight);
 }
 
-float4 MergeCone(float2 probe, float plane, float intrv, float vrays, float index, float side)
+void MergeCone(float2 probe, float plane, float intrv, float vrays, float index, float side,
+               out float3 outRad, out float3 outTrans)
 {
     float coneI = index * 2.0 + side;
     float vrayI = index + side;
@@ -76,14 +86,14 @@ float4 MergeCone(float2 probe, float plane, float intrv, float vrays, float inde
 
     float2 merge = probe + align * (limit + float2(0.0, vrayI * 2.0));
 
-    // Cone angle weighting - use atan(y/x)
+    // Cone angle weighting
     float2 vrayLL = (limit * 2.0) + float2(0.0, coneI * 2.0);
     float2 vrayRR = (limit * 2.0) + float2(0.0, (coneI + 1.0) * 2.0);
     float coneW = atan(vrayRR.y / vrayRR.x) - atan(vrayLL.y / vrayLL.x);
 
-    // defVal: RGB=0 (no radiance), A=1 (full transmittance)
-    float4 vray = GetVolumeVrays(probe, vrayI, intrv, vrays, float4(0.0, 0.0, 0.0, 1.0));
-    float4 coneFar = GetVolumePrev(merge, coneI, 1.0, 1.0, float4(0.0, 0.0, 0.0, 1.0));
+    float3 vrayRad, vrayTrans, coneFarRad, coneFarTrans;
+    GetVolumeVrays(probe, vrayI, intrv, vrays, vrayRad, vrayTrans);
+    GetVolumePrev(merge, coneI, 1.0, 1.0, coneFarRad, coneFarTrans);
 
     if (fmod(plane, 2.0) < 0.5)
     {
@@ -91,25 +101,28 @@ float4 MergeCone(float2 probe, float plane, float intrv, float vrays, float inde
         float2 probeFar = probe + (limit + float2(0.0, vrayI * 2.0));
         float2 probeNear = probe;
 
-        float4 vrayExt = GetVolumeVrays(probeFar, vrayI, intrv, vrays, float4(0.0, 0.0, 0.0, 1.0));
-        float4 coneNear = GetVolumePrev(probeNear, coneI, 1.0, 1.0, float4(0.0, 0.0, 0.0, 1.0));
+        float3 vrayExtRad, vrayExtTrans, coneNearRad, coneNearTrans;
+        GetVolumeVrays(probeFar, vrayI, intrv, vrays, vrayExtRad, vrayExtTrans);
+        GetVolumePrev(probeNear, coneI, 1.0, 1.0, coneNearRad, coneNearTrans);
 
         // Extend the ray first
-        vray = MergeRadiance(vray, vrayExt);
+        float3 extRad, extTrans;
+        MergeRadiance(vrayRad, vrayTrans, vrayExtRad, vrayExtTrans, extRad, extTrans);
 
         // Merge with far cone (with cone weighting)
-        float4 weighted = float4(vray.rgb * coneW, vray.a);
-        float4 result = MergeRadiance(weighted, coneFar);
+        float3 weightedRad = extRad * coneW;
+        float3 resultRad, resultTrans;
+        MergeRadiance(weightedRad, extTrans, coneFarRad, coneFarTrans, resultRad, resultTrans);
 
         // Interpolate with near cone
-        return lerp(result, coneNear, 0.5);
+        outRad = lerp(resultRad, coneNearRad, 0.5);
+        outTrans = lerp(resultTrans, coneNearTrans, 0.5);
     }
     else
     {
         // ODD PLANE: direct merge with cone weighting
-        float3 radiance = (vray.rgb * coneW) + (coneFar.rgb * vray.a);
-        float transmit = vray.a * coneFar.a;
-        return float4(radiance, transmit);
+        outRad = (vrayRad * coneW) + (coneFarRad * vrayTrans);
+        outTrans = vrayTrans * coneFarTrans;
     }
 }
 
@@ -124,11 +137,13 @@ PixelShaderOutput MainPS(PixelShaderInput input)
     float index = floor(texel.x - (plane * intrv));
     float2 probe = float2(plane * intrv, texel.y * ProbeScale) + float2(0.5, 0.0);
 
-    float4 resultL = MergeCone(probe, plane, intrv, vrays, index, 0.0);
-    float4 resultR = MergeCone(probe, plane, intrv, vrays, index, 1.0);
+    float3 radL, transL, radR, transR;
+    MergeCone(probe, plane, intrv, vrays, index, 0.0, radL, transL);
+    MergeCone(probe, plane, intrv, vrays, index, 1.0, radR, transR);
 
-    // Sum radiance, multiply transmittance
-    output.Radiance = float4(resultL.rgb + resultR.rgb, resultL.a * resultR.a);
+    // Sum radiance, sum transmittance (matching GLSL reference)
+    output.Radiance = float4(radL + radR, 1.0);
+    output.Transmittance = float4(transL + transR, 1.0);
     return output;
 }
 

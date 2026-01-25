@@ -4,6 +4,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using System;
+using System.Collections.Generic;
 
 namespace com.radiant.engine.core;
 
@@ -11,7 +12,6 @@ public class MegaLightsScene : Scene
 {
     private int MouseLightId;
     private int[] RotatingLightIds;
-    private int[] OccluderIds;
 
     private MouseState PrevMouse;
     private KeyboardState PrevKeyboard;
@@ -28,31 +28,33 @@ public class MegaLightsScene : Scene
 
     private HRCGI HRCGISystem;
     private RCGI RCGISystem;
+    private BilinearSystem BilinearSystem;
     private UDR1 UDR1System;
     private UDR2 UDR2System;
     private UDR3 UDR3System;
-    private Geometry Geometry;
     private GizmosRenderer Gizmos;
 
     private bool UseHRCGI = true;
-    private int UDRMode = 2;  // 0 = UDR1, 1 = UDR2, 2 = UDR3
+    private int UDRMode = 0;  // 0 = Bilinear, 1 = UDR1, 2 = UDR2, 3 = UDR3
 
     private const float RotationSpeed = 0.15f;
     private const float OrbitRadius = 300f;
     private const int LightCount = 12;
-    private const int OccluderCount = 80;
-    private const float OccluderMargin = 150f;
-    private const float CenterClearance = 400f;
+
+    private const float BoxSize = 50f;
+    private const float ColumnSpacing = 80f;
+    private const int MaxBoxesPerColumn = 18;
 
     public override void SetupECS()
     {
         ECS.AddSystem<PerformanceMonitor>();
-        Geometry = ECS.AddSystem<Geometry>();
+        ECS.AddSystem<Geometry>();
         HRCGISystem = ECS.AddSystem<HRCGI>();
         RCGISystem = ECS.AddSystem<RCGI>(enabled: false);
+        BilinearSystem = ECS.AddSystem<BilinearSystem>();
         UDR1System = ECS.AddSystem<UDR1>(enabled: false);
         UDR2System = ECS.AddSystem<UDR2>(enabled: false);
-        UDR3System = ECS.AddSystem<UDR3>();
+        UDR3System = ECS.AddSystem<UDR3>(enabled: false);
         Gizmos = ECS.AddSystem<GizmosRenderer>();
 
         base.SetupECS();
@@ -89,33 +91,50 @@ public class MegaLightsScene : Scene
 
     private void CreateOccluders()
     {
-        OccluderIds = new int[OccluderCount];
         var screen = Renderer.Window.GetScreenSize();
         var center = Renderer.Window.GetScreenCenter();
 
-        for (int i = 0; i < OccluderCount; i++)
-        {
-            Vector2 pos;
-            do
-            {
-                pos = new Vector2(
-                    OccluderMargin + (float)Rng.NextDouble() * (screen.X - 2 * OccluderMargin),
-                    OccluderMargin + (float)Rng.NextDouble() * (screen.Y - 2 * OccluderMargin)
-                );
-            } while (Vector2.Distance(pos, center) < CenterClearance);
+        int columnsPerSide = (int)((screen.X / 2 - ColumnSpacing) / ColumnSpacing);
+        float maxDistance = screen.X / 2f;  // Scale alpha across full screen half-width
 
-            OccluderIds[i] = CreateOccluder(pos, 60f);
+        var occluderList = new List<int>();
+
+        for (int col = 1; col <= columnsPerSide; col++)
+        {
+            float distanceFromCenter = col * ColumnSpacing;
+
+            // Farther from center = more alpha, closer = less alpha
+            float alpha = (distanceFromCenter / maxDistance) * 1.0f;
+            alpha = Math.Clamp(alpha, 0f, 1.0f);
+            byte alphaByte = (byte)(alpha * 255);
+
+            // Left column
+            float leftX = center.X - distanceFromCenter;
+            for (int row = 0; row < MaxBoxesPerColumn; row++)
+            {
+                float y = center.Y - (MaxBoxesPerColumn * BoxSize / 2) + row * BoxSize + BoxSize / 2;
+                occluderList.Add(CreateOccluder(new Vector2(leftX, y), BoxSize, alphaByte));
+            }
+
+            // Right column
+            float rightX = center.X + distanceFromCenter;
+            for (int row = 0; row < MaxBoxesPerColumn; row++)
+            {
+                float y = center.Y - (MaxBoxesPerColumn * BoxSize / 2) + row * BoxSize + BoxSize / 2;
+                occluderList.Add(CreateOccluder(new Vector2(rightX, y), BoxSize, alphaByte));
+            }
         }
+
     }
 
     private void CreateMouseLight()
     {
         var mouse = Mouse.GetState();
-        MouseLightId = CreateLight(new Vector2(mouse.X, mouse.Y), 50f, Color.White);
+        MouseLightId = CreateLight(new Vector2(mouse.X, mouse.Y), 100f, new Color(0, 255, 255, 1.0f), Color.Transparent);
         PrevMouse = mouse;
     }
 
-    private int CreateLight(Vector2 position, float radius, Color color)
+    private int CreateLight(Vector2 position, float radius, Color color, Color? emissive = null)
     {
         int id = ECS.CreateEntity();
 
@@ -125,9 +144,11 @@ public class MegaLightsScene : Scene
 
         transform.Position = new Vector3(position, id);
         transform.Rotation = Vector3.UnitX;
-        circle.Radius = radius;
+
         material.Albedo = color;
-        material.Emissive = color;
+        material.Emissive = emissive ?? color;
+
+        circle.Radius = radius;
 
         return id;
     }
@@ -142,8 +163,29 @@ public class MegaLightsScene : Scene
 
         transform.Position = new Vector3(position, id);
         transform.Rotation = Vector3.UnitX;
+
         rect.Size = new Vector2(size);
-        material.Albedo = new Color(30, 30, 30);
+
+        material.Albedo = new Color(30, 30, 0, 90);
+        material.Emissive = Color.Black;
+
+        return id;
+    }
+
+    private int CreateOccluder(Vector2 position, float size, byte alpha)
+    {
+        int id = ECS.CreateEntity();
+
+        ref var transform = ref ECS.AddComponent<Transform>(id);
+        ref var rect = ref ECS.AddComponent<Rectangle2D>(id);
+        ref var material = ref ECS.AddComponent<Material>(id);
+
+        transform.Position = new Vector3(position, id);
+        transform.Rotation = Vector3.UnitX;
+
+        rect.Size = new Vector2(size);
+
+        material.Albedo = new Color((byte)0, (byte)0, (byte)0, alpha);
         material.Emissive = Color.Black;
 
         return id;
@@ -177,9 +219,9 @@ public class MegaLightsScene : Scene
             transform.Position = new Vector3(x, y, 0);
         }
 
-        // Update mouse light
+        // Update mouse light (always on top)
         ref var mouseTransform = ref ECS.GetComponent<Transform>(MouseLightId);
-        mouseTransform.Position = new Vector3(mouse.X, mouse.Y, 0);
+        mouseTransform.Position = new Vector3(mouse.X, mouse.Y, ECS.EntityCount + 1);
 
         // Only allow spawning when window is focused
         if (Renderer.Window.IsActive)
@@ -267,6 +309,7 @@ public class MegaLightsScene : Scene
     private void UpdateUDRInput()
     {
         var inputSource = new Func<Texture2D>(() => UseHRCGI ? HRCGISystem.GetOutput() : RCGISystem.GetOutput());
+        BilinearSystem.SetInputSource(inputSource);
         UDR1System.SetInputSource(inputSource);
         UDR2System.SetInputSource(inputSource);
         UDR3System.SetInputSource(inputSource);
@@ -278,34 +321,42 @@ public class MegaLightsScene : Scene
         switch (UDRMode)
         {
             case 0:
+                BilinearSystem.Dispose();
+                BilinearSystem.Enabled = false;
+                break;
+            case 1:
                 UDR1System.Dispose();
                 UDR1System.Enabled = false;
                 break;
-            case 1:
+            case 2:
                 UDR2System.Dispose();
                 UDR2System.Enabled = false;
                 break;
-            case 2:
+            case 3:
                 UDR3System.Dispose();
                 UDR3System.Enabled = false;
                 break;
         }
 
-        // Cycle to next mode
-        UDRMode = (UDRMode + 1) % 3;
+        // Cycle to next mode (0 = Bilinear, 1 = UDR1, 2 = UDR2, 3 = UDR3)
+        UDRMode = (UDRMode + 1) % 4;
 
         // Enable new UDR system
         switch (UDRMode)
         {
             case 0:
+                BilinearSystem.Initialize();
+                BilinearSystem.Enabled = true;
+                break;
+            case 1:
                 UDR1System.Initialize();
                 UDR1System.Enabled = true;
                 break;
-            case 1:
+            case 2:
                 UDR2System.Initialize();
                 UDR2System.Enabled = true;
                 break;
-            case 2:
+            case 3:
                 UDR3System.Initialize();
                 UDR3System.Enabled = true;
                 break;
@@ -318,9 +369,10 @@ public class MegaLightsScene : Scene
     {
         return UDRMode switch
         {
-            0 => "UDR1 (Spatial)",
-            1 => "UDR2 (Spatial + Temporal)",
-            2 => "UDR3 (Bilinear)",
+            0 => "Bilinear",
+            1 => "UDR1 (Spatial)",
+            2 => "UDR2 (Spatial + Temporal)",
+            3 => "UDR3 (Lanczos + Temporal)",
             _ => "Unknown"
         };
     }
@@ -373,5 +425,10 @@ public class MegaLightsScene : Scene
 
             CreateLight(new Vector2(x, y), 3f, color);
         }
+    }
+
+    public override void Render()
+    {
+        base.Render();
     }
 }

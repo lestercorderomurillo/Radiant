@@ -10,7 +10,7 @@ namespace com.radiant.engine.bundle;
 /// Holographic Radiance Cascades - 2D Global Illumination System
 /// Based on the paper by Rouli Freeman (arXiv:2505.02041)
 ///
-/// Uses single-channel transmittance packed into the alpha channel (RGB=radiance, A=transmittance).
+/// Uses MRT with separate RGB textures for radiance and transmittance (stained glass support).
 /// Single set of cascade surfaces reused for each frustum (memory efficient).
 /// </summary>
 public class HRCGI : core.System
@@ -26,12 +26,15 @@ public class HRCGI : core.System
     private Geometry Geometry;
     private GizmosRenderer Gizmos;
 
-    // Single set of cascade surfaces - reused for each frustum (memory efficient)
-    private RenderTarget2D[] VraysCascade;
-    private RenderTarget2D[] MergeCascade;
+    // Paired cascade surfaces (radiance + transmittance) - reused for each frustum
+    private RenderTarget2D[] VraysRadiance;
+    private RenderTarget2D[] VraysTransmittance;
+    private RenderTarget2D[] MergeRadiance;
+    private RenderTarget2D[] MergeTransmittance;
 
     // Per-frustum output + final composited result
-    private RenderTarget2D[] FrustumOutput;
+    private RenderTarget2D[] FrustumRadiance;
+    private RenderTarget2D[] FrustumTransmittance;
     private RenderTarget2D FinalTexture;
 
     private Vector2 WorldSize;
@@ -56,6 +59,10 @@ public class HRCGI : core.System
     private int DebugIndex = 0;
     private int DebugTextureCount;
 
+    // Solid textures for default values
+    private Texture2D BlackTexture;
+    private Texture2D WhiteTexture;
+
     public override void Initialize()
     {
         Geometry = Scene.ECS.GetSystem<Geometry>();
@@ -63,10 +70,14 @@ public class HRCGI : core.System
 
         WorldSize = new Vector2(Renderer.ScaledHigherPowerOfTwo, Renderer.ScaledHigherPowerOfTwo);
 
+        // Create solid textures for defaults
+        BlackTexture = Renderer.GetSolidTexture(Color.Black);
+        WhiteTexture = Renderer.GetSolidTexture(Color.White);
+
         CalculateCascadeSizes();
         CreateRenderTargets();
 
-        DebugTextureCount = 1 + CascadeCount * 2 + FrustumCount + 2;
+        DebugTextureCount = 1 + CascadeCount * 4 + FrustumCount * 2 + 2;
         PrevKeyState = Keyboard.GetState();
         Renderer.RenderScaleChanged += OnRenderScaleChanged;
     }
@@ -81,7 +92,7 @@ public class HRCGI : core.System
         WorldSize = new Vector2(newSize, newSize);
         CalculateCascadeSizes();
         CreateRenderTargets();
-        DebugTextureCount = 1 + CascadeCount * 2 + FrustumCount + 2;
+        DebugTextureCount = 1 + CascadeCount * 4 + FrustumCount * 2 + 2;
     }
 
     private void CalculateCascadeSizes()
@@ -106,20 +117,26 @@ public class HRCGI : core.System
         var cascadeFormat = SurfaceFormat.HalfVector4;
         var finalFormat = SurfaceFormat.Color;
 
-        // Single set of cascade surfaces (reused for each frustum)
-        VraysCascade = new RenderTarget2D[CascadeCount];
-        MergeCascade = new RenderTarget2D[CascadeCount];
+        // Paired cascade surfaces (reused for each frustum)
+        VraysRadiance = new RenderTarget2D[CascadeCount];
+        VraysTransmittance = new RenderTarget2D[CascadeCount];
+        MergeRadiance = new RenderTarget2D[CascadeCount];
+        MergeTransmittance = new RenderTarget2D[CascadeCount];
 
         for (int cascade = 0; cascade < CascadeCount; cascade++)
         {
-            VraysCascade[cascade] = new RenderTarget2D(Renderer.Device, (int)CascadeSizes[cascade].X, (int)CascadeSizes[cascade].Y, false, cascadeFormat, DepthFormat.None);
-            MergeCascade[cascade] = new RenderTarget2D(Renderer.Device, (int)MergeSizes[cascade].X, (int)MergeSizes[cascade].Y, false, cascadeFormat, DepthFormat.None);
+            VraysRadiance[cascade] = new RenderTarget2D(Renderer.Device, (int)CascadeSizes[cascade].X, (int)CascadeSizes[cascade].Y, false, cascadeFormat, DepthFormat.None);
+            VraysTransmittance[cascade] = new RenderTarget2D(Renderer.Device, (int)CascadeSizes[cascade].X, (int)CascadeSizes[cascade].Y, false, cascadeFormat, DepthFormat.None);
+            MergeRadiance[cascade] = new RenderTarget2D(Renderer.Device, (int)MergeSizes[cascade].X, (int)MergeSizes[cascade].Y, false, cascadeFormat, DepthFormat.None);
+            MergeTransmittance[cascade] = new RenderTarget2D(Renderer.Device, (int)MergeSizes[cascade].X, (int)MergeSizes[cascade].Y, false, cascadeFormat, DepthFormat.None);
         }
 
-        FrustumOutput = new RenderTarget2D[FrustumCount];
+        FrustumRadiance = new RenderTarget2D[FrustumCount];
+        FrustumTransmittance = new RenderTarget2D[FrustumCount];
         for (int frustum = 0; frustum < FrustumCount; frustum++)
         {
-            FrustumOutput[frustum] = new RenderTarget2D(Renderer.Device, (int)WorldSize.X, (int)(WorldSize.Y / ProbeScale), false, cascadeFormat, DepthFormat.None);
+            FrustumRadiance[frustum] = new RenderTarget2D(Renderer.Device, (int)WorldSize.X, (int)(WorldSize.Y / ProbeScale), false, cascadeFormat, DepthFormat.None);
+            FrustumTransmittance[frustum] = new RenderTarget2D(Renderer.Device, (int)WorldSize.X, (int)(WorldSize.Y / ProbeScale), false, cascadeFormat, DepthFormat.None);
         }
 
         FinalTexture = new RenderTarget2D(Renderer.Device, (int)WorldSize.X, (int)WorldSize.Y, false, finalFormat, DepthFormat.None);
@@ -157,11 +174,14 @@ public class HRCGI : core.System
 
     private void RenderFrustumSeed(int frustum, Texture2D emissive, Texture2D absorption)
     {
+        // MRT: output to both radiance and transmittance targets
+        Renderer.Device.SetRenderTargets(VraysRadiance[0], VraysTransmittance[0]);
+        Renderer.Device.Clear(Color.Transparent);
+
         Renderer
             .Reset()
             .SetShader("HRC/HRC_FrustumSeed")
             .Configure((0, SamplerState.PointClamp), (1, SamplerState.PointClamp))
-            .SetTarget(VraysCascade[0])
             .SetParameter("Emissivity", emissive)
             .SetParameter("Absorption", absorption)
             .SetParameter("WorldSize", WorldSize)
@@ -175,12 +195,16 @@ public class HRCGI : core.System
 
     private void RenderExtensions(int cascade)
     {
+        // MRT: output to both radiance and transmittance targets
+        Renderer.Device.SetRenderTargets(VraysRadiance[cascade], VraysTransmittance[cascade]);
+        Renderer.Device.Clear(Color.Transparent);
+
         Renderer
             .Reset()
             .SetShader("HRC/HRC_Extensions")
-            .Configure((0, SamplerState.LinearClamp))
-            .SetTarget(VraysCascade[cascade])
-            .SetParameter("PrevCascade", VraysCascade[cascade - 1])
+            .Configure((0, SamplerState.LinearClamp), (1, SamplerState.LinearClamp))
+            .SetParameter("PrevRadiance", VraysRadiance[cascade - 1])
+            .SetParameter("PrevTransmittance", VraysTransmittance[cascade - 1])
             .SetParameter("PrevSize", CascadeSizes[cascade - 1])
             .SetParameter("CascadeSize", CascadeSizes[cascade])
             .SetParameter("CascadeIndex", new Vector2(cascade, CascadeCount))
@@ -194,13 +218,22 @@ public class HRCGI : core.System
         int nextCascade = (cascade + 1) % CascadeCount;
         bool hasNext = cascade + 1 < CascadeCount;
 
+        // MRT: output to both radiance and transmittance targets
+        Renderer.Device.SetRenderTargets(MergeRadiance[cascade], MergeTransmittance[cascade]);
+        Renderer.Device.Clear(Color.Transparent);
+
         Renderer
             .Reset()
             .SetShader("HRC/HRC_MergingCones")
-            .Configure((0, SamplerState.LinearClamp), (1, SamplerState.LinearClamp))
-            .SetTarget(MergeCascade[cascade])
-            .SetParameter("VraysCascade", VraysCascade[cascade])
-            .SetParameter("PrevCascade", hasNext ? MergeCascade[nextCascade] : Renderer.GetSolidTexture(Color.White))
+            .Configure(
+                (0, SamplerState.LinearClamp),
+                (1, SamplerState.LinearClamp),
+                (2, SamplerState.LinearClamp),
+                (3, SamplerState.LinearClamp))
+            .SetParameter("VraysRadiance", VraysRadiance[cascade])
+            .SetParameter("VraysTransmittance", VraysTransmittance[cascade])
+            .SetParameter("PrevRadiance", hasNext ? MergeRadiance[nextCascade] : BlackTexture)
+            .SetParameter("PrevTransmittance", hasNext ? MergeTransmittance[nextCascade] : WhiteTexture)
             .SetParameter("VraysSize", CascadeSizes[cascade])
             .SetParameter("PrevSize", hasNext ? MergeSizes[nextCascade] : Vector2.One)
             .SetParameter("CascadeSize", MergeSizes[cascade])
@@ -212,9 +245,16 @@ public class HRCGI : core.System
 
     private void CopyToFrustumOutput(int frustum)
     {
-        Renderer.Device.SetRenderTarget(FrustumOutput[frustum]);
+        // Copy radiance
+        Renderer.Device.SetRenderTarget(FrustumRadiance[frustum]);
         Renderer.SpriteBatch.Begin(SpriteSortMode.Immediate, BlendState.Opaque, SamplerState.PointClamp);
-        Renderer.SpriteBatch.Draw(MergeCascade[0], Vector2.Zero, Color.White);
+        Renderer.SpriteBatch.Draw(MergeRadiance[0], Vector2.Zero, Color.White);
+        Renderer.SpriteBatch.End();
+
+        // Copy transmittance
+        Renderer.Device.SetRenderTarget(FrustumTransmittance[frustum]);
+        Renderer.SpriteBatch.Begin(SpriteSortMode.Immediate, BlendState.Opaque, SamplerState.PointClamp);
+        Renderer.SpriteBatch.Draw(MergeTransmittance[0], Vector2.Zero, Color.White);
         Renderer.SpriteBatch.End();
     }
 
@@ -229,10 +269,10 @@ public class HRCGI : core.System
                 (2, SamplerState.LinearClamp),
                 (3, SamplerState.LinearClamp))
             .SetTarget(FinalTexture)
-            .SetParameter("FrustumIndex0", FrustumOutput[0])
-            .SetParameter("FrustumIndex1", FrustumOutput[1])
-            .SetParameter("FrustumIndex2", FrustumOutput[2])
-            .SetParameter("FrustumIndex3", FrustumOutput[3])
+            .SetParameter("FrustumIndex0", FrustumRadiance[0])
+            .SetParameter("FrustumIndex1", FrustumRadiance[1])
+            .SetParameter("FrustumIndex2", FrustumRadiance[2])
+            .SetParameter("FrustumIndex3", FrustumRadiance[3])
             .SetParameter("WorldSize", WorldSize)
             .Draw()
             .Commit();
@@ -282,16 +322,32 @@ public class HRCGI : core.System
 
         int textureIndex = DebugIndex - 1;
 
+        // Vrays (radiance + transmittance pairs)
         if (textureIndex < CascadeCount * 2)
         {
             int cascade = textureIndex / 2;
             int type = textureIndex % 2;
-            return type == 0 ? VraysCascade[cascade] : MergeCascade[cascade];
+            return type == 0 ? VraysRadiance[cascade] : VraysTransmittance[cascade];
         }
         textureIndex -= CascadeCount * 2;
 
-        if (textureIndex < FrustumCount) return FrustumOutput[textureIndex];
-        textureIndex -= FrustumCount;
+        // Merge (radiance + transmittance pairs)
+        if (textureIndex < CascadeCount * 2)
+        {
+            int cascade = textureIndex / 2;
+            int type = textureIndex % 2;
+            return type == 0 ? MergeRadiance[cascade] : MergeTransmittance[cascade];
+        }
+        textureIndex -= CascadeCount * 2;
+
+        // Frustum outputs
+        if (textureIndex < FrustumCount * 2)
+        {
+            int frustum = textureIndex / 2;
+            int type = textureIndex % 2;
+            return type == 0 ? FrustumRadiance[frustum] : FrustumTransmittance[frustum];
+        }
+        textureIndex -= FrustumCount * 2;
 
         if (textureIndex == 0) return Geometry.EmissiveTexture;
         return Geometry.AbsorptionTexture;
@@ -309,7 +365,7 @@ public class HRCGI : core.System
         WorldSize = new Vector2(newSize, newSize);
         CalculateCascadeSizes();
         CreateRenderTargets();
-        DebugTextureCount = 1 + CascadeCount * 2 + FrustumCount + 2;
+        DebugTextureCount = 1 + CascadeCount * 4 + FrustumCount * 2 + 2;
     }
 
     private void DisposeRenderTargets()
@@ -317,22 +373,30 @@ public class HRCGI : core.System
         FinalTexture?.Dispose();
         FinalTexture = null;
 
-        if (VraysCascade != null)
+        if (VraysRadiance != null)
         {
-            for (int i = 0; i < VraysCascade.Length; i++)
+            for (int i = 0; i < VraysRadiance.Length; i++)
             {
-                VraysCascade[i]?.Dispose();
-                MergeCascade[i]?.Dispose();
+                VraysRadiance[i]?.Dispose();
+                VraysTransmittance[i]?.Dispose();
+                MergeRadiance[i]?.Dispose();
+                MergeTransmittance[i]?.Dispose();
             }
-            VraysCascade = null;
-            MergeCascade = null;
+            VraysRadiance = null;
+            VraysTransmittance = null;
+            MergeRadiance = null;
+            MergeTransmittance = null;
         }
 
-        if (FrustumOutput != null)
+        if (FrustumRadiance != null)
         {
             for (int i = 0; i < FrustumCount; i++)
-                FrustumOutput[i]?.Dispose();
-            FrustumOutput = null;
+            {
+                FrustumRadiance[i]?.Dispose();
+                FrustumTransmittance[i]?.Dispose();
+            }
+            FrustumRadiance = null;
+            FrustumTransmittance = null;
         }
     }
 

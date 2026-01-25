@@ -1,8 +1,9 @@
 /* HRC_Extensions.fx
    Ray extension combines chained rays from cascade N-1 to form rays of cascade N.
-   Transmittance is packed in the alpha channel. */
+   Uses separate textures for radiance and transmittance (RGB each). */
 
-Texture2D PrevCascade : register(t0);  // RGB = radiance, A = transmittance
+Texture2D PrevRadiance : register(t0);     // RGB = radiance
+Texture2D PrevTransmittance : register(t1); // RGB = transmittance
 
 SamplerState SamplerPrev : register(s0);
 
@@ -31,41 +32,51 @@ PixelShaderInput MainVS(VertexShaderInput input)
     return output;
 }
 
+// MRT Output
 struct PixelShaderOutput
 {
-    float4 Radiance : SV_Target0;  // RGB = radiance, A = transmittance
+    float4 Radiance     : SV_Target0;  // RGB = radiance
+    float4 Transmittance: SV_Target1;  // RGB = transmittance
 };
 
-// Merge radiance with single-channel transmittance in alpha
-float4 MergeRadiance(float4 near, float4 far)
+// Sample both radiance and transmittance
+void GetVolume(float2 probe, float index, float interval, float lookupWidth,
+               float2 resolution, out float3 rad, out float3 trans)
 {
-    // radiance = nearR + farR * nearT
-    // transmit = nearT * farT
-    return float4(near.rgb + far.rgb * near.a, near.a * far.a);
-}
-
-float4 GetVolume(float2 probe, float index, float interval, float lookupWidth,
-                 float2 resolution, float4 defVal)
-{
-    // probe.y is in world space, scale down for half-height texture
     float2 samplePos = float2(floor(probe.x / interval) * lookupWidth, probe.y / ProbeScale) + float2(0.5, 0.0);
     samplePos = float2(samplePos.x + index, samplePos.y) / resolution;
 
     float2 floorPos = floor(samplePos);
     float weight = (floorPos.x != 0.0 || floorPos.y != 0.0) ? 1.0 : 0.0;
 
-    return lerp(PrevCascade.Sample(SamplerPrev, samplePos), defVal, weight);
+    float3 sampledRad = PrevRadiance.Sample(SamplerPrev, samplePos).rgb;
+    float3 sampledTrans = PrevTransmittance.Sample(SamplerPrev, samplePos).rgb;
+
+    rad = lerp(sampledRad, float3(0, 0, 0), weight);
+    trans = lerp(sampledTrans, float3(1, 1, 1), weight);
 }
 
-float4 ExtendRay(float2 probe, float loIndex, float hiIndex,
-                 float prevIntrv, float prevVrays)
+// Merge with RGB transmittance
+void MergeRadiance(float3 nearRad, float3 nearTrans, float3 farRad, float3 farTrans,
+                   out float3 outRad, out float3 outTrans)
+{
+    // radiance = nearR + farR * nearT
+    // transmit = nearT * farT
+    outRad = nearRad + farRad * nearTrans;
+    outTrans = nearTrans * farTrans;
+}
+
+void ExtendRay(float2 probe, float loIndex, float hiIndex,
+               float prevIntrv, float prevVrays,
+               out float3 rad, out float3 trans)
 {
     float2 merge = probe + float2(prevIntrv, -prevIntrv + (loIndex * 2.0));
 
-    float4 near = GetVolume(probe, loIndex, prevIntrv, prevVrays, PrevSize, float4(0.0, 0.0, 0.0, 1.0));
-    float4 far = GetVolume(merge, hiIndex, prevIntrv, prevVrays, PrevSize, float4(0.0, 0.0, 0.0, 1.0));
+    float3 nearRad, nearTrans, farRad, farTrans;
+    GetVolume(probe, loIndex, prevIntrv, prevVrays, PrevSize, nearRad, nearTrans);
+    GetVolume(merge, hiIndex, prevIntrv, prevVrays, PrevSize, farRad, farTrans);
 
-    return MergeRadiance(near, far);
+    MergeRadiance(nearRad, nearTrans, farRad, farTrans, rad, trans);
 }
 
 PixelShaderOutput MainPS(PixelShaderInput input)
@@ -85,10 +96,12 @@ PixelShaderOutput MainPS(PixelShaderInput input)
     float lower = floor(index * 0.5);
     float upper = ceil(index * 0.5);
 
-    float4 resultL = ExtendRay(probe, lower, upper, prevIntrv, prevVrays);
-    float4 resultU = ExtendRay(probe, upper, lower, prevIntrv, prevVrays);
+    float3 radL, transL, radU, transU;
+    ExtendRay(probe, lower, upper, prevIntrv, prevVrays, radL, transL);
+    ExtendRay(probe, upper, lower, prevIntrv, prevVrays, radU, transU);
 
-    output.Radiance = lerp(resultL, resultU, 0.5);
+    output.Radiance = float4(lerp(radL, radU, 0.5), 1.0);
+    output.Transmittance = float4(lerp(transL, transU, 0.5), 1.0);
     return output;
 }
 
@@ -99,14 +112,4 @@ technique GenerateOutputTexture
         VertexShader = compile vs_5_0 MainVS();
         PixelShader = compile ps_5_0 MainPS();
     }
-}
-
-float2 FlipX(float2 uv)
-{
-    return float2(1.0 - uv.x, uv.y);
-}
-
-float2 FlipY(float2 uv)
-{
-    return float2(uv.x, 1.0 - uv.y);
 }
