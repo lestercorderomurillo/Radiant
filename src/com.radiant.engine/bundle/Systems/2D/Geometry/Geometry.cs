@@ -9,7 +9,7 @@ namespace com.radiant.engine.bundle;
 
 public class Geometry : core.System
 {
-    public float SDFScale = 0.50f;
+    public float SDFScale = 0.25f;
     public bool EnableSDF = false;
 
     private RenderTarget2D JFATexture1;
