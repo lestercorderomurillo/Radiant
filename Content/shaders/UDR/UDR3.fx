@@ -33,7 +33,7 @@ static const float EDGE_BLEND_OUTSIDE = 0.77;        // blend strength when outs
 // Edge smooth parameters
 static const float SMOOTH_STRENGTH = 0.70;
 static const float BLUR_SIGMA = 3.00;                 // blur strength: 1.0 = subtle, 1.5 = medium, 2.0+ = strong
-static const int BLUR_RADIUS = 5;                    // kernel radius: 2 = 5x5, 3 = 7x7, 4 = 9x9
+static const int BLUR_RADIUS = 3;                    // kernel radius: 2 = 5x5, 3 = 7x7, 4 = 9x9
 
 struct VertexShaderInput
 {
@@ -82,6 +82,79 @@ float DetectSDFEdge(float2 uv)
     return SDFTexture.Sample(Sampler, uv).r;
 }
 
+// Combined edge detection - computes both blur and correction factors in one pass
+void GetBothEdgeFactors(float2 uv, out float blurFactor, out float correctionFactor, out float4 emissiveSample)
+{
+    float2 texelSize = 1.0 / OutputSize;
+    blurFactor = 0.0;
+    correctionFactor = 0.0;
+
+    emissiveSample = EmissiveTexture.Sample(Sampler, uv);
+    float sdfDist = SDFTexture.Sample(Sampler, uv).r;
+    bool onSurface = emissiveSample.a > 0.0;
+
+    if (onSurface)
+    {
+        // Non-linear sampling (denser near, sparser far) - max 32 pixels
+        static const int SAMPLE_COUNT = 10;
+        static const float SAMPLE_DISTANCES[10] = { 1.0, 2.0, 4.0, 6.0, 8.0, 12.0, 16.0, 20.0, 26.0, 32.0 };
+        static const float DIAG = 0.707;
+        float edgeDist = 33.0;  // Beyond max sample distance
+
+        [unroll]
+        for (int i = 0; i < SAMPLE_COUNT; i++)
+        {
+            float dist = SAMPLE_DISTANCES[i];
+
+            float aL = EmissiveTexture.Sample(Sampler, uv + float2(-texelSize.x * dist, 0)).a;
+            float aR = EmissiveTexture.Sample(Sampler, uv + float2( texelSize.x * dist, 0)).a;
+            float aU = EmissiveTexture.Sample(Sampler, uv + float2(0, -texelSize.y * dist)).a;
+            float aD = EmissiveTexture.Sample(Sampler, uv + float2(0,  texelSize.y * dist)).a;
+
+            float diagDist = dist * DIAG;
+            float aNW = EmissiveTexture.Sample(Sampler, uv + float2(-texelSize.x * diagDist, -texelSize.y * diagDist)).a;
+            float aNE = EmissiveTexture.Sample(Sampler, uv + float2( texelSize.x * diagDist, -texelSize.y * diagDist)).a;
+            float aSW = EmissiveTexture.Sample(Sampler, uv + float2(-texelSize.x * diagDist,  texelSize.y * diagDist)).a;
+            float aSE = EmissiveTexture.Sample(Sampler, uv + float2( texelSize.x * diagDist,  texelSize.y * diagDist)).a;
+
+            bool hitEdge = (aL < 0.5) || (aR < 0.5) || (aU < 0.5) || (aD < 0.5) ||
+                           (aNW < 0.5) || (aNE < 0.5) || (aSW < 0.5) || (aSE < 0.5);
+
+            if (hitEdge)
+            {
+                edgeDist = dist;
+                break;
+            }
+        }
+
+        // Derive both factors from the same edgeDist
+        if (edgeDist <= BLUR_INNER_MARGIN)
+        {
+            float t = 1.0 - (edgeDist / BLUR_INNER_MARGIN);
+            blurFactor = smoothstep(0.0, 1.0, t);
+        }
+        if (edgeDist <= CORRECTION_INNER_MARGIN)
+        {
+            float t = 1.0 - (edgeDist / CORRECTION_INNER_MARGIN);
+            correctionFactor = smoothstep(0.0, 1.0, t);
+        }
+    }
+    else
+    {
+        // OUTSIDE SURFACE - use SDF distance
+        float absDist = abs(sdfDist);
+        if (absDist <= BLUR_OUTER_MARGIN)
+        {
+            blurFactor = 1.0 - (absDist / BLUR_OUTER_MARGIN);
+        }
+        if (absDist <= CORRECTION_OUTER_MARGIN)
+        {
+            correctionFactor = 1.0 - (absDist / CORRECTION_OUTER_MARGIN);
+        }
+    }
+}
+
+// Single-factor version for Spatial pass (still needed there)
 float GetEdgeBlendFactorEx(float2 uv, float outerMargin, float innerMargin)
 {
     float2 texelSize = 1.0 / OutputSize;
@@ -93,9 +166,8 @@ float GetEdgeBlendFactorEx(float2 uv, float outerMargin, float innerMargin)
 
     if (onSurface)
     {
-        // Non-linear sampling (denser near, sparser far) - max 64 pixels
-        static const int SAMPLE_COUNT = 16;
-        static const float SAMPLE_DISTANCES[16] = { 1.0, 2.0, 4.0, 6.0, 8.0, 12.0, 16.0, 20.0, 26.0, 32.0, 40.0, 48.0, 56.0, 64.0, 72.0, 80.0 };
+        static const int SAMPLE_COUNT = 10;
+        static const float SAMPLE_DISTANCES[10] = { 1.0, 2.0, 4.0, 6.0, 8.0, 12.0, 16.0, 20.0, 26.0, 32.0 };
         static const float DIAG = 0.707;
         float edgeDist = innerMargin + 1.0;
 
@@ -133,7 +205,6 @@ float GetEdgeBlendFactorEx(float2 uv, float outerMargin, float innerMargin)
     }
     else
     {
-        // OUTSIDE SURFACE - use SDF distance
         float absDist = abs(sdfDist);
         if (absDist <= outerMargin)
         {
@@ -142,17 +213,6 @@ float GetEdgeBlendFactorEx(float2 uv, float outerMargin, float innerMargin)
     }
 
     return sdfEdge;
-}
-
-// Convenience wrappers
-float GetCorrectionBlendFactor(float2 uv)
-{
-    return GetEdgeBlendFactorEx(uv, CORRECTION_OUTER_MARGIN, CORRECTION_INNER_MARGIN);
-}
-
-float GetBlurBlendFactor(float2 uv)
-{
-    return GetEdgeBlendFactorEx(uv, BLUR_OUTER_MARGIN, BLUR_INNER_MARGIN);
 }
 
 static const float PI = 3.14159265359;
@@ -394,12 +454,10 @@ float4 UDR3_Temporal(PixelShaderInput input) : SV_Target0
 
     float3 current = InputTexture.Sample(Sampler, uv).rgb;
 
-    // Get both factors
-    float blurFactor = GetBlurBlendFactor(uv);
-    float correctionFactor = GetCorrectionBlendFactor(uv);
-
-    // Check if we're inside emissive surface
-    float4 emissiveSample = EmissiveTexture.Sample(Sampler, uv);
+    // Get both factors + emissive in one pass
+    float blurFactor, correctionFactor;
+    float4 emissiveSample;
+    GetBothEdgeFactors(uv, blurFactor, correctionFactor, emissiveSample);
     bool insideEmissive = emissiveSample.a > 0.0;
 
     // Not near any edge - return current directly (no temporal)
@@ -466,7 +524,7 @@ float4 UDR3_Temporal(PixelShaderInput input) : SV_Target0
     float luminance = GetLuminance(current);
     float finalBlurFactor = blurFactor * luminance;
 
-    if (finalBlurFactor > 0.001 && !insideEmissive)
+    if (finalBlurFactor > 0.01 && !insideEmissive)
     {
         float3 blur = float3(0, 0, 0);
         float totalWeight = 0.0;
@@ -525,9 +583,11 @@ float4 EdgeSmooth_PS(PixelShaderInput input) : SV_Target0
 
     float3 current = InputTexture.Sample(Sampler, uv).rgb;
 
-    // Separate factors for blur and correction
-    float blurFactor = GetBlurBlendFactor(uv);
-    float correctionFactor = GetCorrectionBlendFactor(uv);
+    // Get both factors + emissive in one pass
+    float blurFactor, correctionFactor;
+    float4 emissiveSample;
+    GetBothEdgeFactors(uv, blurFactor, correctionFactor, emissiveSample);
+    bool onSurface = emissiveSample.a > 0.0;
 
     // Not near any edge - return original
     if (blurFactor < 0.001 && correctionFactor < 0.001)
@@ -566,9 +626,7 @@ float4 EdgeSmooth_PS(PixelShaderInput input) : SV_Target0
     // Step 2: Apply emissive/SDF correction on top of blurred result
     if (correctionFactor > 0.001)
     {
-        float4 emissiveSample = EmissiveTexture.Sample(Sampler, uv);
-
-        if (emissiveSample.a > 0.0)
+        if (onSurface)
         {
             // On surface - blend with emissive color
             float3 emissiveColor = emissiveSample.rgb / emissiveSample.a;

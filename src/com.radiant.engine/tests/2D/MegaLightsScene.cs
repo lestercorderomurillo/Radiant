@@ -83,7 +83,7 @@ public class MegaLightsScene : Scene
             float hue = i / (float)LightCount;
             var color = HueToRGB(hue);
 
-            RotatingLightIds[i] = CreateLight(new Vector2(x, y), 40f, color);
+            RotatingLightIds[i] = CreateLight(new Vector2(x, y), 25f, color);
         }
     }
 
@@ -123,7 +123,7 @@ public class MegaLightsScene : Scene
         ref var circle = ref ECS.AddComponent<Circle2D>(id);
         ref var material = ref ECS.AddComponent<Material>(id);
 
-        transform.Position = new Vector3(position, 0);
+        transform.Position = new Vector3(position, id);
         transform.Rotation = Vector3.UnitX;
         circle.Radius = radius;
         material.Albedo = color;
@@ -140,7 +140,7 @@ public class MegaLightsScene : Scene
         ref var rect = ref ECS.AddComponent<Rectangle2D>(id);
         ref var material = ref ECS.AddComponent<Material>(id);
 
-        transform.Position = new Vector3(position, 0);
+        transform.Position = new Vector3(position, id);
         transform.Rotation = Vector3.UnitX;
         rect.Size = new Vector2(size);
         material.Albedo = new Color(30, 30, 30);
