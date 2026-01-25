@@ -13,10 +13,7 @@ public class ECS : IGameObject
     private readonly Stack<int> RecycledIds;
     private readonly List<System> Systems;
     private readonly Dictionary<Type, IComponentSet> ComponentSets;
-    private readonly List<int> QueryResult;
     private int NextEntityId;
-    private Vector2 ViewportCenter;
-    private Vector2 ViewportSize;
     public int EntityCount => ActiveEntities.Count;
     public Scene Scene { get; set; }
     public Renderer Renderer { get; private set; }
@@ -30,43 +27,7 @@ public class ECS : IGameObject
         RecycledIds = new Stack<int>();
         Systems = new List<System>();
         ComponentSets = new Dictionary<Type, IComponentSet>();
-        QueryResult = new List<int>();
         Spatial = new SpatialIndex(this, 64f);
-
-        var window = Renderer.Window;
-        ViewportSize = window.GetScreenSize();
-        ViewportCenter = window.GetScreenCenter();
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void SetViewport(Vector2 center, Vector2 size)
-    {
-        ViewportCenter = center;
-        ViewportSize = size;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void SetViewport(Vector2 center)
-    {
-        ViewportCenter = center;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void GetCullBounds(Vector2? viewport, float padding, out Vector3 min, out Vector3 max)
-    {
-        var center = viewport ?? ViewportCenter;
-        var halfSize = ViewportSize * 0.5f;
-
-        min = new Vector3(
-            center.X - halfSize.X - padding,
-            center.Y - halfSize.Y - padding,
-            float.MinValue
-        );
-        max = new Vector3(
-            center.X + halfSize.X + padding,
-            center.Y + halfSize.Y + padding,
-            float.MaxValue
-        );
     }
 
     public void Initialize()
@@ -254,367 +215,27 @@ public class ECS : IGameObject
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int? AtExact(float x, float y, float z) => Spatial.AtExact(x, y, z);
 
-    public List<int> Query<T1>(bool culling = false, float padding = 100f, Vector2? viewport = null)
-    where T1 : struct, Component
-    {
-        QueryResult.Clear();
-        var set1 = GetComponentSet<T1>();
-
-        if (culling)
-        {
-            GetCullBounds(viewport, padding, out var min, out var max);
-            var visible = Spatial.InBox(min, max);
-
-            for (int i = 0; i < visible.Length; i++)
-            {
-                int entityId = visible[i];
-                if (ActiveEntities.Contains(entityId) && set1.Contains(entityId))
-                    QueryResult.Add(entityId);
-            }
-        }
-        else
-        {
-            foreach (int entityId in set1.GetEntityIds())
-                if (ActiveEntities.Contains(entityId))
-                    QueryResult.Add(entityId);
-        }
-
-        return QueryResult;
-    }
-
-    public List<int> Query<T1, T2>(bool culling = false, float padding = 100f, Vector2? viewport = null)
-        where T1 : struct, Component
-        where T2 : struct, Component
-    {
-        QueryResult.Clear();
-        var set1 = GetComponentSet<T1>();
-        var set2 = GetComponentSet<T2>();
-
-        if (culling)
-        {
-            GetCullBounds(viewport, padding, out var min, out var max);
-            var visible = Spatial.InBox(min, max);
-
-            for (int i = 0; i < visible.Length; i++)
-            {
-                int entityId = visible[i];
-                if (ActiveEntities.Contains(entityId) && set1.Contains(entityId) && set2.Contains(entityId))
-                    QueryResult.Add(entityId);
-            }
-        }
-        else
-        {
-            var smallest = set1.EntityCount <= set2.EntityCount ? set1 : (IComponentSet)set2;
-
-            foreach (int entityId in smallest.GetEntityIds())
-            {
-                if (!ActiveEntities.Contains(entityId))
-                    continue;
-                if (set1.Contains(entityId) && set2.Contains(entityId))
-                    QueryResult.Add(entityId);
-            }
-        }
-
-        return QueryResult;
-    }
-
-    public List<int> Query<T1, T2, T3>(bool culling = false, float padding = 100f, Vector2? viewport = null)
-        where T1 : struct, Component
-        where T2 : struct, Component
-        where T3 : struct, Component
-    {
-        QueryResult.Clear();
-        var set1 = GetComponentSet<T1>();
-        var set2 = GetComponentSet<T2>();
-        var set3 = GetComponentSet<T3>();
-
-        if (culling)
-        {
-            GetCullBounds(viewport, padding, out var min, out var max);
-            var visible = Spatial.InBox(min, max);
-
-            for (int i = 0; i < visible.Length; i++)
-            {
-                int entityId = visible[i];
-                if (ActiveEntities.Contains(entityId) &&
-                    set1.Contains(entityId) &&
-                    set2.Contains(entityId) &&
-                    set3.Contains(entityId))
-                    QueryResult.Add(entityId);
-            }
-        }
-        else
-        {
-            IComponentSet smallest = set1;
-            if (set2.EntityCount < smallest.Count) smallest = set2;
-            if (set3.EntityCount < smallest.Count) smallest = set3;
-
-            foreach (int entityId in smallest.GetEntityIds())
-            {
-                if (!ActiveEntities.Contains(entityId))
-                    continue;
-                if (set1.Contains(entityId) && set2.Contains(entityId) && set3.Contains(entityId))
-                    QueryResult.Add(entityId);
-            }
-        }
-
-        return QueryResult;
-    }
-
-    public List<int> Query<T1, T2, T3, T4>(bool culling = false, float padding = 100f, Vector2? viewport = null)
-        where T1 : struct, Component
-        where T2 : struct, Component
-        where T3 : struct, Component
-        where T4 : struct, Component
-    {
-        QueryResult.Clear();
-        var set1 = GetComponentSet<T1>();
-        var set2 = GetComponentSet<T2>();
-        var set3 = GetComponentSet<T3>();
-        var set4 = GetComponentSet<T4>();
-
-        if (culling)
-        {
-            GetCullBounds(viewport, padding, out var min, out var max);
-            var visible = Spatial.InBox(min, max);
-
-            for (int i = 0; i < visible.Length; i++)
-            {
-                int entityId = visible[i];
-                if (ActiveEntities.Contains(entityId) &&
-                    set1.Contains(entityId) &&
-                    set2.Contains(entityId) &&
-                    set3.Contains(entityId) &&
-                    set4.Contains(entityId))
-                    QueryResult.Add(entityId);
-            }
-        }
-        else
-        {
-            IComponentSet smallest = set1;
-            if (set2.EntityCount < smallest.Count) smallest = set2;
-            if (set3.EntityCount < smallest.Count) smallest = set3;
-            if (set4.EntityCount < smallest.Count) smallest = set4;
-
-            foreach (int entityId in smallest.GetEntityIds())
-            {
-                if (!ActiveEntities.Contains(entityId))
-                    continue;
-                if (set1.Contains(entityId) &&
-                    set2.Contains(entityId) &&
-                    set3.Contains(entityId) &&
-                    set4.Contains(entityId))
-                    QueryResult.Add(entityId);
-            }
-        }
-
-        return QueryResult;
-    }
-    /// <summary>Action delegate for single-component ForEach iteration.</summary>
-    public delegate void ForEachAction<T1>(int entity, ref T1 c1) where T1 : struct;
-    /// <summary>Action delegate for two-component ForEach iteration.</summary>
-    public delegate void ForEachAction<T1, T2>(int entity, ref T1 c1, ref T2 c2) where T1 : struct where T2 : struct;
-    /// <summary>Action delegate for three-component ForEach iteration.</summary>
-    public delegate void ForEachAction<T1, T2, T3>(int entity, ref T1 c1, ref T2 c2, ref T3 c3) where T1 : struct where T2 : struct where T3 : struct;
-    /// <summary>Action delegate for four-component ForEach iteration.</summary>
-    public delegate void ForEachAction<T1, T2, T3, T4>(int entity, ref T1 c1, ref T2 c2, ref T3 c3, ref T4 c4) where T1 : struct where T2 : struct where T3 : struct where T4 : struct;
-
-    /// <summary>Parallel action delegate with thread index for ordered collection.</summary>
-    public delegate void ForEachParallelAction<T1>(int threadIdx, int entity, ref T1 c1) where T1 : struct;
-    public delegate void ForEachParallelAction<T1, T2>(int threadIdx, int entity, ref T1 c1, ref T2 c2) where T1 : struct where T2 : struct;
-    public delegate void ForEachParallelAction<T1, T2, T3>(int threadIdx, int entity, ref T1 c1, ref T2 c2, ref T3 c3) where T1 : struct where T2 : struct where T3 : struct;
-    public delegate void ForEachParallelAction<T1, T2, T3, T4>(int threadIdx, int entity, ref T1 c1, ref T2 c2, ref T3 c3, ref T4 c4) where T1 : struct where T2 : struct where T3 : struct where T4 : struct;
-
-    /// <summary>Creates a view for iterating entities with three components. Supports early exit via foreach.</summary>
+    /// <summary>Returns all active entity IDs that have the specified component. For sequential iteration.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public View<T1, T2, T3> View<T1, T2, T3>()
-        where T1 : struct, Component
-        where T2 : struct, Component
-        where T3 : struct, Component
+    public IEnumerable<int> GetEntities<T>() where T : struct, Component
     {
-        return new View<T1, T2, T3>(
-            GetComponentSet<T1>(),
-            GetComponentSet<T2>(),
-            GetComponentSet<T3>(),
-            ActiveEntities);
+        var set = GetComponentSet<T>();
+        foreach (int entity in set.GetEntityIds())
+            if (ActiveEntities.Contains(entity))
+                yield return entity;
     }
 
-    /// <summary>Creates a view for iterating entities with two components. Supports early exit via foreach.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public View<T1, T2> View<T1, T2>()
-        where T1 : struct, Component
-        where T2 : struct, Component
-    {
-        return new View<T1, T2>(
-            GetComponentSet<T1>(),
-            GetComponentSet<T2>(),
-            ActiveEntities);
-    }
+    /// <summary>Action delegate for parallel ForEach iteration with thread index for ordered collection.</summary>
+    public delegate void ForEachAction<T1>(int threadIdx, int entity, ref T1 c1) where T1 : struct;
+    public delegate void ForEachAction<T1, T2>(int threadIdx, int entity, ref T1 c1, ref T2 c2) where T1 : struct where T2 : struct;
+    public delegate void ForEachAction<T1, T2, T3>(int threadIdx, int entity, ref T1 c1, ref T2 c2, ref T3 c3) where T1 : struct where T2 : struct where T3 : struct;
+    public delegate void ForEachAction<T1, T2, T3, T4>(int threadIdx, int entity, ref T1 c1, ref T2 c2, ref T3 c3, ref T4 c4) where T1 : struct where T2 : struct where T3 : struct where T4 : struct;
 
-    /// <summary>Iterates all active entities with the specified component, providing direct ref access.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void ForEach<T1>(ForEachAction<T1> action)
-        where T1 : struct, Component
-    {
-        var set1 = GetComponentSet<T1>();
-        int count = set1.EntityCount;
-
-        for (int i = 0; i < count; i++)
-        {
-            int entity = set1.GetEntityAt(i);
-            if (!ActiveEntities.Contains(entity)) continue;
-            action(entity, ref set1.GetComponentAt(i));
-        }
-    }
-
-    /// <summary>Iterates all active entities with two components, providing direct ref access.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void ForEach<T1, T2>(ForEachAction<T1, T2> action)
-        where T1 : struct, Component
-        where T2 : struct, Component
-    {
-        var set1 = GetComponentSet<T1>();
-        var set2 = GetComponentSet<T2>();
-
-        // Iterate smallest set
-        if (set1.EntityCount <= set2.EntityCount)
-        {
-            int count = set1.EntityCount;
-            for (int i = 0; i < count; i++)
-            {
-                int entity = set1.GetEntityAt(i);
-                if (!ActiveEntities.Contains(entity)) continue;
-                int idx2 = set2.GetDenseIndex(entity);
-                if (idx2 < 0) continue;
-                action(entity, ref set1.GetComponentAt(i), ref set2.GetComponentAt(idx2));
-            }
-        }
-        else
-        {
-            int count = set2.EntityCount;
-            for (int i = 0; i < count; i++)
-            {
-                int entity = set2.GetEntityAt(i);
-                if (!ActiveEntities.Contains(entity)) continue;
-                int idx1 = set1.GetDenseIndex(entity);
-                if (idx1 < 0) continue;
-                action(entity, ref set1.GetComponentAt(idx1), ref set2.GetComponentAt(i));
-            }
-        }
-    }
-
-    /// <summary>Iterates all active entities with three components, providing direct ref access.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void ForEach<T1, T2, T3>(ForEachAction<T1, T2, T3> action)
-        where T1 : struct, Component
-        where T2 : struct, Component
-        where T3 : struct, Component
-    {
-        var set1 = GetComponentSet<T1>();
-        var set2 = GetComponentSet<T2>();
-        var set3 = GetComponentSet<T3>();
-
-        int smallestIdx = 1;
-        int smallestCount = set1.EntityCount;
-        if (set2.EntityCount < smallestCount) { smallestCount = set2.EntityCount; smallestIdx = 2; }
-        if (set3.EntityCount < smallestCount) { smallestCount = set3.EntityCount; smallestIdx = 3; }
-
-        for (int i = 0; i < smallestCount; i++)
-        {
-            int entity;
-            int idx1, idx2, idx3;
-
-            if (smallestIdx == 1)
-            {
-                entity = set1.GetEntityAt(i);
-                idx1 = i;
-                idx2 = set2.GetDenseIndex(entity); if (idx2 < 0) continue;
-                idx3 = set3.GetDenseIndex(entity); if (idx3 < 0) continue;
-            }
-            else if (smallestIdx == 2)
-            {
-                entity = set2.GetEntityAt(i);
-                idx2 = i;
-                idx1 = set1.GetDenseIndex(entity); if (idx1 < 0) continue;
-                idx3 = set3.GetDenseIndex(entity); if (idx3 < 0) continue;
-            }
-            else
-            {
-                entity = set3.GetEntityAt(i);
-                idx3 = i;
-                idx1 = set1.GetDenseIndex(entity); if (idx1 < 0) continue;
-                idx2 = set2.GetDenseIndex(entity); if (idx2 < 0) continue;
-            }
-
-            if (!ActiveEntities.Contains(entity)) continue;
-            action(entity, ref set1.GetComponentAt(idx1), ref set2.GetComponentAt(idx2), ref set3.GetComponentAt(idx3));
-        }
-    }
-
-    /// <summary>Iterates all active entities with four components, providing direct ref access.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void ForEach<T1, T2, T3, T4>(ForEachAction<T1, T2, T3, T4> action)
-        where T1 : struct, Component
-        where T2 : struct, Component
-        where T3 : struct, Component
-        where T4 : struct, Component
-    {
-        var set1 = GetComponentSet<T1>();
-        var set2 = GetComponentSet<T2>();
-        var set3 = GetComponentSet<T3>();
-        var set4 = GetComponentSet<T4>();
-
-        // Find smallest set index
-        int smallestIdx = 1;
-        int smallestCount = set1.EntityCount;
-        if (set2.EntityCount < smallestCount) { smallestCount = set2.EntityCount; smallestIdx = 2; }
-        if (set3.EntityCount < smallestCount) { smallestCount = set3.EntityCount; smallestIdx = 3; }
-        if (set4.EntityCount < smallestCount) { smallestCount = set4.EntityCount; smallestIdx = 4; }
-
-        for (int i = 0; i < smallestCount; i++)
-        {
-            int entity;
-            int idx1, idx2, idx3, idx4;
-
-            switch (smallestIdx)
-            {
-                case 1:
-                    entity = set1.GetEntityAt(i);
-                    idx1 = i;
-                    idx2 = set2.GetDenseIndex(entity); if (idx2 < 0) continue;
-                    idx3 = set3.GetDenseIndex(entity); if (idx3 < 0) continue;
-                    idx4 = set4.GetDenseIndex(entity); if (idx4 < 0) continue;
-                    break;
-                case 2:
-                    entity = set2.GetEntityAt(i);
-                    idx2 = i;
-                    idx1 = set1.GetDenseIndex(entity); if (idx1 < 0) continue;
-                    idx3 = set3.GetDenseIndex(entity); if (idx3 < 0) continue;
-                    idx4 = set4.GetDenseIndex(entity); if (idx4 < 0) continue;
-                    break;
-                case 3:
-                    entity = set3.GetEntityAt(i);
-                    idx3 = i;
-                    idx1 = set1.GetDenseIndex(entity); if (idx1 < 0) continue;
-                    idx2 = set2.GetDenseIndex(entity); if (idx2 < 0) continue;
-                    idx4 = set4.GetDenseIndex(entity); if (idx4 < 0) continue;
-                    break;
-                default:
-                    entity = set4.GetEntityAt(i);
-                    idx4 = i;
-                    idx1 = set1.GetDenseIndex(entity); if (idx1 < 0) continue;
-                    idx2 = set2.GetDenseIndex(entity); if (idx2 < 0) continue;
-                    idx3 = set3.GetDenseIndex(entity); if (idx3 < 0) continue;
-                    break;
-            }
-
-            if (!ActiveEntities.Contains(entity)) continue;
-            action(entity, ref set1.GetComponentAt(idx1), ref set2.GetComponentAt(idx2), ref set3.GetComponentAt(idx3), ref set4.GetComponentAt(idx4));
-        }
-    }
+    /// <summary>Returns the number of threads used for parallel iteration.</summary>
+    public static int ThreadCount => Environment.ProcessorCount;
 
     /// <summary>Parallel ForEach - divides entities across threads by range. Thread 0: 0-N, Thread 1: N-M, etc.</summary>
-    public void ForEachParallel<T1>(ForEachParallelAction<T1> action)
+    public void ForEach<T1>(ForEachAction<T1> action)
         where T1 : struct, Component
     {
         var set1 = GetComponentSet<T1>();
@@ -639,7 +260,7 @@ public class ECS : IGameObject
     }
 
     /// <summary>Parallel ForEach for two components.</summary>
-    public void ForEachParallel<T1, T2>(ForEachParallelAction<T1, T2> action)
+    public void ForEach<T1, T2>(ForEachAction<T1, T2> action)
         where T1 : struct, Component
         where T2 : struct, Component
     {
@@ -684,7 +305,7 @@ public class ECS : IGameObject
     }
 
     /// <summary>Parallel ForEach for three components.</summary>
-    public void ForEachParallel<T1, T2, T3>(ForEachParallelAction<T1, T2, T3> action)
+    public void ForEach<T1, T2, T3>(ForEachAction<T1, T2, T3> action)
         where T1 : struct, Component
         where T2 : struct, Component
         where T3 : struct, Component
@@ -741,7 +362,7 @@ public class ECS : IGameObject
     }
 
     /// <summary>Parallel ForEach for four components.</summary>
-    public void ForEachParallel<T1, T2, T3, T4>(ForEachParallelAction<T1, T2, T3, T4> action)
+    public void ForEach<T1, T2, T3, T4>(ForEachAction<T1, T2, T3, T4> action)
         where T1 : struct, Component
         where T2 : struct, Component
         where T3 : struct, Component
@@ -817,8 +438,6 @@ public class ECS : IGameObject
         {
             Renderer.Window.ClearResizePending();
             Renderer.UpdateScreenInfo();
-            ViewportSize = Renderer.Window.GetScreenSize();
-            ViewportCenter = Renderer.Window.GetScreenCenter();
 
             for (int i = 0; i < Systems.Count; i++)
                 if (Systems[i].Enabled)

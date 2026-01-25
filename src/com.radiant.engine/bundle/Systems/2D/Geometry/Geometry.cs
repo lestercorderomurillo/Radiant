@@ -187,7 +187,7 @@ public class Geometry : core.System
             EmissiveShapesByThread[i].Clear();
 
         // Parallel visibility filter for rectangles
-        Scene.ECS.ForEachParallel<Transform, Rectangle2D, Material>((int threadIdx, int entity, ref Transform transform, ref Rectangle2D rect, ref Material mat) =>
+        Scene.ECS.ForEach<Transform, Rectangle2D, Material>((int threadIdx, int entity, ref Transform transform, ref Rectangle2D rect, ref Material mat) =>
         {
             if (mat.Emissive.A == 0) return;
 
@@ -201,7 +201,7 @@ public class Geometry : core.System
         });
 
         // Parallel visibility filter for circles
-        Scene.ECS.ForEachParallel<Transform, Circle2D, Material>((int threadIdx, int entity, ref Transform transform, ref Circle2D circle, ref Material mat) =>
+        Scene.ECS.ForEach<Transform, Circle2D, Material>((int threadIdx, int entity, ref Transform transform, ref Circle2D circle, ref Material mat) =>
         {
             if (mat.Emissive.A == 0) return;
 
@@ -241,7 +241,7 @@ public class Geometry : core.System
             AbsorptionShapesByThread[i].Clear();
 
         // Parallel visibility filter for rectangles
-        Scene.ECS.ForEachParallel<Transform, Rectangle2D, Material>((int threadIdx, int entity, ref Transform transform, ref Rectangle2D rect, ref Material mat) =>
+        Scene.ECS.ForEach<Transform, Rectangle2D, Material>((int threadIdx, int entity, ref Transform transform, ref Rectangle2D rect, ref Material mat) =>
         {
             if (mat.Albedo.A == 0) return;
 
@@ -255,7 +255,7 @@ public class Geometry : core.System
         });
 
         // Parallel visibility filter for circles
-        Scene.ECS.ForEachParallel<Transform, Circle2D, Material>((int threadIdx, int entity, ref Transform transform, ref Circle2D circle, ref Material mat) =>
+        Scene.ECS.ForEach<Transform, Circle2D, Material>((int threadIdx, int entity, ref Transform transform, ref Circle2D circle, ref Material mat) =>
         {
             if (mat.Albedo.A == 0) return;
 
