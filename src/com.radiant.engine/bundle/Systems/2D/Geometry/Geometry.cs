@@ -34,8 +34,10 @@ public class Geometry : core.System
     private int EmissiveCount;
     private int AbsorptionCount;
 
-    // Motion vector tracking
-    private Dictionary<int, Vector3> PrevPositions = new();
+    // Motion vector tracking with N-frame history
+    public int MotionHistoryFrames = 2;  // Configurable: average velocity over N frames
+    private ConcurrentDictionary<int, Queue<Vector3>> PositionHistory = new();
+    
     private List<(Vector2 pos, Vector2 size, Vector2 velocity, bool isCircle, float radius)>[] MotionShapesByThread;
 
     private enum DebugMode { None, Emissive, Absorption, SDF, JFADirection, JFARaw, MotionVectors }
@@ -372,62 +374,92 @@ public class Geometry : core.System
         Renderer.Configure(BlendState.AlphaBlend).FlushShapes(AbsorptionTexture, Color.Transparent);
     }
 
+    private Vector2 CalculateVelocityFromHistory(int entity, Vector3 currentPos)
+    {
+        if (!PositionHistory.TryGetValue(entity, out var history) || history.Count == 0)
+            return Vector2.Zero;
+
+        // Get oldest position in history
+        var oldestPos = history.Peek();
+        int frameCount = history.Count;
+
+        // Calculate total displacement and divide by frame count for per-frame velocity
+        float dx = currentPos.X - oldestPos.X;
+        float dy = currentPos.Y - oldestPos.Y;
+
+        return new Vector2(dx / frameCount, dy / frameCount);
+    }
+
+    private void UpdatePositionHistory(int entity, Vector3 currentPos)
+    {
+        if (!PositionHistory.TryGetValue(entity, out var history))
+        {
+            history = new Queue<Vector3>();
+            PositionHistory[entity] = history;
+        }
+
+        history.Enqueue(currentPos);
+
+        // Keep only N frames of history
+        while (history.Count > MotionHistoryFrames)
+            history.Dequeue();
+    }
+
     private void RenderMotionVectorTexture()
     {
         // Clear thread-local lists
         for (int i = 0; i < ThreadCount; i++)
             MotionShapesByThread[i].Clear();
 
-        var nextPositions = new ConcurrentDictionary<int, Vector3>();
+        var activeEntities = new ConcurrentDictionary<int, bool>();
 
         // Collect motion for rectangles
         Scene.ECS.ForEach<Transform, Rectangle2D, Material>((int threadIdx, int entity, ref Transform transform, ref Rectangle2D rect, ref Material mat) =>
         {
             Vector2 position = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
+            activeEntities[entity] = true;
 
-            // Store current position for next frame
-            nextPositions[entity] = transform.Position;
-
-            // Calculate velocity from previous position
-            Vector2 velocity = Vector2.Zero;
-            if (PrevPositions.TryGetValue(entity, out var prevPos))
-            {
-                velocity = new Vector2(transform.Position.X - prevPos.X, transform.Position.Y - prevPos.Y);
-            }
+            // Calculate velocity from position history
+            Vector2 velocity = CalculateVelocityFromHistory(entity, transform.Position);
 
             // Only add if there's motion
             if (velocity.LengthSquared() > 0.01f)
             {
                 MotionShapesByThread[threadIdx].Add((position, rect.Size, velocity, false, 0));
             }
+
+            // Update history (must be done after velocity calculation)
+            UpdatePositionHistory(entity, transform.Position);
         });
 
         // Collect motion for circles
         Scene.ECS.ForEach<Transform, Circle2D, Material>((int threadIdx, int entity, ref Transform transform, ref Circle2D circle, ref Material mat) =>
         {
             Vector2 center = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
+            activeEntities[entity] = true;
 
-            // Store current position for next frame
-            nextPositions[entity] = transform.Position;
-
-            // Calculate velocity from previous position
-            Vector2 velocity = Vector2.Zero;
-            if (PrevPositions.TryGetValue(entity, out var prevPos))
-            {
-                velocity = new Vector2(transform.Position.X - prevPos.X, transform.Position.Y - prevPos.Y);
-            }
+            // Calculate velocity from position history
+            Vector2 velocity = CalculateVelocityFromHistory(entity, transform.Position);
 
             // Only add if there's motion
             if (velocity.LengthSquared() > 0.01f)
             {
                 MotionShapesByThread[threadIdx].Add((center, Vector2.Zero, velocity, true, circle.Radius));
             }
+
+            // Update history (must be done after velocity calculation)
+            UpdatePositionHistory(entity, transform.Position);
         });
 
-        // Update previous positions for next frame
-        PrevPositions.Clear();
-        foreach (var kvp in nextPositions)
-            PrevPositions[kvp.Key] = kvp.Value;
+        // Clean up history for entities that no longer exist
+        var toRemove = new List<int>();
+        foreach (var kvp in PositionHistory)
+        {
+            if (!activeEntities.ContainsKey(kvp.Key))
+                toRemove.Add(kvp.Key);
+        }
+        foreach (var key in toRemove)
+            PositionHistory.TryRemove(key, out _);
 
         // Render motion vectors
         Renderer.ClearShapes();
@@ -449,7 +481,11 @@ public class Geometry : core.System
             }
         }
 
-        Renderer.Configure(BlendState.Opaque).FlushShapes(MotionVectorTexture, new Color(0.5f, 0.5f, 0f, 0f));
+        // Clear with Color(0.5f) which produces byte 127 -> 127/255 when read
+        // Shader decodes with 127/255, so they match perfectly
+        // Use "Sharp" technique to avoid edge fading which corrupts motion encoding
+        var motionClear = new Color(0.5f, 0.5f, 0f, 1f);
+        Renderer.Configure(BlendState.Opaque).FlushShapes(MotionVectorTexture, motionClear, "Sharp");
     }
 
     private void DrawShapesMerged(List<ShapeData>[] shapesByThread)

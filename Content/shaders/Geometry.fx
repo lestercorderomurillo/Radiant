@@ -387,85 +387,93 @@ float2 RotatePoint(float2 p, float angle)
     return float2(p.x * c - p.y * s, p.x * s + p.y * c);
 }
 
-// Debug motion vectors: arrows showing direction and magnitude
-float4 DebugMotionVectorsPS(PixelShaderInput input) : COLOR
+// Sample motion and return velocity with highest speed from 4 neighborhood samples
+float2 SampleStrongestMotion(float2 center, float2 bounds)
 {
-    // Grid cell size in pixels
-    static const float CELL_SIZE = 64.0;
+    static const float SAMPLE_OFFSET = 6.0;  // Offset from center for 4 samples
 
-    float2 pixelPos = input.UV * WorldsBounds;
+    float2 offsets[4] = {
+        float2(-SAMPLE_OFFSET, -SAMPLE_OFFSET),
+        float2( SAMPLE_OFFSET, -SAMPLE_OFFSET),
+        float2(-SAMPLE_OFFSET,  SAMPLE_OFFSET),
+        float2( SAMPLE_OFFSET,  SAMPLE_OFFSET)
+    };
 
-    // Find grid cell center
-    float2 cellIndex = floor(pixelPos / CELL_SIZE);
-    float2 cellCenter = (cellIndex + 0.5) * CELL_SIZE;
-    float2 cellUV = cellCenter / WorldsBounds;
+    float2 bestVelocity = float2(0, 0);
+    float bestSpeed = 0;
 
-    // Sample motion at cell center - use multiple samples to avoid edge issues
-    float2 texelSize = 1.0 / WorldsBounds;
-    float2 motionEncoded = float2(0, 0);
-    float validSamples = 0;
+    // 127/255 - Color(0.5f) truncates to byte 127, not 128
+    static const float BYTE_CENTER = 127.0 / 255.0;
 
-    // Sample 3x3 around cell center, only count non-zero motion
-    for (int y = -1; y <= 1; y++)
+    [unroll]
+    for (int i = 0; i < 4; i++)
     {
-        for (int x = -1; x <= 1; x++)
+        int2 texel = int2(center + offsets[i]);
+        texel = clamp(texel, int2(0, 0), int2(bounds) - 1);
+        float2 motion = MotionVectorTexture.Load(int3(texel, 0)).rg;
+        float2 vel = (motion - BYTE_CENTER) * 200.0;
+        float spd = length(vel);
+
+        if (spd > bestSpeed)
         {
-            float2 sampleUV = cellUV + float2(x, y) * texelSize * 8.0;
-            float2 sample = MotionVectorTexture.Sample(SceneColorSampler, sampleUV).rg;
-            float2 vel = (sample - 0.5) * 200.0;
-            float spd = length(vel);
-            if (spd > 0.5)
-            {
-                motionEncoded += sample;
-                validSamples += 1.0;
-            }
+            bestSpeed = spd;
+            bestVelocity = vel;
         }
     }
 
-    // Average valid samples
-    if (validSamples > 0)
-        motionEncoded /= validSamples;
-    else
-        motionEncoded = float2(0.5, 0.5);
+    return bestVelocity;
+}
 
-    float2 velocity = (motionEncoded - 0.5) * 200.0;
-    float speed = length(velocity);
+// Debug motion vectors: arrows showing direction and magnitude
+float4 DebugMotionVectorsPS(PixelShaderInput input) : COLOR
+{
+    static const float CELL_SIZE = 32.0;
+    static const float GRID_WIDTH = 1.0;
 
-    // Background: dark gray
-    float3 bgColor = float3(0.08, 0.08, 0.08);
-
-    // No motion = just background
-    if (speed < 0.5)
-        return float4(bgColor, 1.0);
-
-    // Position relative to cell center
+    float2 pixelPos = input.UV * WorldsBounds;
+    float2 cellIndex = floor(pixelPos / CELL_SIZE);
+    float2 cellCenter = (cellIndex + 0.5) * CELL_SIZE;
     float2 localPos = pixelPos - cellCenter;
 
-    // Arrow direction and length
+    float3 bgColor = float3(0.02, 0.02, 0.02);
+    float3 gridColor = float3(0.08, 0.08, 0.08);
+
+    // Draw grid lines
+    float2 cellPos = fmod(pixelPos, CELL_SIZE);
+    bool onGrid = cellPos.x < GRID_WIDTH || cellPos.y < GRID_WIDTH;
+
+    // Sample strongest motion from 4 neighborhood points
+    float2 velocity = SampleStrongestMotion(cellCenter, WorldsBounds);
+    float speed = length(velocity);
+
+    // No motion: draw small white dot in center
+    if (speed < 0.1)
+    {
+        float dotDist = length(localPos);
+        if (dotDist < 2.0)
+            return float4(0.4, 0.4, 0.4, 1.0);  // White dot
+        return float4(onGrid ? gridColor : bgColor, 1.0);
+    }
+
+    // Arrow direction (screen coords, Y+ is down)
     float angle = atan2(velocity.y, velocity.x);
-    float arrowLength = min(speed * 2.0, CELL_SIZE * 0.7);  // Scale with speed, max 70% of cell
-    float headSize = arrowLength * 0.35;
+    // Bigger arrows: increased multiplier
+    float arrowLength = min(sqrt(speed) * 10.0, CELL_SIZE * 0.85);
+    float headSize = arrowLength * 0.45;
 
-    // Rotate local position to arrow space (arrow points +X)
     float2 rotatedPos = RotatePoint(localPos, -angle);
+    rotatedPos.x += arrowLength * 0.35;
 
-    // Offset so arrow is centered
-    rotatedPos.x += arrowLength * 0.4;
-
-    // Get distance to arrow
     float dist = ArrowSDF(rotatedPos, arrowLength, headSize);
 
-    // Arrow color based on direction
     float3 arrowColor = AngleToColor(angle + PI);
-
-    // Brightness based on speed
-    float brightness = 0.6 + saturate(speed / 20.0) * 0.4;
+    float brightness = 0.7 + saturate(speed / 10.0) * 0.3;
     arrowColor *= brightness;
 
-    // Anti-aliased edge
-    float alpha = 1.0 - smoothstep(-1.5, 1.5, dist);
+    float alpha = 1.0 - smoothstep(-1.0, 1.0, dist);
 
-    return float4(lerp(bgColor, arrowColor, alpha), 1.0);
+    float3 baseColor = onGrid ? gridColor : bgColor;
+    return float4(lerp(baseColor, arrowColor, alpha), 1.0);
 }
 
 technique InitializeJFA
@@ -546,5 +554,23 @@ technique DebugMotionVectors
     {
         VertexShader = compile vs_4_0 MainVS();
         PixelShader = compile ps_4_0 DebugMotionVectorsPS();
+    }
+}
+
+// Clear motion vector texture to 127/255 (matches Color byte precision)
+// Color(0.5f) truncates: 0.5*255=127.5 -> byte 127, not 128
+static const float MV_CENTER = 127.0 / 255.0;
+
+float4 ClearMotionPS(PixelShaderInput input) : COLOR
+{
+    return float4(MV_CENTER, MV_CENTER, 0.0, 1.0);
+}
+
+technique ClearMotion
+{
+    pass P0
+    {
+        VertexShader = compile vs_4_0 MainVS();
+        PixelShader = compile ps_4_0 ClearMotionPS();
     }
 }

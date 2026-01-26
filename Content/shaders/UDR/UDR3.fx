@@ -114,9 +114,11 @@ float4 Temporal_PS(PixelShaderInput input) : SV_Target0
 
     float3 current = InputTexture.Sample(Sampler, uv).rgb;
 
-    // Read motion vector (encoded as 0.5 = no motion, 0 = -100px, 1 = +100px)
+    // Read motion vector (encoded as 127/255 = no motion, 0 = -100px, 1 = +100px)
+    // Color(0.5f) truncates: 0.5*255=127.5 -> byte 127, not 128
+    static const float MV_CENTER = 127.0 / 255.0;
     float2 motionEncoded = MotionVectorTexture.Sample(Sampler, uv).rg;
-    float2 velocity = (motionEncoded - 0.5) * 200.0;  // Decode to pixels
+    float2 velocity = (motionEncoded - MV_CENTER) * 200.0;  // Decode to pixels
 
     // Calculate velocity magnitude (pixels per frame)
     float speed = length(velocity);
