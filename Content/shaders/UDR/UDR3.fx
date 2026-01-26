@@ -107,46 +107,26 @@ float4 Spatial_PS(PixelShaderInput input) : SV_Target0
     return color;
 }
 
-// Temporal pass - motion vector based accumulation
+// Temporal pass - color difference based accumulation
 float4 Temporal_PS(PixelShaderInput input) : SV_Target0
 {
     float2 uv = input.UV;
 
     float3 current = InputTexture.Sample(Sampler, uv).rgb;
+    float3 history = LastFrame.Sample(Sampler, uv).rgb;
 
-    // Read motion vector (encoded as 127/255 = no motion, 0 = -100px, 1 = +100px)
-    // Color(0.5f) truncates: 0.5*255=127.5 -> byte 127, not 128
-    static const float MV_CENTER = 127.0 / 255.0;
-    float2 motionEncoded = MotionVectorTexture.Sample(Sampler, uv).rg;
-    float2 velocity = (motionEncoded - MV_CENTER) * 200.0;  // Decode to pixels
-
-    // Calculate velocity magnitude (pixels per frame)
-    float speed = length(velocity);
-
-    // Reproject: sample history from where this pixel came from
-    float2 historyUV = uv - velocity / OutputSize;
-    float3 history = LastFrame.Sample(Sampler, historyUV).rgb;
-
-    // Velocity-based blend weight:
-    // speed 0 = static, accumulate normally (low CurrentWeight like 0.08)
-    // speed > threshold = fast motion, use current frame more
-    static const float SPEED_THRESHOLD = 0.5;   // Start rejecting at 0.5 pixels/frame
-    static const float SPEED_SCALE = 2.0;       // How fast to ramp to full rejection
-
-    float motionFactor = saturate((speed - SPEED_THRESHOLD) * SPEED_SCALE);
-
-    // Also add color difference as fallback (catches shadows, lighting changes)
+    // Color difference for history validity
     float3 diff = abs(current - history);
     float colorDiff = max(diff.r, max(diff.g, diff.b));
-    float colorMotion = saturate((colorDiff - 0.02) * 10.0);
 
-    motionFactor = max(motionFactor, colorMotion);
+    static const float DIFF_SCALE = 2.0;
+    float historyValidity = 1.0 / (1.0 + colorDiff * DIFF_SCALE);
 
-    // Static: use normal temporal weight (accumulate)
-    // Moving: use mostly current frame (reject history)
-    float blendWeight = lerp(CurrentWeight, 1.0, motionFactor);
+    // Running average: new_avg = old_avg * (1 - 1/N) + current * (1/N)
+    float historyWeight = (1.0 - CurrentWeight) * historyValidity;
+    float currentWeight = 1.0 - historyWeight;
 
-    float3 result = lerp(history, current, blendWeight);
+    float3 result = history * historyWeight + current * currentWeight;
 
     return float4(result, 1.0);
 }

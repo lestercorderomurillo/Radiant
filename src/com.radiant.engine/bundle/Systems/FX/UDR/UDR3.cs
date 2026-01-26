@@ -9,7 +9,7 @@ namespace com.radiant.engine.bundle;
 public class UDR3 : core.System
 {
     // Temporal parameters
-    public int FramesToAccumulate = 12;
+    public int FramesToAccumulate = 6;
 
     private RenderTarget2D SpatialTexture;
     private RenderTarget2D TemporalTexture;
