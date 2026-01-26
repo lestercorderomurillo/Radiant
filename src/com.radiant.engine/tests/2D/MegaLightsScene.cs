@@ -24,6 +24,10 @@ public class MegaLightsScene : Scene
     private const float PaintSpacing = 3f; // Spacing between painted lights (half radius for overlap)
     private Vector2 LastPaintPos;
     private bool HasLastPaintPos = false;
+    private Vector2 LastRightPaintPos;
+    private bool HasLastRightPaintPos = false;
+    private Vector2 LastMiddlePaintPos;
+    private bool HasLastMiddlePaintPos = false;
     private bool IsAnimating = true;
 
     private HRCGI HRCGISystem;
@@ -264,9 +268,75 @@ public class MegaLightsScene : Scene
                 HasLastPaintPos = false;
             }
 
-            // Right click: spawn occluder
-            if (mouse.RightButton == ButtonState.Pressed && PrevMouse.RightButton == ButtonState.Released)
-                CreateOccluder(new Vector2(mouse.X, mouse.Y), 40f);
+            // Right click + moving: spawn black dots continuously
+            if (mouse.RightButton == ButtonState.Pressed)
+            {
+                if (!HasLastRightPaintPos)
+                {
+                    // First paint point
+                    PaintBlackDotAt(mousePos);
+                    LastRightPaintPos = mousePos;
+                    HasLastRightPaintPos = true;
+                }
+                else
+                {
+                    // Interpolate between last position and current to fill gaps
+                    float distance = Vector2.Distance(LastRightPaintPos, mousePos);
+                    if (distance >= PaintSpacing)
+                    {
+                        Vector2 direction = Vector2.Normalize(mousePos - LastRightPaintPos);
+                        float traveled = PaintSpacing;
+
+                        while (traveled <= distance)
+                        {
+                            Vector2 paintPos = LastRightPaintPos + direction * traveled;
+                            PaintBlackDotAt(paintPos);
+                            traveled += PaintSpacing;
+                        }
+
+                        LastRightPaintPos = mousePos;
+                    }
+                }
+            }
+            else
+            {
+                HasLastRightPaintPos = false;
+            }
+
+            // Middle click + moving: spawn white half-opaque dots continuously
+            if (mouse.MiddleButton == ButtonState.Pressed)
+            {
+                if (!HasLastMiddlePaintPos)
+                {
+                    // First paint point
+                    PaintWhiteDotAt(mousePos);
+                    LastMiddlePaintPos = mousePos;
+                    HasLastMiddlePaintPos = true;
+                }
+                else
+                {
+                    // Interpolate between last position and current to fill gaps
+                    float distance = Vector2.Distance(LastMiddlePaintPos, mousePos);
+                    if (distance >= PaintSpacing)
+                    {
+                        Vector2 direction = Vector2.Normalize(mousePos - LastMiddlePaintPos);
+                        float traveled = PaintSpacing;
+
+                        while (traveled <= distance)
+                        {
+                            Vector2 paintPos = LastMiddlePaintPos + direction * traveled;
+                            PaintWhiteDotAt(paintPos);
+                            traveled += PaintSpacing;
+                        }
+
+                        LastMiddlePaintPos = mousePos;
+                    }
+                }
+            }
+            else
+            {
+                HasLastMiddlePaintPos = false;
+            }
         }
 
         // F11 to toggle UDR mode
@@ -282,7 +352,7 @@ public class MegaLightsScene : Scene
 
         Gizmos.Set("Scene", $"GI: {(UseHRCGI ? "HRCGI" : "RCGI")} [Tab] | Animation: {(IsAnimating ? "On" : "Off")} [Space]");
         Gizmos.Set("Scene", $"Upscaler: {GetUDRName()} [F11]");
-        Gizmos.Set("Scene", "Left Click: Add Light | Right Click: Add Occluder");
+        Gizmos.Set("Scene", "Left: Rainbow | Right: Black | Middle: White (50%)");
     }
 
     private void ToggleGISystem()
@@ -400,6 +470,52 @@ public class MegaLightsScene : Scene
 
         // No overlap, create new light
         CreateLight(position, PaintRadius, color);
+    }
+
+    private void PaintBlackDotAt(Vector2 position)
+    {
+        var color = Color.Black;
+
+        // Check if there's an existing light at this position (ECS spatial query)
+        var nearby = ECS.InRadius(new Vector3(position, 0), PaintRadius);
+        foreach (int entityId in nearby)
+        {
+            // Only replace if it has Circle2D (is a light, not an occluder)
+            if (ECS.HasComponent<Circle2D>(entityId) && entityId != MouseLightId)
+            {
+                // Replace existing light's color
+                ref var material = ref ECS.GetComponent<Material>(entityId);
+                material.Albedo = color;
+                material.Emissive = color;
+                return;
+            }
+        }
+
+        // No overlap, create new black dot
+        CreateLight(position, PaintRadius, color);
+    }
+
+    private void PaintWhiteDotAt(Vector2 position)
+    {
+        var color = new Color(255, 255, 255, 128); // White with 50% opacity
+
+        // Check if there's an existing light at this position (ECS spatial query)
+        var nearby = ECS.InRadius(new Vector3(position, 0), PaintRadius);
+        foreach (int entityId in nearby)
+        {
+            // Only replace if it has Circle2D (is a light, not an occluder)
+            if (ECS.HasComponent<Circle2D>(entityId) && entityId != MouseLightId)
+            {
+                // Replace existing light's color
+                ref var material = ref ECS.GetComponent<Material>(entityId);
+                material.Albedo = color;
+                material.Emissive = new Color(255, 255, 255, 128);
+                return;
+            }
+        }
+
+        // No overlap, create new white dot
+        CreateLight(position, PaintRadius, color, new Color(255, 255, 255, 128));
     }
 
     private static Color HueToRGB(float hue)

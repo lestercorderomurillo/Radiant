@@ -5,6 +5,7 @@ Texture2D InputTexture : register(t0);
 Texture2D EmissiveTexture : register(t1);
 Texture2D SDFTexture : register(t2);
 Texture2D HistoryTexture : register(t3);
+Texture2D AbsorptionTexture : register(t4);
 SamplerState Sampler : register(s0);
 
 float2 InputSize;
@@ -304,9 +305,20 @@ float4 CorrectEdgesWithDebug(float3 color, float2 uv)
         // Apply EDGE_BLEND to control max emissive contribution at edge
         float emissiveAmount = (1.0 - blendFactor) * EDGE_BLEND;
 
+        // Get surface opacity from absorption texture
+        float surfaceOpacity = AbsorptionTexture.Sample(Sampler, uv).a;
+
+        // Skip edge correction for transparent surfaces - HRC already handles transmitted light correctly
+        static const float OPACITY_THRESHOLD = 0.5;
+        if (surfaceOpacity < OPACITY_THRESHOLD)
+        {
+            return float4(color, 0.0);  // No correction for transparent surfaces
+        }
+
         // Blend: emissive fills holes near edge, original color preserved inside
         // debug = emissiveAmount remapped to show correction intensity (positive = on surface)
         float3 emissiveColor = UnpremultiplyRGB(emissive);
+
         return float4(lerp(color, emissiveColor, emissiveAmount), emissiveAmount + 0.5);
     }
     else
@@ -321,22 +333,51 @@ float4 CorrectEdgesWithDebug(float3 color, float2 uv)
             return float4(color, 0.0);  // debug = 0 (no correction)
         }
 
-        // Sample neighbor emissive colors
+        // Sample neighbor emissive colors and their absorption
         float4 emissiveL = EmissiveTexture.Sample(Sampler, uv + float2(-texelSize.x, 0));
         float4 emissiveR = EmissiveTexture.Sample(Sampler, uv + float2( texelSize.x, 0));
         float4 emissiveU = EmissiveTexture.Sample(Sampler, uv + float2(0, -texelSize.y));
         float4 emissiveD = EmissiveTexture.Sample(Sampler, uv + float2(0,  texelSize.y));
 
         // Weighted average from neighbors on surface (un-premultiply to get true colors)
+        // Also accumulate opacity for proper blending
         float3 surfaceColor = float3(0, 0, 0);
         float surfaceWeight = 0.0;
+        float avgOpacity = 0.0;
 
-        if (emissiveL.a > 0.0) { surfaceColor += UnpremultiplyRGB(emissiveL); surfaceWeight += 1.0; }
-        if (emissiveR.a > 0.0) { surfaceColor += UnpremultiplyRGB(emissiveR); surfaceWeight += 1.0; }
-        if (emissiveU.a > 0.0) { surfaceColor += UnpremultiplyRGB(emissiveU); surfaceWeight += 1.0; }
-        if (emissiveD.a > 0.0) { surfaceColor += UnpremultiplyRGB(emissiveD); surfaceWeight += 1.0; }
+        // Only consider opaque neighbors for edge correction
+        static const float OPACITY_THRESHOLD = 0.5;
 
-        // No nearby surface - no correction
+        if (emissiveL.a > 0.0) {
+            float opacityL = AbsorptionTexture.Sample(Sampler, uv + float2(-texelSize.x, 0)).a;
+            if (opacityL >= OPACITY_THRESHOLD) {
+                surfaceColor += UnpremultiplyRGB(emissiveL);
+                surfaceWeight += 1.0;
+            }
+        }
+        if (emissiveR.a > 0.0) {
+            float opacityR = AbsorptionTexture.Sample(Sampler, uv + float2(texelSize.x, 0)).a;
+            if (opacityR >= OPACITY_THRESHOLD) {
+                surfaceColor += UnpremultiplyRGB(emissiveR);
+                surfaceWeight += 1.0;
+            }
+        }
+        if (emissiveU.a > 0.0) {
+            float opacityU = AbsorptionTexture.Sample(Sampler, uv + float2(0, -texelSize.y)).a;
+            if (opacityU >= OPACITY_THRESHOLD) {
+                surfaceColor += UnpremultiplyRGB(emissiveU);
+                surfaceWeight += 1.0;
+            }
+        }
+        if (emissiveD.a > 0.0) {
+            float opacityD = AbsorptionTexture.Sample(Sampler, uv + float2(0, texelSize.y)).a;
+            if (opacityD >= OPACITY_THRESHOLD) {
+                surfaceColor += UnpremultiplyRGB(emissiveD);
+                surfaceWeight += 1.0;
+            }
+        }
+
+        // No nearby opaque surface - no correction
         if (surfaceWeight < 0.001)
         {
             return float4(color, 0.0);  // debug = 0 (no correction)
