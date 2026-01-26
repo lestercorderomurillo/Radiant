@@ -69,9 +69,44 @@ public class MegaLightsScene : Scene
         CreateRotatingLights();
         CreateOccluders();
         CreateMouseLight();
+        CreateCenterTriangles();
         UpdateUDRInput();
 
         base.SetupScene();
+    }
+
+    private void CreateCenterTriangles()
+    {
+        var center = Renderer.Window.GetScreenCenter();
+
+        // Large outer triangle - black border
+        float sizeOuter = 500f;
+        CreateBorderedTriangle(center, sizeOuter, Color.Black);
+
+        // Smaller inner triangle - purple emissive
+        float sizeInner = 150f;
+        CreateBorderedTriangle(center, sizeInner, new Color(180, 0, 255));
+    }
+
+    private void CreateBorderedTriangle(Vector2 center, float size, Color emissive)
+    {
+        int id = ECS.CreateEntity();
+
+        ref var transform = ref ECS.AddComponent<Transform>(id);
+        ref var triangle = ref ECS.AddComponent<Triangle2D>(id);
+        ref var material = ref ECS.AddComponent<Material>(id);
+
+        // Triangle centroid is at y=0.117 in UV space (below box center)
+        // Offset the box up so the visual centroid aligns with screen center
+        float centroidOffsetY = size * 0.117f;
+        transform.Position = new Vector3(center.X - size / 2, center.Y - size / 2 - centroidOffsetY, 0);
+        transform.Rotation = Vector3.UnitX;
+
+        triangle.Size = new Vector2(size);
+        triangle.Bordered = true;
+
+        material.Albedo = new Color(0, 0, 0, 200);
+        material.Emissive = emissive;
     }
 
     private void CreateRotatingLights()

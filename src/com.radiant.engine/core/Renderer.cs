@@ -406,6 +406,14 @@ public class Renderer : IDisposable
     }
 
     /// <summary>
+    /// Adds a bordered (unfilled) triangle shape to the current batch.
+    /// </summary>
+    public Renderer DrawTriangleBorder(Vector2 position, Vector2 size, Color color)
+    {
+        return DrawShape(Shape.TriangleBorder(position, size, color));
+    }
+
+    /// <summary>
     /// Renders all batched shapes in a single draw call and clears the batch.
     /// </summary>
     /// <param name="target">Render target (null for backbuffer).</param>

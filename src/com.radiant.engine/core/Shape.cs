@@ -61,6 +61,14 @@ public struct Shape
         Color = color,
         Type = 2f
     };
+
+    public static Shape TriangleBorder(Vector2 position, Vector2 size, Color color) => new()
+    {
+        Position = position,
+        Size = size,
+        Color = color,
+        Type = 3f
+    };
 }
 
 [StructLayout(LayoutKind.Sequential, Pack = 1)]

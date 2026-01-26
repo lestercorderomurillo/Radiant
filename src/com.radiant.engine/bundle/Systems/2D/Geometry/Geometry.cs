@@ -46,6 +46,8 @@ public class Geometry : core.System
     private GizmosRenderer Gizmos;
 
     // Parallel shape collection
+    private enum ShapeType { Rectangle, Circle, Triangle, TriangleBorder }
+
     private readonly struct ShapeData : IComparable<ShapeData>
     {
         public readonly Vector2 Position;
@@ -53,15 +55,15 @@ public class Geometry : core.System
         public readonly float Radius;
         public readonly Color Color;
         public readonly float Z;
-        public readonly bool IsCircle;
+        public readonly ShapeType Type;
 
-        public ShapeData(Vector2 pos, Vector2 size, Color color, float z)
+        public ShapeData(Vector2 pos, Vector2 size, Color color, float z, ShapeType type = ShapeType.Rectangle)
         {
-            Position = pos; Size = size; Radius = 0; Color = color; Z = z; IsCircle = false;
+            Position = pos; Size = size; Radius = 0; Color = color; Z = z; Type = type;
         }
         public ShapeData(Vector2 pos, float radius, Color color, float z)
         {
-            Position = pos; Size = default; Radius = radius; Color = color; Z = z; IsCircle = true;
+            Position = pos; Size = default; Radius = radius; Color = color; Z = z; Type = ShapeType.Circle;
         }
 
         public int CompareTo(ShapeData other) => Z.CompareTo(other.Z);
@@ -255,8 +257,29 @@ public class Geometry : core.System
                     (int)(mat.Emissive.G * intensity),
                     (int)(mat.Emissive.B * intensity),
                     mat.Emissive.A);
-                    
+
                 EmissiveShapesByThread[threadIdx].Add(new ShapeData(center, circle.Radius, emissive, transform.Position.Z));
+            }
+        });
+
+        // Parallel visibility filter for triangles
+        Scene.ECS.ForEach<Transform, Triangle2D, Material>((int threadIdx, int entity, ref Transform transform, ref Triangle2D tri, ref Material mat) =>
+        {
+            if (mat.Emissive.A == 0) return;
+
+            Vector2 position = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
+
+            if (position.X + tri.Size.X >= 0 && position.X < WorldBounds.X &&
+                position.Y + tri.Size.Y >= 0 && position.Y < WorldBounds.Y)
+            {
+                // Scale emissive color by alpha (intensity)
+                float intensity = mat.Emissive.A / 255f;
+                Color emissive = new Color(
+                    (int)(mat.Emissive.R * intensity),
+                    (int)(mat.Emissive.G * intensity),
+                    (int)(mat.Emissive.B * intensity),
+                    mat.Albedo.A);
+                EmissiveShapesByThread[threadIdx].Add(new ShapeData(position, tri.Size, emissive, transform.Position.Z, tri.Bordered ? ShapeType.TriangleBorder : ShapeType.Triangle));
             }
         });
 
@@ -350,6 +373,21 @@ public class Geometry : core.System
             {
                 Color absorption = CalculateAbsorption(ref mat);
                 AbsorptionShapesByThread[threadIdx].Add(new ShapeData(center, circle.Radius, absorption, transform.Position.Z));
+            }
+        });
+
+        // Parallel visibility filter for triangles
+        Scene.ECS.ForEach<Transform, Triangle2D, Material>((int threadIdx, int entity, ref Transform transform, ref Triangle2D tri, ref Material mat) =>
+        {
+            if (mat.Albedo.A == 0) return;
+
+            Vector2 position = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
+
+            if (position.X + tri.Size.X >= 0 && position.X < WorldBounds.X &&
+                position.Y + tri.Size.Y >= 0 && position.Y < WorldBounds.Y)
+            {
+                Color absorption = CalculateAbsorption(ref mat);
+                AbsorptionShapesByThread[threadIdx].Add(new ShapeData(position, tri.Size, absorption, transform.Position.Z, tri.Bordered ? ShapeType.TriangleBorder : ShapeType.Triangle));
             }
         });
 
@@ -524,10 +562,21 @@ public class Geometry : core.System
             for (int i = 0; i < SingleBuffer.Count; i++)
             {
                 var shape = SingleBuffer[i];
-                if (shape.IsCircle)
-                    Renderer.DrawCircle(shape.Position, shape.Radius, shape.Color);
-                else
-                    Renderer.DrawRect(shape.Position, shape.Size, shape.Color);
+                switch (shape.Type)
+                {
+                    case ShapeType.Circle:
+                        Renderer.DrawCircle(shape.Position, shape.Radius, shape.Color);
+                        break;
+                    case ShapeType.Triangle:
+                        Renderer.DrawTriangle(shape.Position, shape.Size, shape.Color);
+                        break;
+                    case ShapeType.TriangleBorder:
+                        Renderer.DrawTriangleBorder(shape.Position, shape.Size, shape.Color);
+                        break;
+                    default:
+                        Renderer.DrawRect(shape.Position, shape.Size, shape.Color);
+                        break;
+                }
             }
         }
         else
@@ -553,10 +602,21 @@ public class Geometry : core.System
                 var (_, bestThread) = MergeHeap[0];
                 var shape = shapesByThread[bestThread][MergeIndices[bestThread]++];
 
-                if (shape.IsCircle)
-                    Renderer.DrawCircle(shape.Position, shape.Radius, shape.Color);
-                else
-                    Renderer.DrawRect(shape.Position, shape.Size, shape.Color);
+                switch (shape.Type)
+                {
+                    case ShapeType.Circle:
+                        Renderer.DrawCircle(shape.Position, shape.Radius, shape.Color);
+                        break;
+                    case ShapeType.Triangle:
+                        Renderer.DrawTriangle(shape.Position, shape.Size, shape.Color);
+                        break;
+                    case ShapeType.TriangleBorder:
+                        Renderer.DrawTriangleBorder(shape.Position, shape.Size, shape.Color);
+                        break;
+                    default:
+                        Renderer.DrawRect(shape.Position, shape.Size, shape.Color);
+                        break;
+                }
 
                 if (MergeIndices[bestThread] < shapesByThread[bestThread].Count)
                 {

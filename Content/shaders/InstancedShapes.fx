@@ -58,12 +58,40 @@ float4 MainPS(PSInput input) : SV_Target
     }
     else if (type == 2) // Triangle (equilateral, pointing up)
     {
-        // Triangle SDF
-        float2 p = float2(abs(center.x), -center.y + 0.15);
-        float d = max(p.x * 0.866 + p.y * 0.5, p.y) - 0.35;
-        // Screen-space anti-aliasing using derivatives
+        // Equilateral triangle: apex at TOP, base at BOTTOM
+        float2 p = float2(abs(center.x), center.y);
+
+        // Base edge at bottom (y = 0.35)
+        float d_base = p.y - 0.35;
+
+        // Slant edges from apex (0, -0.35) to corners (±0.4, 0.35)
+        float d_slant = p.x * 0.868 - (p.y + 0.35) * 0.496;
+
+        float d = max(d_base, d_slant);
+
         float pixelWidth = fwidth(d);
         alpha = 1.0 - smoothstep(-pixelWidth, pixelWidth, d);
+        if (alpha < 0.001)
+            discard;
+    }
+    else if (type == 3) // Triangle Border (unfilled, outline only)
+    {
+        // Equilateral triangle border
+        float borderThickness = 0.03;
+        float2 p = float2(abs(center.x), center.y);
+
+        // Same SDF as filled
+        float d_base = p.y - 0.35;
+        float d_slant = p.x * 0.868 - (p.y + 0.35) * 0.496;
+        float d = max(d_base, d_slant);
+
+        // Border ring
+        float d_outer = d;
+        float d_inner = d + borderThickness;
+        float d_border = max(d_outer, -d_inner);
+
+        float pixelWidth = fwidth(d_border);
+        alpha = 1.0 - smoothstep(-pixelWidth, pixelWidth, d_border);
         if (alpha < 0.001)
             discard;
     }
@@ -93,9 +121,21 @@ float4 SharpPS(PSInput input) : SV_Target
     }
     else if (type == 2) // Triangle
     {
-        float2 p = float2(abs(center.x), -center.y + 0.15);
-        float d = max(p.x * 0.866 + p.y * 0.5, p.y) - 0.35;
-        if (d > 0)
+        float2 p = float2(abs(center.x), center.y);
+        float d_base = p.y - 0.35;
+        float d_slant = p.x * 0.868 - (p.y + 0.35) * 0.496;
+        if (max(d_base, d_slant) > 0)
+            discard;
+    }
+    else if (type == 3) // Triangle Border
+    {
+        float borderThickness = 0.03;
+        float2 p = float2(abs(center.x), center.y);
+        float d_base = p.y - 0.35;
+        float d_slant = p.x * 0.868 - (p.y + 0.35) * 0.496;
+        float d = max(d_base, d_slant);
+        float d_border = max(d, -(d + borderThickness));
+        if (d_border > 0)
             discard;
     }
 
