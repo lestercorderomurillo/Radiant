@@ -4,6 +4,7 @@ static const float EPSILON = 0.00001;
 Texture2D EmissiveTexture : register(t0);
 Texture2D JFATexture : register(t1);
 Texture2D JFATextureInterior : register(t2);
+Texture2D MotionVectorTexture : register(t3);
 
 SamplerState SceneColorSampler : register(s0);
 SamplerState JFASampler : register(s1);
@@ -351,6 +352,122 @@ float4 DebugEmissivePS(PixelShaderInput input) : COLOR
     return EmissiveTexture.Sample(SceneColorSampler, input.UV);
 }
 
+// Arrow SDF: returns distance to arrow shape pointing in +X direction
+float ArrowSDF(float2 p, float arrowLen, float headSize)
+{
+    // Arrow body (line from origin to arrowLen)
+    float bodyLen = arrowLen - headSize;
+    float2 bodyEnd = float2(bodyLen, 0);
+
+    // Distance to line segment (body)
+    float2 pa = p;
+    float2 ba = bodyEnd;
+    float h = saturate(dot(pa, ba) / dot(ba, ba));
+    float bodyDist = length(pa - ba * h) - 0.5;  // 0.5 = line thickness
+
+    // Arrow head (triangle)
+    float2 ph = p - float2(bodyLen, 0);
+    float headDist = max(
+        -ph.x,  // Left of head start
+        max(
+            ph.y - headSize * 0.5 + ph.x * 0.5,   // Top edge
+            -ph.y - headSize * 0.5 + ph.x * 0.5   // Bottom edge
+        )
+    );
+    headDist = max(headDist, ph.x - headSize);  // Right of tip
+
+    return min(bodyDist, headDist);
+}
+
+// Rotate point by angle
+float2 RotatePoint(float2 p, float angle)
+{
+    float c = cos(angle);
+    float s = sin(angle);
+    return float2(p.x * c - p.y * s, p.x * s + p.y * c);
+}
+
+// Debug motion vectors: arrows showing direction and magnitude
+float4 DebugMotionVectorsPS(PixelShaderInput input) : COLOR
+{
+    // Grid cell size in pixels
+    static const float CELL_SIZE = 64.0;
+
+    float2 pixelPos = input.UV * WorldsBounds;
+
+    // Find grid cell center
+    float2 cellIndex = floor(pixelPos / CELL_SIZE);
+    float2 cellCenter = (cellIndex + 0.5) * CELL_SIZE;
+    float2 cellUV = cellCenter / WorldsBounds;
+
+    // Sample motion at cell center - use multiple samples to avoid edge issues
+    float2 texelSize = 1.0 / WorldsBounds;
+    float2 motionEncoded = float2(0, 0);
+    float validSamples = 0;
+
+    // Sample 3x3 around cell center, only count non-zero motion
+    for (int y = -1; y <= 1; y++)
+    {
+        for (int x = -1; x <= 1; x++)
+        {
+            float2 sampleUV = cellUV + float2(x, y) * texelSize * 8.0;
+            float2 sample = MotionVectorTexture.Sample(SceneColorSampler, sampleUV).rg;
+            float2 vel = (sample - 0.5) * 200.0;
+            float spd = length(vel);
+            if (spd > 0.5)
+            {
+                motionEncoded += sample;
+                validSamples += 1.0;
+            }
+        }
+    }
+
+    // Average valid samples
+    if (validSamples > 0)
+        motionEncoded /= validSamples;
+    else
+        motionEncoded = float2(0.5, 0.5);
+
+    float2 velocity = (motionEncoded - 0.5) * 200.0;
+    float speed = length(velocity);
+
+    // Background: dark gray
+    float3 bgColor = float3(0.08, 0.08, 0.08);
+
+    // No motion = just background
+    if (speed < 0.5)
+        return float4(bgColor, 1.0);
+
+    // Position relative to cell center
+    float2 localPos = pixelPos - cellCenter;
+
+    // Arrow direction and length
+    float angle = atan2(velocity.y, velocity.x);
+    float arrowLength = min(speed * 2.0, CELL_SIZE * 0.7);  // Scale with speed, max 70% of cell
+    float headSize = arrowLength * 0.35;
+
+    // Rotate local position to arrow space (arrow points +X)
+    float2 rotatedPos = RotatePoint(localPos, -angle);
+
+    // Offset so arrow is centered
+    rotatedPos.x += arrowLength * 0.4;
+
+    // Get distance to arrow
+    float dist = ArrowSDF(rotatedPos, arrowLength, headSize);
+
+    // Arrow color based on direction
+    float3 arrowColor = AngleToColor(angle + PI);
+
+    // Brightness based on speed
+    float brightness = 0.6 + saturate(speed / 20.0) * 0.4;
+    arrowColor *= brightness;
+
+    // Anti-aliased edge
+    float alpha = 1.0 - smoothstep(-1.5, 1.5, dist);
+
+    return float4(lerp(bgColor, arrowColor, alpha), 1.0);
+}
+
 technique InitializeJFA
 {
     pass P0
@@ -416,9 +533,18 @@ technique DebugJFA
 
 technique DebugEmissive
 {
-    pass P0 
-    { 
+    pass P0
+    {
         VertexShader = compile vs_4_0 MainVS();
-        PixelShader = compile ps_4_0 DebugEmissivePS(); 
+        PixelShader = compile ps_4_0 DebugEmissivePS();
+    }
+}
+
+technique DebugMotionVectors
+{
+    pass P0
+    {
+        VertexShader = compile vs_4_0 MainVS();
+        PixelShader = compile ps_4_0 DebugMotionVectorsPS();
     }
 }

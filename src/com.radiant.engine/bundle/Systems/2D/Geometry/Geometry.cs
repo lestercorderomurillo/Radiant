@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using com.radiant.engine.core;
@@ -28,11 +29,16 @@ public class Geometry : core.System
     public RenderTarget2D EmissiveTexture { get; private set; }
     public RenderTarget2D AbsorptionTexture { get; private set; }
     public RenderTarget2D SDFTexture { get; private set; }
+    public RenderTarget2D MotionVectorTexture { get; private set; }
 
     private int EmissiveCount;
     private int AbsorptionCount;
 
-    private enum DebugMode { None, Emissive, Absorption, SDF, JFADirection, JFARaw }
+    // Motion vector tracking
+    private Dictionary<int, Vector3> PrevPositions = new();
+    private List<(Vector2 pos, Vector2 size, Vector2 velocity, bool isCircle, float radius)>[] MotionShapesByThread;
+
+    private enum DebugMode { None, Emissive, Absorption, SDF, JFADirection, JFARaw, MotionVectors }
     private DebugMode CurrentDebug = DebugMode.None;
     private KeyboardState PrevKeyState;
     private GizmosRenderer Gizmos;
@@ -93,6 +99,7 @@ public class Geometry : core.System
         ThreadCount = Environment.ProcessorCount;
         EmissiveShapesByThread = new List<ShapeData>[ThreadCount];
         AbsorptionShapesByThread = new List<ShapeData>[ThreadCount];
+        MotionShapesByThread = new List<(Vector2, Vector2, Vector2, bool, float)>[ThreadCount];
         MergeIndices = new int[ThreadCount];
         MergeHeap = new (float, int)[ThreadCount];
         SingleBuffer = new List<ShapeData>();
@@ -100,6 +107,7 @@ public class Geometry : core.System
         {
             EmissiveShapesByThread[i] = new List<ShapeData>();
             AbsorptionShapesByThread[i] = new List<ShapeData>();
+            MotionShapesByThread[i] = new();
         }
 
         Gizmos = Scene.ECS.GetSystem<GizmosRenderer>();
@@ -151,6 +159,10 @@ public class Geometry : core.System
             Renderer.Device, (int)WorldBounds.X, (int)WorldBounds.Y,
             false, SurfaceFormat.HalfVector2, DepthFormat.None);
 
+        MotionVectorTexture = new RenderTarget2D(
+            Renderer.Device, (int)WorldBounds.X, (int)WorldBounds.Y,
+            false, SurfaceFormat.HalfVector2, DepthFormat.None);
+
         JFATexture1 = new RenderTarget2D(
             Renderer.Device, (int)SDFBounds.X, (int)SDFBounds.Y,
             false, SurfaceFormat.Vector4, DepthFormat.None);
@@ -182,6 +194,7 @@ public class Geometry : core.System
 
         RenderEmissiveTexture();
         RenderAbsorptionTexture();
+        RenderMotionVectorTexture();
 
         bool needsSDF = EnableSDF ||
             CurrentDebug == DebugMode.SDF ||
@@ -357,6 +370,86 @@ public class Geometry : core.System
 
         AbsorptionCount = Renderer.ShapeBatchCount;
         Renderer.Configure(BlendState.AlphaBlend).FlushShapes(AbsorptionTexture, Color.Transparent);
+    }
+
+    private void RenderMotionVectorTexture()
+    {
+        // Clear thread-local lists
+        for (int i = 0; i < ThreadCount; i++)
+            MotionShapesByThread[i].Clear();
+
+        var nextPositions = new ConcurrentDictionary<int, Vector3>();
+
+        // Collect motion for rectangles
+        Scene.ECS.ForEach<Transform, Rectangle2D, Material>((int threadIdx, int entity, ref Transform transform, ref Rectangle2D rect, ref Material mat) =>
+        {
+            Vector2 position = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
+
+            // Store current position for next frame
+            nextPositions[entity] = transform.Position;
+
+            // Calculate velocity from previous position
+            Vector2 velocity = Vector2.Zero;
+            if (PrevPositions.TryGetValue(entity, out var prevPos))
+            {
+                velocity = new Vector2(transform.Position.X - prevPos.X, transform.Position.Y - prevPos.Y);
+            }
+
+            // Only add if there's motion
+            if (velocity.LengthSquared() > 0.01f)
+            {
+                MotionShapesByThread[threadIdx].Add((position, rect.Size, velocity, false, 0));
+            }
+        });
+
+        // Collect motion for circles
+        Scene.ECS.ForEach<Transform, Circle2D, Material>((int threadIdx, int entity, ref Transform transform, ref Circle2D circle, ref Material mat) =>
+        {
+            Vector2 center = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
+
+            // Store current position for next frame
+            nextPositions[entity] = transform.Position;
+
+            // Calculate velocity from previous position
+            Vector2 velocity = Vector2.Zero;
+            if (PrevPositions.TryGetValue(entity, out var prevPos))
+            {
+                velocity = new Vector2(transform.Position.X - prevPos.X, transform.Position.Y - prevPos.Y);
+            }
+
+            // Only add if there's motion
+            if (velocity.LengthSquared() > 0.01f)
+            {
+                MotionShapesByThread[threadIdx].Add((center, Vector2.Zero, velocity, true, circle.Radius));
+            }
+        });
+
+        // Update previous positions for next frame
+        PrevPositions.Clear();
+        foreach (var kvp in nextPositions)
+            PrevPositions[kvp.Key] = kvp.Value;
+
+        // Render motion vectors
+        Renderer.ClearShapes();
+
+        for (int t = 0; t < ThreadCount; t++)
+        {
+            foreach (var (pos, size, velocity, isCircle, radius) in MotionShapesByThread[t])
+            {
+                // Encode velocity as color: RG = velocity XY, normalized to screen
+                // Scale velocity to 0-1 range (assuming max velocity ~100 pixels/frame)
+                float vx = (velocity.X / 100f) * 0.5f + 0.5f;  // -100..+100 -> 0..1
+                float vy = (velocity.Y / 100f) * 0.5f + 0.5f;
+                Color motionColor = new Color(vx, vy, 0f, 1f);
+
+                if (isCircle)
+                    Renderer.DrawCircle(pos, radius, motionColor);
+                else
+                    Renderer.DrawRect(pos, size, motionColor);
+            }
+        }
+
+        Renderer.Configure(BlendState.Opaque).FlushShapes(MotionVectorTexture, new Color(0.5f, 0.5f, 0f, 0f));
     }
 
     private void DrawShapesMerged(List<ShapeData>[] shapesByThread)
@@ -615,6 +708,18 @@ public class Geometry : core.System
                     .Draw()
                     .Commit();
                 break;
+
+            case DebugMode.MotionVectors:
+                Renderer
+                    .Reset()
+                    .SetShader("Geometry")
+                    .SetTechnique("DebugMotionVectors")
+                    .SetTarget(null)
+                    .SetParameter("MotionVectorTexture", MotionVectorTexture)
+                    .SetParameter("WorldsBounds", WorldBounds)
+                    .Draw()
+                    .Commit();
+                break;
         }
     }
 
@@ -627,6 +732,7 @@ public class Geometry : core.System
         EmissiveTexture?.Dispose();
         AbsorptionTexture?.Dispose();
         SDFTexture?.Dispose();
+        MotionVectorTexture?.Dispose();
         JFATexture1?.Dispose();
         JFATexture2?.Dispose();
         JFATextureInterior1?.Dispose();
@@ -651,6 +757,7 @@ public class Geometry : core.System
         EmissiveTexture?.Dispose();
         AbsorptionTexture?.Dispose();
         SDFTexture?.Dispose();
+        MotionVectorTexture?.Dispose();
         JFATexture1?.Dispose();
         JFATexture2?.Dispose();
         JFATextureInterior1?.Dispose();

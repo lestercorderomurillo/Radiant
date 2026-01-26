@@ -8,9 +8,6 @@ namespace com.radiant.engine.bundle;
 
 public class UDR3 : core.System
 {
-    public float DetailCorrection = 0f;
-    public bool DebugRays = false;
-
     // Temporal parameters
     public int FramesToAccumulate = 12;
 
@@ -20,8 +17,8 @@ public class UDR3 : core.System
     private Vector2 OutputSize;
 
     private Func<Texture2D> InputSource;
-    private Geometry Geometry;
     private GizmosRenderer Gizmos;
+    private Geometry Geometry;
     private KeyboardState PrevKeyState;
 
     private int FrameIndex = 0;
@@ -30,9 +27,6 @@ public class UDR3 : core.System
     {
         Gizmos = Scene.ECS.GetSystem<GizmosRenderer>();
         Geometry = Scene.ECS.GetSystem<Geometry>();
-
-        if (Geometry != null)
-            Geometry.EnableSDF = true;
 
         OutputSize = Renderer.ScreenSize;
         CreateRenderTargets();
@@ -93,21 +87,16 @@ public class UDR3 : core.System
 
         Vector2 inputSize = new Vector2(input.Width, input.Height);
 
-        // Pass 1: Spatial (Lanczos + edge correction)
+        // Pass 1: Spatial (bilinear upsampling)
         Renderer
             .Reset()
             .SetShader("UDR/UDR3")
             .SetTechnique("Spatial")
-            .Configure(SamplerState.LinearClamp)
+            .Configure(SamplerState.PointClamp)
             .SetTarget(SpatialTexture)
             .Clear(Color.Black)
             .SetParameter("InputTexture", input)
-            .SetParameter("EmissiveTexture", Geometry?.EmissiveTexture)
-            .SetParameter("SDFTexture", Geometry?.SDFTexture)
             .SetParameter("InputSize", inputSize)
-            .SetParameter("OutputSize", OutputSize)
-            .SetParameter("DebugRays", DebugRays ? 1f : 0f)
-            .SetParameter("FrameIndex", (float)FrameIndex)
             .Draw()
             .Commit()
             .SetTarget(null);
@@ -125,12 +114,10 @@ public class UDR3 : core.System
             .SetTarget(TemporalTexture)
             .Clear(Color.Black)
             .SetParameter("InputTexture", SpatialTexture)
-            .SetParameter("EmissiveTexture", Geometry?.EmissiveTexture)
-            .SetParameter("SDFTexture", Geometry?.SDFTexture)
             .SetParameter("LastFrame", LastFrameTexture)
+            .SetParameter("MotionVectorTexture", Geometry?.MotionVectorTexture)
             .SetParameter("OutputSize", OutputSize)
             .SetParameter("CurrentWeight", currentWeight)
-            .SetParameter("FrameCount", (float)effectiveFrames)
             .Draw()
             .Commit()
             .SetTarget(null);
@@ -155,7 +142,6 @@ public class UDR3 : core.System
         Gizmos?.Set("UDR3", $"Input Size: {input.Width}x{input.Height}");
         Gizmos?.Set("UDR3", $"Output Size: {OutputSize.X}x{OutputSize.Y}");
         Gizmos?.Set("UDR3", $"Frames to Accumulate: {FramesToAccumulate} (current: {effectiveFrames})");
-        Gizmos?.Set("UDR3", $"Debug Rays: {(DebugRays ? "On" : "Off")} [F10]");
     }
 
     private void HandleInput()
@@ -165,11 +151,6 @@ public class UDR3 : core.System
         if (key.IsKeyDown(Keys.F4) && !PrevKeyState.IsKeyDown(Keys.F4))
         {
             UDRQuality.Cycle();
-        }
-
-        if (key.IsKeyDown(Keys.F10) && !PrevKeyState.IsKeyDown(Keys.F10))
-        {
-            DebugRays = !DebugRays;
         }
 
         PrevKeyState = key;

@@ -75,4 +75,3 @@
 /processor:EffectProcessor
 /processorParam:DebugMode=Auto
 /build:shaders/UDR/UDR3.fx
-

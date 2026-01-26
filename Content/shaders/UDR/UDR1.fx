@@ -243,7 +243,7 @@ float4 CorrectEdgesWithDebug(float3 color, float2 uv)
     // Adjustable constants
     static const float OUTER_MARGIN = 0.001;      // SDF distance outside to blend (0 = edge, 0.05 = far)
     static const float INNER_MARGIN = 20.0;       // Texels inside to blend (1-4 range based on samples)
-    static const float EDGE_BLEND = 0.55;         // Blend strength at exact edge
+    static const float EDGE_BLEND = 0.09;         // Blend strength at exact edge
 
     float4 emissive = EmissiveTexture.Sample(Sampler, uv);
     float sdfDist = SDFTexture.Sample(Sampler, uv).r;  // 0 = on surface, >0 = outside
