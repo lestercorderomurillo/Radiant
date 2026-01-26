@@ -41,8 +41,8 @@ public class MegaLightsScene : Scene
     private bool UseHRCGI = true;
     private int UDRMode = 0;  // 0 = Bilinear, 1 = UDR1, 2 = UDR2, 3 = UDR3
 
-    private const float RotationSpeed = 0.15f;
-    private const float OrbitRadius = 300f;
+    private const float RotationSpeed = 0.20f;
+    private const float OrbitRadius = 320f;
     private const int LightCount = 12;
 
     private const float BoxSize = 50f;

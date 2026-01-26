@@ -34,8 +34,8 @@ public class Geometry : core.System
     private int EmissiveCount;
     private int AbsorptionCount;
 
-    // Motion vector tracking with N-frame history
-    public int MotionHistoryFrames = 2;  // Configurable: average velocity over N frames
+    // Motion vector tracking with N-frame history (weighted: recent frames have more influence)
+    public int MotionHistoryFrames = 4;
     private ConcurrentDictionary<int, Queue<Vector3>> PositionHistory = new();
     
     private List<(Vector2 pos, Vector2 size, Vector2 velocity, bool isCircle, float radius)>[] MotionShapesByThread;
@@ -379,15 +379,27 @@ public class Geometry : core.System
         if (!PositionHistory.TryGetValue(entity, out var history) || history.Count == 0)
             return Vector2.Zero;
 
-        // Get oldest position in history
-        var oldestPos = history.Peek();
-        int frameCount = history.Count;
+        // Convert queue to array for indexed access (oldest first)
+        var positions = history.ToArray();
+        int count = positions.Length;
 
-        // Calculate total displacement and divide by frame count for per-frame velocity
-        float dx = currentPos.X - oldestPos.X;
-        float dy = currentPos.Y - oldestPos.Y;
+        Vector2 weightedVelocity = Vector2.Zero;
+        float totalWeight = 0;
 
-        return new Vector2(dx / frameCount, dy / frameCount);
+        // Calculate weighted velocity for each frame transition
+        // More recent transitions get higher weight (1, 2, 3, ...)
+        for (int i = 0; i < count; i++)
+        {
+            Vector3 from = positions[i];
+            Vector3 to = (i < count - 1) ? positions[i + 1] : currentPos;
+
+            float weight = i + 1;
+            weightedVelocity.X += (to.X - from.X) * weight;
+            weightedVelocity.Y += (to.Y - from.Y) * weight;
+            totalWeight += weight;
+        }
+
+        return totalWeight > 0 ? weightedVelocity / totalWeight : Vector2.Zero;
     }
 
     private void UpdatePositionHistory(int entity, Vector3 currentPos)
@@ -422,8 +434,8 @@ public class Geometry : core.System
             // Calculate velocity from position history
             Vector2 velocity = CalculateVelocityFromHistory(entity, transform.Position);
 
-            // Only add if there's motion
-            if (velocity.LengthSquared() > 0.01f)
+            // Only add if there's motion (very low threshold to catch slow movement)
+            if (velocity.LengthSquared() > 0.0001f)
             {
                 MotionShapesByThread[threadIdx].Add((position, rect.Size, velocity, false, 0));
             }
@@ -441,8 +453,8 @@ public class Geometry : core.System
             // Calculate velocity from position history
             Vector2 velocity = CalculateVelocityFromHistory(entity, transform.Position);
 
-            // Only add if there's motion
-            if (velocity.LengthSquared() > 0.01f)
+            // Only add if there's motion (very low threshold to catch slow movement)
+            if (velocity.LengthSquared() > 0.0001f)
             {
                 MotionShapesByThread[threadIdx].Add((center, Vector2.Zero, velocity, true, circle.Radius));
             }
@@ -469,9 +481,9 @@ public class Geometry : core.System
             foreach (var (pos, size, velocity, isCircle, radius) in MotionShapesByThread[t])
             {
                 // Encode velocity as color: RG = velocity XY, normalized to screen
-                // Scale velocity to 0-1 range (assuming max velocity ~100 pixels/frame)
-                float vx = (velocity.X / 100f) * 0.5f + 0.5f;  // -100..+100 -> 0..1
-                float vy = (velocity.Y / 100f) * 0.5f + 0.5f;
+                // Scale velocity to 0-1 range (max ±10 pixels/frame for better precision at slow speeds)
+                float vx = (velocity.X / 10f) * 0.5f + 0.5f;  // -10..+10 -> 0..1
+                float vy = (velocity.Y / 10f) * 0.5f + 0.5f;
                 Color motionColor = new Color(vx, vy, 0f, 1f);
 
                 if (isCircle)

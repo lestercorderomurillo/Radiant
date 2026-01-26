@@ -411,7 +411,7 @@ float2 SampleStrongestMotion(float2 center, float2 bounds)
         int2 texel = int2(center + offsets[i]);
         texel = clamp(texel, int2(0, 0), int2(bounds) - 1);
         float2 motion = MotionVectorTexture.Load(int3(texel, 0)).rg;
-        float2 vel = (motion - BYTE_CENTER) * 200.0;
+        float2 vel = (motion - BYTE_CENTER) * 20.0;
         float spd = length(vel);
 
         if (spd > bestSpeed)
@@ -427,7 +427,7 @@ float2 SampleStrongestMotion(float2 center, float2 bounds)
 // Debug motion vectors: arrows showing direction and magnitude
 float4 DebugMotionVectorsPS(PixelShaderInput input) : COLOR
 {
-    static const float CELL_SIZE = 32.0;
+    static const float CELL_SIZE = 48.0;
     static const float GRID_WIDTH = 1.0;
 
     float2 pixelPos = input.UV * WorldsBounds;
@@ -447,7 +447,7 @@ float4 DebugMotionVectorsPS(PixelShaderInput input) : COLOR
     float speed = length(velocity);
 
     // No motion: draw small white dot in center
-    if (speed < 0.1)
+    if (speed < 0.01)
     {
         float dotDist = length(localPos);
         if (dotDist < 2.0)
