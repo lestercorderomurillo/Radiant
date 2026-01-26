@@ -130,7 +130,8 @@ public class MegaLightsScene : Scene
     private void CreateMouseLight()
     {
         var mouse = Mouse.GetState();
-        MouseLightId = CreateLight(new Vector2(mouse.X, mouse.Y), 100f, new Color(0, 255, 255, 1.0f), Color.Transparent);
+        MouseLightId = CreateLight(new Vector2(mouse.X, mouse.Y), 100f, new Color(0, 0, 0, 128), Color.Black);
+
         PrevMouse = mouse;
     }
 

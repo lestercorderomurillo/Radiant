@@ -239,7 +239,8 @@ public class Geometry : core.System
                     (int)(mat.Emissive.R * intensity),
                     (int)(mat.Emissive.G * intensity),
                     (int)(mat.Emissive.B * intensity),
-                    mat.Albedo.A);
+                    mat.Emissive.A);
+                    
                 EmissiveShapesByThread[threadIdx].Add(new ShapeData(center, circle.Radius, emissive, transform.Position.Z));
             }
         });
