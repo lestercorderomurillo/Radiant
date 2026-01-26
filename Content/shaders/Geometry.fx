@@ -387,37 +387,55 @@ float2 RotatePoint(float2 p, float angle)
     return float2(p.x * c - p.y * s, p.x * s + p.y * c);
 }
 
-// Sample motion and return velocity with highest speed from 4 neighborhood samples
+// Sample motion and return velocity with highest speed from multi-radius neighborhood
+// Samples at multiple distances and picks strongest, with falloff for distant samples
 float2 SampleStrongestMotion(float2 center, float2 bounds)
 {
-    static const float SAMPLE_OFFSET = 6.0;  // Offset from center for 4 samples
-
-    float2 offsets[4] = {
-        float2(-SAMPLE_OFFSET, -SAMPLE_OFFSET),
-        float2( SAMPLE_OFFSET, -SAMPLE_OFFSET),
-        float2(-SAMPLE_OFFSET,  SAMPLE_OFFSET),
-        float2( SAMPLE_OFFSET,  SAMPLE_OFFSET)
-    };
-
-    float2 bestVelocity = float2(0, 0);
-    float bestSpeed = 0;
-
     // 127/255 - Color(0.5f) truncates to byte 127, not 128
     static const float BYTE_CENTER = 127.0 / 255.0;
 
-    [unroll]
-    for (int i = 0; i < 4; i++)
-    {
-        int2 texel = int2(center + offsets[i]);
-        texel = clamp(texel, int2(0, 0), int2(bounds) - 1);
-        float2 motion = MotionVectorTexture.Load(int3(texel, 0)).rg;
-        float2 vel = (motion - BYTE_CENTER) * 20.0;
-        float spd = length(vel);
+    // Sample radii - close, medium, far
+    static const float RADII[3] = { 4.0, 12.0, 24.0 };
+    // Falloff multipliers - closer samples contribute more
+    static const float FALLOFF[3] = { 1.0, 0.6, 0.3 };
 
-        if (spd > bestSpeed)
+    // 4 corner directions for each radius
+    static const float2 DIRS[4] = {
+        float2(-1, -1),
+        float2( 1, -1),
+        float2(-1,  1),
+        float2( 1,  1)
+    };
+
+    float2 bestVelocity = float2(0, 0);
+    float bestWeightedSpeed = 0;
+
+    [unroll]
+    for (int r = 0; r < 3; r++)
+    {
+        float radius = RADII[r];
+        float falloff = FALLOFF[r];
+
+        [unroll]
+        for (int d = 0; d < 4; d++)
         {
-            bestSpeed = spd;
-            bestVelocity = vel;
+            float2 offset = DIRS[d] * radius;
+            int2 texel = int2(center + offset);
+            texel = clamp(texel, int2(0, 0), int2(bounds) - 1);
+
+            float2 motion = MotionVectorTexture.Load(int3(texel, 0)).rg;
+            float2 vel = (motion - BYTE_CENTER) * 20.0;
+            float spd = length(vel);
+
+            // Apply falloff - distant motion counts less
+            float weightedSpeed = spd * falloff;
+
+            if (weightedSpeed > bestWeightedSpeed)
+            {
+                bestWeightedSpeed = weightedSpeed;
+                // Scale velocity by falloff to create gradient effect
+                bestVelocity = vel * falloff;
+            }
         }
     }
 
@@ -427,8 +445,7 @@ float2 SampleStrongestMotion(float2 center, float2 bounds)
 // Debug motion vectors: arrows showing direction and magnitude
 float4 DebugMotionVectorsPS(PixelShaderInput input) : COLOR
 {
-    static const float CELL_SIZE = 48.0;
-    static const float GRID_WIDTH = 1.0;
+    static const float CELL_SIZE = 24.0;
 
     float2 pixelPos = input.UV * WorldsBounds;
     float2 cellIndex = floor(pixelPos / CELL_SIZE);
@@ -436,44 +453,32 @@ float4 DebugMotionVectorsPS(PixelShaderInput input) : COLOR
     float2 localPos = pixelPos - cellCenter;
 
     float3 bgColor = float3(0.02, 0.02, 0.02);
-    float3 gridColor = float3(0.08, 0.08, 0.08);
 
-    // Draw grid lines
-    float2 cellPos = fmod(pixelPos, CELL_SIZE);
-    bool onGrid = cellPos.x < GRID_WIDTH || cellPos.y < GRID_WIDTH;
-
-    // Sample strongest motion from 4 neighborhood points
+    // Sample strongest motion from multi-radius neighborhood
     float2 velocity = SampleStrongestMotion(cellCenter, WorldsBounds);
     float speed = length(velocity);
 
-    // No motion: draw small white dot in center
+    // No motion: white dot
     if (speed < 0.01)
     {
-        float dotDist = length(localPos);
-        if (dotDist < 2.0)
-            return float4(0.4, 0.4, 0.4, 1.0);  // White dot
-        return float4(onGrid ? gridColor : bgColor, 1.0);
+        float dotDist = length(localPos) - 2.0;
+        float dotAlpha = 1.0 - smoothstep(-1.0, 1.0, dotDist);
+        return float4(lerp(bgColor, float3(0.4, 0.4, 0.4), dotAlpha), 1.0);
     }
 
-    // Arrow direction (screen coords, Y+ is down)
+    // Motion: arrow that scales with speed (6 to 24)
     float angle = atan2(velocity.y, velocity.x);
-    // Bigger arrows: increased multiplier
-    float arrowLength = min(sqrt(speed) * 10.0, CELL_SIZE * 0.85);
-    float headSize = arrowLength * 0.45;
+    float arrowLength = 6.0 + saturate(speed / 3.0) * 18.0;
+    float headSize = 4.0 + saturate(speed / 3.0) * 8.0;
 
     float2 rotatedPos = RotatePoint(localPos, -angle);
     rotatedPos.x += arrowLength * 0.35;
 
     float dist = ArrowSDF(rotatedPos, arrowLength, headSize);
-
     float3 arrowColor = AngleToColor(angle + PI);
-    float brightness = 0.7 + saturate(speed / 10.0) * 0.3;
-    arrowColor *= brightness;
-
     float alpha = 1.0 - smoothstep(-1.0, 1.0, dist);
 
-    float3 baseColor = onGrid ? gridColor : bgColor;
-    return float4(lerp(baseColor, arrowColor, alpha), 1.0);
+    return float4(lerp(bgColor, arrowColor, alpha), 1.0);
 }
 
 technique InitializeJFA
