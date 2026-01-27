@@ -45,9 +45,9 @@ public class MegaLightsScene : Scene
     private const float OrbitRadius = 320f;
     private const int LightCount = 12;
 
-    private const float BoxSize = 50f;
-    private const float ColumnSpacing = 80f;
-    private const int MaxBoxesPerColumn = 18;
+    private const float BoxSize = 75f;
+    private const float ColumnSpacing = 150f;
+    private const int MaxBoxesPerColumn = 12;
 
     public override void SetupECS()
     {
@@ -147,19 +147,23 @@ public class MegaLightsScene : Scene
             alpha = Math.Clamp(alpha, 0f, 1.0f);
             byte alphaByte = (byte)(alpha * 255);
 
+            // Each column farther gains +1 top and +1 bottom box
+            int extraBoxes = col - 1;
+            int boxesInColumn = MaxBoxesPerColumn + extraBoxes * 2;
+
             // Left column
             float leftX = center.X - distanceFromCenter;
-            for (int row = 0; row < MaxBoxesPerColumn; row++)
+            for (int row = 0; row < boxesInColumn; row++)
             {
-                float y = center.Y - (MaxBoxesPerColumn * BoxSize / 2) + row * BoxSize + BoxSize / 2;
+                float y = center.Y - (boxesInColumn * BoxSize / 2) + row * BoxSize + BoxSize / 2;
                 occluderList.Add(CreateOccluder(new Vector2(leftX, y), BoxSize, alphaByte));
             }
 
             // Right column
             float rightX = center.X + distanceFromCenter;
-            for (int row = 0; row < MaxBoxesPerColumn; row++)
+            for (int row = 0; row < boxesInColumn; row++)
             {
-                float y = center.Y - (MaxBoxesPerColumn * BoxSize / 2) + row * BoxSize + BoxSize / 2;
+                float y = center.Y - (boxesInColumn * BoxSize / 2) + row * BoxSize + BoxSize / 2;
                 occluderList.Add(CreateOccluder(new Vector2(rightX, y), BoxSize, alphaByte));
             }
         }
