@@ -13,6 +13,8 @@ float DebugRays;
 float FrameCount;
 float CurrentWeight;
 
+float DebugEdges;
+
 static const float PI = 3.14159265359;
 
 struct VertexShaderInput
@@ -107,6 +109,123 @@ float4 Spatial_PS(PixelShaderInput input) : SV_Target0
     return color;
 }
 
+// Edge reconstruction: walk emissive alpha to find edge distance, blend emissive color
+static const float EDGE_BLEND = 0.25;
+static const float INNER_MARGIN = 12.0;  // max texels from edge (on surface)
+static const float OUTER_MARGIN = 1.0;  // max texels from edge (off surface)
+static const int   MAX_STEPS = 24;       // walk steps (sample every 2 texels = 8 texel reach)
+static const float DIAG = 0.707;
+
+// 8 directions: cardinal + diagonal
+static const float2 DIRS[8] = {
+    float2( 1, 0), float2(-1, 0), float2(0,  1), float2(0, -1),
+    float2( 1, 1) * DIAG, float2(-1, 1) * DIAG,
+    float2( 1,-1) * DIAG, float2(-1,-1) * DIAG
+};
+
+float WalkToEdge(float2 uv, float2 texelSize, bool onSurface)
+{
+    // Walk 8 directions, find closest edge (where alpha flips)
+    float minDist = INNER_MARGIN + 1.0;
+
+    [unroll]
+    for (int d = 0; d < 8; d++)
+    {
+        [unroll]
+        for (int i = 1; i <= MAX_STEPS; i++)
+        {
+            float dist = i * 2.0;
+            float2 sampleUV = uv + DIRS[d] * texelSize * dist;
+            float a = EmissiveTexture.Sample(Sampler, sampleUV).a;
+
+            // On surface: look for alpha dropping (leaving geometry)
+            // Off surface: look for alpha appearing (entering geometry)
+            bool hitEdge = onSurface ? (a < 0.5) : (a >= 0.5);
+
+            if (hitEdge)
+            {
+                // Diagonal steps are further apart
+                float actualDist = (d >= 4) ? dist * DIAG : dist;
+                minDist = min(minDist, actualDist);
+                break;
+            }
+        }
+    }
+    return minDist;
+}
+
+float4 EdgeReconstruct_PS(PixelShaderInput input) : SV_Target0
+{
+    float2 uv = input.UV;
+    float2 texelSize = 1.0 / OutputSize;
+
+    float3 upsampled = InputTexture.Sample(Sampler, uv).rgb;
+    float4 emissive = EmissiveTexture.Sample(Sampler, uv);
+
+    bool onSurface = emissive.a > 0.5;
+    float margin = onSurface ? INNER_MARGIN : OUTER_MARGIN;
+
+    // Walk emissive alpha to find distance to nearest edge
+    float edgeDist = WalkToEdge(uv, texelSize, onSurface);
+
+    // Far from edge: no correction
+    if (edgeDist > margin)
+    {
+        if (DebugEdges > 0.5)
+            return float4(0, 0, 0, 1);
+        return float4(upsampled, 1.0);
+    }
+
+    // Blend factor: 1 at edge, 0 at margin
+    float blendFactor = 1.0 - (edgeDist / margin);
+    blendFactor = smoothstep(0.0, 1.0, blendFactor) * EDGE_BLEND;
+
+    // Get emissive color (un-premultiply if needed)
+    float3 emColor = emissive.a > 0.001 ? emissive.rgb / emissive.a : float3(0, 0, 0);
+
+    // On surface: blend emissive in near edges
+    // Off surface: pull in nearest surface emissive color
+    float3 edgeColor;
+    if (onSurface)
+    {
+        edgeColor = emColor;
+    }
+    else
+    {
+        // Sample neighbors to find nearest surface color
+        float3 surfaceColor = float3(0, 0, 0);
+        float surfaceWeight = 0.0;
+
+        [unroll]
+        for (int d = 0; d < 8; d++)
+        {
+            [unroll]
+            for (int i = 1; i <= MAX_STEPS; i++)
+            {
+                float2 sampleUV = uv + DIRS[d] * texelSize * i * 2.0;
+                float4 em = EmissiveTexture.Sample(Sampler, sampleUV);
+                if (em.a >= 0.5)
+                {
+                    float3 c = em.rgb / em.a;
+                    float w = 1.0 / (i * i); // closer = more weight
+                    surfaceColor += c * w;
+                    surfaceWeight += w;
+                    break;
+                }
+            }
+        }
+        edgeColor = surfaceWeight > 0.0 ? surfaceColor / surfaceWeight : upsampled;
+    }
+
+    float3 result = lerp(upsampled, edgeColor, blendFactor);
+
+    // Debug: edge proximity as white
+    if (DebugEdges > 0.5)
+        return float4(blendFactor, blendFactor, blendFactor, 1.0);
+
+    return float4(max(result, 0.0), 1.0);
+}
+
 // Temporal pass - color difference based accumulation
 float4 Temporal_PS(PixelShaderInput input) : SV_Target0
 {
@@ -137,7 +256,7 @@ float4 Copy_PS(PixelShaderInput input) : SV_Target0
     return InputTexture.Sample(Sampler, input.UV);
 }
 
-technique Spatial
+technique UDR3_Stage1 // Spatial - Lanczos upsampling
 {
     pass P0
     {
@@ -146,7 +265,16 @@ technique Spatial
     }
 }
 
-technique Temporal
+technique UDR3_Stage2 // Edge reconstruction
+{
+    pass P0
+    {
+        VertexShader = compile vs_5_0 MainVS();
+        PixelShader = compile ps_5_0 EdgeReconstruct_PS();
+    }
+}
+
+technique UDR3_Stage3 // Temporal accumulation
 {
     pass P0
     {
@@ -155,7 +283,7 @@ technique Temporal
     }
 }
 
-technique Copy
+technique UDR3_Stage4 // Copy to history
 {
     pass P0
     {

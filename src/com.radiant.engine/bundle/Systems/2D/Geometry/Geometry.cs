@@ -35,7 +35,7 @@ public class Geometry : core.System
     private int AbsorptionCount;
 
     // Motion vector tracking with N-frame history (weighted: recent frames have more influence)
-    public int MotionHistoryFrames = 4;
+    public int MotionHistoryFrames = 2;
     private ConcurrentDictionary<int, Queue<Vector3>> PositionHistory = new();
     
     private List<(Vector2 pos, Vector2 size, Vector2 velocity, bool isCircle, float radius)>[] MotionShapesByThread;

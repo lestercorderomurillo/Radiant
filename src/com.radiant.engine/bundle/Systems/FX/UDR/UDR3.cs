@@ -11,7 +11,11 @@ public class UDR3 : core.System
     // Temporal parameters
     public int FramesToAccumulate = 6;
 
+
+    private int DebugEdges = 0;
+
     private RenderTarget2D SpatialTexture;
+    private RenderTarget2D EdgeTexture;
     private RenderTarget2D TemporalTexture;
     private RenderTarget2D LastFrameTexture;
     private Vector2 OutputSize;
@@ -44,6 +48,14 @@ public class UDR3 : core.System
     private void CreateRenderTargets()
     {
         SpatialTexture = new RenderTarget2D(
+            Renderer.Device,
+            (int)OutputSize.X,
+            (int)OutputSize.Y,
+            false,
+            SurfaceFormat.HalfVector4,
+            DepthFormat.None);
+
+        EdgeTexture = new RenderTarget2D(
             Renderer.Device,
             (int)OutputSize.X,
             (int)OutputSize.Y,
@@ -91,7 +103,7 @@ public class UDR3 : core.System
         Renderer
             .Reset()
             .SetShader("UDR/UDR3")
-            .SetTechnique("Spatial")
+            .SetTechnique("UDR3_Stage1")
             .Configure(SamplerState.PointClamp)
             .SetTarget(SpatialTexture)
             .Clear(Color.Black)
@@ -101,7 +113,27 @@ public class UDR3 : core.System
             .Commit()
             .SetTarget(null);
 
-        // Pass 2: Temporal accumulation
+        // Pass 2: Edge reconstruction (SDF + motion vector guided sharpening)
+        Renderer
+            .Reset()
+            .SetShader("UDR/UDR3")
+            .SetTechnique("UDR3_Stage2")
+            .Configure(SamplerState.LinearClamp)
+            .SetTarget(EdgeTexture)
+            .Clear(Color.Black)
+            .SetParameter("InputTexture", SpatialTexture)
+            .SetParameter("EmissiveTexture", Geometry?.EmissiveTexture)
+            .SetParameter("SDFTexture", Geometry?.SDFTexture)
+            .SetParameter("MotionVectorTexture", Geometry?.MotionVectorTexture)
+            .SetParameter("InputSize", inputSize)
+            .SetParameter("OutputSize", OutputSize)
+
+            .SetParameter("DebugEdges", (float)DebugEdges)
+            .Draw()
+            .Commit()
+            .SetTarget(null);
+
+        // Pass 3: Temporal accumulation
         // Weight for current frame: 1/N where N = min(FrameIndex+1, FramesToAccumulate)
         int effectiveFrames = Math.Min(FrameIndex + 1, FramesToAccumulate);
         float currentWeight = 1.0f / effectiveFrames;
@@ -109,11 +141,11 @@ public class UDR3 : core.System
         Renderer
             .Reset()
             .SetShader("UDR/UDR3")
-            .SetTechnique("Temporal")
+            .SetTechnique("UDR3_Stage3")
             .Configure(SamplerState.LinearClamp)
             .SetTarget(TemporalTexture)
             .Clear(Color.Black)
-            .SetParameter("InputTexture", SpatialTexture)
+            .SetParameter("InputTexture", EdgeTexture)
             .SetParameter("LastFrame", LastFrameTexture)
             .SetParameter("MotionVectorTexture", Geometry?.MotionVectorTexture)
             .SetParameter("OutputSize", OutputSize)
@@ -122,11 +154,11 @@ public class UDR3 : core.System
             .Commit()
             .SetTarget(null);
 
-        // Pass 3: Copy to LastFrame for next frame
+        // Pass 4: Copy to LastFrame for next frame
         Renderer
             .Reset()
             .SetShader("UDR/UDR3")
-            .SetTechnique("Copy")
+            .SetTechnique("UDR3_Stage4")
             .Configure(SamplerState.LinearClamp)
             .SetTarget(LastFrameTexture)
             .Clear(Color.Black)
@@ -142,6 +174,8 @@ public class UDR3 : core.System
         Gizmos?.Set("UDR3", $"Input Size: {input.Width}x{input.Height}");
         Gizmos?.Set("UDR3", $"Output Size: {OutputSize.X}x{OutputSize.Y}");
         Gizmos?.Set("UDR3", $"Frames to Accumulate: {FramesToAccumulate} (current: {effectiveFrames})");
+        string[] debugNames = { "OFF", "Edge Mask" };
+        Gizmos?.Set("UDR3", $"Debug Edges: {debugNames[DebugEdges]} [K]");
     }
 
     private void HandleInput()
@@ -151,6 +185,11 @@ public class UDR3 : core.System
         if (key.IsKeyDown(Keys.F4) && !PrevKeyState.IsKeyDown(Keys.F4))
         {
             UDRQuality.Cycle();
+        }
+
+        if (key.IsKeyDown(Keys.K) && !PrevKeyState.IsKeyDown(Keys.K))
+        {
+            DebugEdges = (DebugEdges + 1) % 2; // 0=off, 1=edge mask
         }
 
         PrevKeyState = key;
@@ -183,6 +222,7 @@ public class UDR3 : core.System
     private void DisposeRenderTargets()
     {
         SpatialTexture?.Dispose();
+        EdgeTexture?.Dispose();
         TemporalTexture?.Dispose();
         LastFrameTexture?.Dispose();
     }
@@ -193,6 +233,7 @@ public class UDR3 : core.System
 
         DisposeRenderTargets();
         SpatialTexture = null;
+        EdgeTexture = null;
         TemporalTexture = null;
         LastFrameTexture = null;
     }
