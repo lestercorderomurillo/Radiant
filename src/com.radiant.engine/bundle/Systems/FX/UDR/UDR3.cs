@@ -125,6 +125,7 @@ public class UDR3 : core.System
             .SetParameter("EmissiveTexture", Geometry?.EmissiveTexture)
             .SetParameter("SDFTexture", Geometry?.SDFTexture)
             .SetParameter("MotionVectorTexture", Geometry?.MotionVectorTexture)
+            .SetParameter("AbsorptionTexture", Geometry?.AbsorptionTexture)
             .SetParameter("InputSize", inputSize)
             .SetParameter("OutputSize", OutputSize)
 

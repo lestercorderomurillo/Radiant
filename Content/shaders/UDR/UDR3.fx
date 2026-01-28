@@ -5,6 +5,7 @@ Texture2D EmissiveTexture : register(t1);
 Texture2D SDFTexture : register(t2);
 Texture2D LastFrame : register(t3);
 Texture2D MotionVectorTexture : register(t4);
+Texture2D AbsorptionTexture : register(t5);
 SamplerState Sampler : register(s0);
 
 float2 InputSize;
@@ -178,17 +179,15 @@ float4 EdgeReconstruct_PS(PixelShaderInput input) : SV_Target0
 
     // Blend factor: 1 at edge, 0 at margin
     float blendFactor = 1.0 - (edgeDist / margin);
-    blendFactor = smoothstep(0.0, 1.0, blendFactor) * EDGE_BLEND;
-
-    // Get emissive color (un-premultiply if needed)
-    float3 emColor = emissive.a > 0.001 ? emissive.rgb / emissive.a : float3(0, 0, 0);
+    float absorption = AbsorptionTexture.Sample(Sampler, uv).a;
+    blendFactor = smoothstep(0.0, 1.0, blendFactor) * EDGE_BLEND * absorption;
 
     // On surface: blend emissive in near edges
     // Off surface: pull in nearest surface emissive color
     float3 edgeColor;
     if (onSurface)
     {
-        edgeColor = emColor;
+        edgeColor = emissive.rgb;
     }
     else
     {
@@ -206,9 +205,8 @@ float4 EdgeReconstruct_PS(PixelShaderInput input) : SV_Target0
                 float4 em = EmissiveTexture.Sample(Sampler, sampleUV);
                 if (em.a >= 0.5)
                 {
-                    float3 c = em.rgb / em.a;
-                    float w = 1.0 / (i * i); // closer = more weight
-                    surfaceColor += c * w;
+                    float w = 1.0 / (i * i);
+                    surfaceColor += em.rgb * w;
                     surfaceWeight += w;
                     break;
                 }
