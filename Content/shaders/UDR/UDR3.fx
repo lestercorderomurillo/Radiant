@@ -111,10 +111,10 @@ float4 Spatial_PS(PixelShaderInput input) : SV_Target0
 }
 
 // Edge reconstruction: walk emissive alpha to find edge distance, blend emissive color
-static const float EDGE_BLEND = 0.25;
-static const float INNER_MARGIN = 12.0;  // max texels from edge (on surface)
+static const float EDGE_BLEND = 0.21;
+static const float INNER_MARGIN = 8.0;  // max texels from edge (on surface)
 static const float OUTER_MARGIN = 1.0;  // max texels from edge (off surface)
-static const int   MAX_STEPS = 24;       // walk steps (sample every 2 texels = 8 texel reach)
+static const int   MAX_STEPS = 24;      // walk steps (sample every 2 texels = 8 texel reach)
 static const float DIAG = 0.707;
 
 // 8 directions: cardinal + diagonal
@@ -185,15 +185,19 @@ float4 EdgeReconstruct_PS(PixelShaderInput input) : SV_Target0
     // On surface: blend emissive in near edges
     // Off surface: pull in nearest surface emissive color
     float3 edgeColor;
+
     if (onSurface)
     {
         edgeColor = emissive.rgb;
+        // Transparent surfaces: reduce blend by absorption alpha to avoid darkening inside
+        blendFactor *= absorption;
     }
     else
     {
-        // Sample neighbors to find nearest surface color
+        // Sample neighbors to find nearest surface color + its absorption
         float3 surfaceColor = float3(0, 0, 0);
         float surfaceWeight = 0.0;
+        float surfaceAbsorption = 0.0;
 
         [unroll]
         for (int d = 0; d < 8; d++)
@@ -207,12 +211,17 @@ float4 EdgeReconstruct_PS(PixelShaderInput input) : SV_Target0
                 {
                     float w = 1.0 / (i * i);
                     surfaceColor += em.rgb * w;
+                    surfaceAbsorption += AbsorptionTexture.Sample(Sampler, sampleUV).a * w;
                     surfaceWeight += w;
                     break;
                 }
             }
         }
         edgeColor = surfaceWeight > 0.0 ? surfaceColor / surfaceWeight : upsampled;
+
+        // Transparent nearby surfaces: reduce outer edge correction
+        float nearAbsorption = surfaceWeight > 0.0 ? surfaceAbsorption / surfaceWeight : 0.0;
+        blendFactor *= nearAbsorption;
     }
 
     float3 result = lerp(upsampled, edgeColor, blendFactor);
@@ -254,6 +263,30 @@ float4 Copy_PS(PixelShaderInput input) : SV_Target0
     return InputTexture.Sample(Sampler, input.UV);
 }
 
+// RCAS - Robust Contrast-Adaptive Sharpening (simple unsharp mask style)
+static const float RCAS_STRENGTH = 0.9;
+
+float4 RCAS_PS(PixelShaderInput input) : SV_Target0
+{
+    float2 uv = input.UV;
+    float2 texelSize = 1.0 / OutputSize;
+
+    // 5-tap cross
+    float3 c = InputTexture.Sample(Sampler, uv).rgb;
+    float3 n = InputTexture.Sample(Sampler, uv + float2(0, -texelSize.y)).rgb;
+    float3 s = InputTexture.Sample(Sampler, uv + float2(0,  texelSize.y)).rgb;
+    float3 e = InputTexture.Sample(Sampler, uv + float2( texelSize.x, 0)).rgb;
+    float3 w = InputTexture.Sample(Sampler, uv + float2(-texelSize.x, 0)).rgb;
+
+    // Local average
+    float3 avg = (n + s + e + w) * 0.25;
+
+    // Sharpen: center + (center - average) * strength
+    float3 result = c + (c - avg) * RCAS_STRENGTH;
+
+    return float4(max(result, 0.0), 1.0);
+}
+
 technique UDR3_Stage1 // Spatial - Lanczos upsampling
 {
     pass P0
@@ -287,5 +320,14 @@ technique UDR3_Stage4 // Copy to history
     {
         VertexShader = compile vs_5_0 MainVS();
         PixelShader = compile ps_5_0 Copy_PS();
+    }
+}
+
+technique UDR3_Stage5 // RCAS sharpening
+{
+    pass P0
+    {
+        VertexShader = compile vs_5_0 MainVS();
+        PixelShader = compile ps_5_0 RCAS_PS();
     }
 }

@@ -34,7 +34,7 @@ PixelShaderInput MainVS(VertexShaderInput input)
     return output;
 }
 
-// MRT Output - matching GLSL reference
+// MRT Output
 struct PixelShaderOutput
 {
     float4 Radiance     : SV_Target0;  // RGB = radiance
@@ -49,7 +49,6 @@ float2 TransformProbeToFrustum(float2 probe)
     ) + FrustumOffset;
 }
 
-// sRGB to Linear conversion (matching GLSL LINEAR macro)
 float3 ToLinear(float3 srgb) { return pow(abs(srgb), 2.2); }
 
 PixelShaderOutput MainPS(PixelShaderInput input)

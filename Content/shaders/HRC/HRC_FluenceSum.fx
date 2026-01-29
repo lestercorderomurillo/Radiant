@@ -24,6 +24,7 @@ PixelShaderInput MainVS(VertexShaderInput input)
     PixelShaderInput output;
     output.Position = float4(input.Position, 1.0);
     output.UV = input.TexCoord;
+    
     return output;
 }
 

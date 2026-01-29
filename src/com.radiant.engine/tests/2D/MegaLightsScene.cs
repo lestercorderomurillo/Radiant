@@ -32,7 +32,7 @@ public class MegaLightsScene : Scene
 
     private HRCGI HRCGISystem;
     private RCGI RCGISystem;
-    private BilinearSystem BilinearSystem;
+    private Bilinear BilinearSystem;
     private UDR1 UDR1System;
     private UDR2 UDR2System;
     private UDR3 UDR3System;
@@ -41,13 +41,13 @@ public class MegaLightsScene : Scene
     private bool UseHRCGI = true;
     private int UDRMode = 0;  // 0 = Bilinear, 1 = UDR1, 2 = UDR2, 3 = UDR3
 
-    private const float RotationSpeed = 0.10f;
-    private const float OrbitRadius = 320f;
-    private const int LightCount = 12;
+    private const float RotationSpeed = 0.12f;
+    private const float OrbitRadius = 360f;
+    private const int LightCount = 14;
 
-    private const float BoxSize = 75f;
-    private const float ColumnSpacing = 150f;
-    private const int MaxBoxesPerColumn = 12;
+    private const float BoxSize = 80f;
+    private const float ColumnSpacing = 120f;
+    private const int MaxBoxesPerColumn = 10;
 
     public override void SetupECS()
     {
@@ -55,7 +55,7 @@ public class MegaLightsScene : Scene
         ECS.AddSystem<Geometry>();
         HRCGISystem = ECS.AddSystem<HRCGI>();
         RCGISystem = ECS.AddSystem<RCGI>(enabled: false);
-        BilinearSystem = ECS.AddSystem<BilinearSystem>();
+        BilinearSystem = ECS.AddSystem<Bilinear>();
         UDR1System = ECS.AddSystem<UDR1>(enabled: false);
         UDR2System = ECS.AddSystem<UDR2>(enabled: false);
         UDR3System = ECS.AddSystem<UDR3>(enabled: false);

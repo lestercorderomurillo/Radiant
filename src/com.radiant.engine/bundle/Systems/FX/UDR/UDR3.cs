@@ -9,7 +9,7 @@ namespace com.radiant.engine.bundle;
 public class UDR3 : core.System
 {
     // Temporal parameters
-    public int FramesToAccumulate = 6;
+    public int FramesToAccumulate = 4;
 
 
     private int DebugEdges = 0;
@@ -155,7 +155,7 @@ public class UDR3 : core.System
             .Commit()
             .SetTarget(null);
 
-        // Pass 4: Copy to LastFrame for next frame
+        // Pass 4: Copy to LastFrame for next frame (unsharpened)
         Renderer
             .Reset()
             .SetShader("UDR/UDR3")
@@ -164,6 +164,20 @@ public class UDR3 : core.System
             .SetTarget(LastFrameTexture)
             .Clear(Color.Black)
             .SetParameter("InputTexture", TemporalTexture)
+            .Draw()
+            .Commit()
+            .SetTarget(null);
+
+        // Pass 5: RCAS sharpening (reuse EdgeTexture for output)
+        Renderer
+            .Reset()
+            .SetShader("UDR/UDR3")
+            .SetTechnique("UDR3_Stage5")
+            .Configure(SamplerState.PointClamp)
+            .SetTarget(EdgeTexture)
+            .Clear(Color.Black)
+            .SetParameter("InputTexture", TemporalTexture)
+            .SetParameter("OutputSize", OutputSize)
             .Draw()
             .Commit()
             .SetTarget(null);
@@ -202,11 +216,11 @@ public class UDR3 : core.System
             return;
 
         Renderer.SpriteBatch.Begin(SpriteSortMode.Immediate, BlendState.AlphaBlend, SamplerState.LinearClamp);
-        Renderer.SpriteBatch.Draw(TemporalTexture, Renderer.Device.Viewport.Bounds, Color.White);
+        Renderer.SpriteBatch.Draw(EdgeTexture, Renderer.Device.Viewport.Bounds, Color.White);
         Renderer.SpriteBatch.End();
     }
 
-    public RenderTarget2D GetOutput() => TemporalTexture;
+    public RenderTarget2D GetOutput() => EdgeTexture;
 
     public override void OnResize()
     {

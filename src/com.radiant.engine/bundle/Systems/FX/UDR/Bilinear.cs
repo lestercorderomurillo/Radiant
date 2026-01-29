@@ -6,7 +6,7 @@ using Microsoft.Xna.Framework.Input;
 
 namespace com.radiant.engine.bundle;
 
-public class BilinearSystem : core.System
+public class Bilinear : core.System
 {
     private Func<Texture2D> InputSource;
     private GizmosRenderer Gizmos;
