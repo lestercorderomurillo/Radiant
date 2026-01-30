@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using com.radiant.engine.core;
@@ -36,13 +35,8 @@ public class Geometry : core.System
 
     // Motion vector tracking with N-frame history (weighted: recent frames have more influence)
     public int MotionHistoryFrames = 2;
-    private ConcurrentDictionary<int, Queue<Vector3>> PositionHistory = new();
 
     private List<(Vector2 pos, Vector2 size, Vector2 velocity, bool isCircle, float radius)>[] MotionShapesByThread;
-
-    // Reusable collections to avoid per-frame allocations
-    private ConcurrentDictionary<int, bool> _activeEntities = new();
-    private List<int> _toRemove = new();
 
     private enum DebugMode { None, Emissive, Absorption, SDF, JFADirection, JFARaw, MotionVectors }
     private DebugMode CurrentDebug = DebugMode.None;
@@ -131,7 +125,7 @@ public class Geometry : core.System
             .SetTechnique("InitializeJFA")
             .SetTarget(JFATexture1)
             .Clear(Color.Black)
-            .SetParameter("EmissiveTexture", EmissiveTexture)
+            .SetParameter("EmissiveTexture", AbsorptionTexture)
             .SetParameter("WorldsBounds", SDFBounds)
             .SetParameter("ScreenDiagonal", ScreenDiagonal)
             .Draw()
@@ -145,7 +139,7 @@ public class Geometry : core.System
             .SetTechnique("InitializeJFAInterior")
             .SetTarget(JFATextureInterior1)
             .Clear(Color.Black)
-            .SetParameter("EmissiveTexture", EmissiveTexture)
+            .SetParameter("EmissiveTexture", AbsorptionTexture)
             .SetParameter("WorldsBounds", SDFBounds)
             .SetParameter("ScreenDiagonal", ScreenDiagonal)
             .Draw()
@@ -222,7 +216,6 @@ public class Geometry : core.System
             AbsorptionShapesByThread[i].Clear();
             MotionShapesByThread[i].Clear();
         }
-        _activeEntities.Clear();
 
         // Single query for rectangles - collect emissive, absorption, and motion
         Scene.ECS.ForEach<Transform, Rectangle2D, Material>((int threadIdx, int entity, ref Transform transform, ref Rectangle2D rect, ref Material mat) =>
@@ -245,15 +238,6 @@ public class Geometry : core.System
                     AbsorptionShapesByThread[threadIdx].Add(new ShapeData(position, rect.Size, mat.Absorption, transform.Position.Z));
                 }
             }
-
-            // Motion (track all entities for history)
-            _activeEntities[entity] = true;
-            Vector2 velocity = CalculateVelocityFromHistory(entity, transform.Position);
-            if (velocity.LengthSquared() > 0.0001f)
-            {
-                MotionShapesByThread[threadIdx].Add((position, rect.Size, velocity, false, 0));
-            }
-            UpdatePositionHistory(entity, transform.Position);
         });
 
         // Single query for circles
@@ -277,15 +261,6 @@ public class Geometry : core.System
                     AbsorptionShapesByThread[threadIdx].Add(new ShapeData(center, circle.Radius, mat.Absorption, transform.Position.Z));
                 }
             }
-
-            // Motion
-            _activeEntities[entity] = true;
-            Vector2 velocity = CalculateVelocityFromHistory(entity, transform.Position);
-            if (velocity.LengthSquared() > 0.0001f)
-            {
-                MotionShapesByThread[threadIdx].Add((center, Vector2.Zero, velocity, true, circle.Radius));
-            }
-            UpdatePositionHistory(entity, transform.Position);
         });
 
         // Single query for triangles (no motion for triangles currently)
@@ -312,15 +287,28 @@ public class Geometry : core.System
             }
         });
 
-        // Clean up stale motion history
-        _toRemove.Clear();
-        foreach (var kvp in PositionHistory)
+        // Motion tracking - only for entities with MotionTrackable component
+        Scene.ECS.ForEach<Transform, Rectangle2D, MotionTrackable>((int threadIdx, int entity, ref Transform transform, ref Rectangle2D rect, ref MotionTrackable motion) =>
         {
-            if (!_activeEntities.ContainsKey(kvp.Key))
-                _toRemove.Add(kvp.Key);
-        }
-        foreach (var key in _toRemove)
-            PositionHistory.TryRemove(key, out _);
+            Vector2 position = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
+            Vector2 velocity = motion.CalculateVelocity(transform.Position, MotionHistoryFrames);
+            if (velocity.LengthSquared() > 0.0001f)
+            {
+                MotionShapesByThread[threadIdx].Add((position, rect.Size, velocity, false, 0));
+            }
+            motion.Push(transform.Position);
+        });
+
+        Scene.ECS.ForEach<Transform, Circle2D, MotionTrackable>((int threadIdx, int entity, ref Transform transform, ref Circle2D circle, ref MotionTrackable motion) =>
+        {
+            Vector2 center = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
+            Vector2 velocity = motion.CalculateVelocity(transform.Position, MotionHistoryFrames);
+            if (velocity.LengthSquared() > 0.0001f)
+            {
+                MotionShapesByThread[threadIdx].Add((center, Vector2.Zero, velocity, true, circle.Radius));
+            }
+            motion.Push(transform.Position);
+        });
 
         // Render emissive
         RenderEmissiveFromCollected();
@@ -389,57 +377,6 @@ public class Geometry : core.System
 
         var motionClear = new Color(0.5f, 0.5f, 0f, 1f);
         Renderer.Configure(BlendState.Opaque).FlushShapes(MotionVectorTexture, motionClear, "Sharp");
-    }
-
-    private Vector2 CalculateVelocityFromHistory(int entity, Vector3 currentPos)
-    {
-        if (!PositionHistory.TryGetValue(entity, out var history) || history.Count == 0)
-            return Vector2.Zero;
-
-        // Iterate queue directly - no allocation
-        Vector2 weightedVelocity = Vector2.Zero;
-        float totalWeight = 0;
-        int i = 0;
-        Vector3 prev = default;
-
-        foreach (var pos in history)
-        {
-            if (i > 0)
-            {
-                float weight = i;
-                weightedVelocity.X += (pos.X - prev.X) * weight;
-                weightedVelocity.Y += (pos.Y - prev.Y) * weight;
-                totalWeight += weight;
-            }
-            prev = pos;
-            i++;
-        }
-
-        // Final transition to current position
-        if (i > 0)
-        {
-            float weight = i;
-            weightedVelocity.X += (currentPos.X - prev.X) * weight;
-            weightedVelocity.Y += (currentPos.Y - prev.Y) * weight;
-            totalWeight += weight;
-        }
-
-        return totalWeight > 0 ? weightedVelocity / totalWeight : Vector2.Zero;
-    }
-
-    private void UpdatePositionHistory(int entity, Vector3 currentPos)
-    {
-        if (!PositionHistory.TryGetValue(entity, out var history))
-        {
-            history = new Queue<Vector3>();
-            PositionHistory[entity] = history;
-        }
-
-        history.Enqueue(currentPos);
-
-        // Keep only N frames of history
-        while (history.Count > MotionHistoryFrames)
-            history.Dequeue();
     }
 
     private void DrawShapesMerged(List<ShapeData>[] shapesByThread)
@@ -618,7 +555,7 @@ public class Geometry : core.System
             .SetShader("Geometry")
             .SetTechnique("GenerateSDFFromJFA")
             .SetTarget(SDFTexture)
-            .SetParameter("EmissiveTexture", EmissiveTexture)
+            .SetParameter("EmissiveTexture", AbsorptionTexture)
             .SetParameter("JFATexture", JFAResult)
             .SetParameter("JFATextureInterior", JFAResultInterior)
             .SetParameter("WorldsBounds", WorldBounds)

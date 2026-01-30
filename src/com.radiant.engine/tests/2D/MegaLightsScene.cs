@@ -125,6 +125,9 @@ public class MegaLightsScene : Scene
             var color = HueToRGB(hue);
 
             RotatingLightIds[i] = CreateLight(new Vector2(x, y), 25f, color);
+
+            // Add motion tracking for rotating lights (these move every frame)
+            ECS.AddComponent<MotionTrackable>(RotatingLightIds[i]);
         }
     }
 
@@ -174,6 +177,9 @@ public class MegaLightsScene : Scene
     {
         var mouse = Mouse.GetState();
         MouseLightId = CreateLight(new Vector2(mouse.X, mouse.Y), 100f, new Color(0, 0, 0, 128), Color.Black);
+
+        // Add motion tracking for mouse-controlled light
+        ECS.AddComponent<MotionTrackable>(MouseLightId);
 
         PrevMouse = mouse;
     }
@@ -260,12 +266,12 @@ public class MegaLightsScene : Scene
             float y = center.Y + OrbitRadius * MathF.Sin(angle);
 
             ref var transform = ref ECS.GetComponent<Transform>(RotatingLightIds[i]);
-            transform.Position = new Vector3(x, y, 0);
+            transform.Position = new Vector3(x, y, RotatingLightIds[i]);  // Use entity ID for Z
         }
 
         // Update mouse light (always on top)
         ref var mouseTransform = ref ECS.GetComponent<Transform>(MouseLightId);
-        mouseTransform.Position = new Vector3(mouse.X, mouse.Y, ECS.EntityCount + 1);
+        mouseTransform.Position = new Vector3(mouse.X, mouse.Y, 999999f);
 
         // Only allow spawning when window is focused
         if (Renderer.Window.IsActive)
