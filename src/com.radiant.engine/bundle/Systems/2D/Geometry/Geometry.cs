@@ -233,16 +233,10 @@ public class Geometry : core.System
 
             if (inBounds)
             {
-                // Emissive
-                if (mat.Emissive.A > 0)
+                // Emissive (uses pre-cached EmissiveScaled)
+                if (mat.Emissive.A > 0 && (mat.Emissive.R > 0 || mat.Emissive.G > 0 || mat.Emissive.B > 0))
                 {
-                    float intensity = mat.Emissive.A / 255f;
-                    Color emissive = new Color(
-                        (int)(mat.Emissive.R * intensity),
-                        (int)(mat.Emissive.G * intensity),
-                        (int)(mat.Emissive.B * intensity),
-                        mat.Albedo.A);
-                    EmissiveShapesByThread[threadIdx].Add(new ShapeData(position, rect.Size, emissive, transform.Position.Z));
+                    EmissiveShapesByThread[threadIdx].Add(new ShapeData(position, rect.Size, mat.EmissiveScaled, transform.Position.Z));
                 }
 
                 // Absorption
@@ -271,16 +265,10 @@ public class Geometry : core.System
 
             if (inBounds)
             {
-                // Emissive
-                if (mat.Emissive.A > 0)
+                // Emissive (uses pre-cached EmissiveScaled)
+                if (mat.Emissive.A > 0 && (mat.Emissive.R > 0 || mat.Emissive.G > 0 || mat.Emissive.B > 0))
                 {
-                    float intensity = mat.Emissive.A / 255f;
-                    Color emissive = new Color(
-                        (int)(mat.Emissive.R * intensity),
-                        (int)(mat.Emissive.G * intensity),
-                        (int)(mat.Emissive.B * intensity),
-                        mat.Emissive.A);
-                    EmissiveShapesByThread[threadIdx].Add(new ShapeData(center, circle.Radius, emissive, transform.Position.Z));
+                    EmissiveShapesByThread[threadIdx].Add(new ShapeData(center, circle.Radius, mat.EmissiveScaled, transform.Position.Z));
                 }
 
                 // Absorption
@@ -311,16 +299,10 @@ public class Geometry : core.System
 
             ShapeType type = tri.Bordered ? ShapeType.TriangleBorder : ShapeType.Triangle;
 
-            // Emissive
-            if (mat.Emissive.A > 0)
+            // Emissive (uses pre-cached EmissiveScaled)
+            if (mat.Emissive.A > 0 && (mat.Emissive.R > 0 || mat.Emissive.G > 0 || mat.Emissive.B > 0))
             {
-                float intensity = mat.Emissive.A / 255f;
-                Color emissive = new Color(
-                    (int)(mat.Emissive.R * intensity),
-                    (int)(mat.Emissive.G * intensity),
-                    (int)(mat.Emissive.B * intensity),
-                    mat.Albedo.A);
-                EmissiveShapesByThread[threadIdx].Add(new ShapeData(position, tri.Size, emissive, transform.Position.Z, type));
+                EmissiveShapesByThread[threadIdx].Add(new ShapeData(position, tri.Size, mat.EmissiveScaled, transform.Position.Z, type));
             }
 
             // Absorption

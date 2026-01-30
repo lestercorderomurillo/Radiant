@@ -11,32 +11,45 @@ public struct Material : Component
     public Color Albedo
     {
         readonly get => _albedo;
-        set { _albedo = value; UpdateAbsorption(); }
+        set { _albedo = value; UpdateCached(); }
     }
 
     public Color Emissive
     {
         readonly get => _emissive;
-        set { _emissive = value; UpdateAbsorption(); }
+        set { _emissive = value; UpdateCached(); }
     }
 
+    /// <summary>Auto-calculated: Albedo inverted, scaled by alpha. Used by HRC.</summary>
     public Color Absorption { get; private set; }
+
+    /// <summary>Auto-calculated: Emissive RGB scaled by intensity (A), with alpha=255 for rendering.</summary>
+    public Color EmissiveScaled { get; private set; }
 
     public Material()
     {
         _albedo = Color.White;
         _emissive = Color.Black;
         Absorption = new Color(0, 0, 0, 255);
+        EmissiveScaled = Color.Black;
     }
 
-    private void UpdateAbsorption()
+    private void UpdateCached()
     {
-        bool isEmissive = _emissive.R > 0 || _emissive.G > 0 || _emissive.B > 0;
-        float alpha = _albedo.A / 255f;
+        // EmissiveScaled: RGB scaled by intensity (A), alpha=255 for rendering
+        float intensity = _emissive.A / 255f;
+        EmissiveScaled = new Color(
+            (int)(_emissive.R * intensity),
+            (int)(_emissive.G * intensity),
+            (int)(_emissive.B * intensity),
+            255);
 
+        // Absorption depends on whether object emits light
+        // HRC formula: radiance = absorption * emission, so emitters need absorption = emission
+        bool isEmissive = _emissive.R > 0 || _emissive.G > 0 || _emissive.B > 0;
         if (isEmissive)
         {
-            float intensity = _emissive.A / 255f;
+            // Emitters: absorption = scaled emissive (required by HRC radiance formula)
             Absorption = new Color(
                 (int)(_emissive.R * intensity),
                 (int)(_emissive.G * intensity),
@@ -45,6 +58,8 @@ public struct Material : Component
         }
         else
         {
+            // Non-emitters: absorption = inverted albedo
+            float alpha = _albedo.A / 255f;
             Absorption = new Color(
                 (int)((255 - _albedo.R) * alpha),
                 (int)((255 - _albedo.G) * alpha),
