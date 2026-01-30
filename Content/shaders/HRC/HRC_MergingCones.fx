@@ -1,13 +1,12 @@
 /* HRC_MergingCones.fx
    Merges cascade rays with RGB transmittance for stained glass support. */
 
-Texture2D VraysRadiance : register(t0);      // RGB = radiance
-Texture2D VraysTransmittance : register(t1); // RGB = transmittance
-Texture2D PrevRadiance : register(t2);       // RGB = radiance
-Texture2D PrevTransmittance : register(t3);  // RGB = transmittance
+Texture2D VraysRadiance : register(t0);
+Texture2D VraysTransmittance : register(t1);
+Texture2D PrevRadiance : register(t2);
+Texture2D PrevTransmittance : register(t3);
 
-SamplerState SamplerVrays : register(s0);
-SamplerState SamplerPrev : register(s1);
+SamplerState Sampler0 : register(s0);
 
 float2 VraysSize;
 float2 PrevSize;
@@ -35,14 +34,12 @@ PixelShaderInput MainVS(VertexShaderInput input)
     return output;
 }
 
-// MRT Output
 struct PixelShaderOutput
 {
-    float4 Radiance     : SV_Target0;  // RGB = radiance
-    float4 Transmittance: SV_Target1;  // RGB = transmittance
+    float4 Radiance     : SV_Target0;
+    float4 Transmittance: SV_Target1;
 };
 
-// Merge with RGB transmittance
 void MergeRadiance(float3 nearRad, float3 nearTrans, float3 farRad, float3 farTrans,
                    out float3 outRad, out float3 outTrans)
 {
@@ -59,8 +56,8 @@ void GetVolumeVrays(float2 probe, float index, float interval, float lookupWidth
     float2 floorPos = floor(samplePos);
     float weight = (floorPos.x != 0.0 || floorPos.y != 0.0) ? 1.0 : 0.0;
 
-    rad = lerp(VraysRadiance.Sample(SamplerVrays, samplePos).rgb, float3(0, 0, 0), weight);
-    trans = lerp(VraysTransmittance.Sample(SamplerVrays, samplePos).rgb, float3(1, 1, 1), weight);
+    rad = lerp(VraysRadiance.Sample(Sampler0, samplePos).rgb, float3(0, 0, 0), weight);
+    trans = lerp(VraysTransmittance.Sample(Sampler0, samplePos).rgb, float3(1, 1, 1), weight);
 }
 
 void GetVolumePrev(float2 probe, float index, float interval, float lookupWidth,
@@ -72,8 +69,8 @@ void GetVolumePrev(float2 probe, float index, float interval, float lookupWidth,
     float2 floorPos = floor(samplePos);
     float weight = (floorPos.x != 0.0 || floorPos.y != 0.0) ? 1.0 : 0.0;
 
-    rad = lerp(PrevRadiance.Sample(SamplerPrev, samplePos).rgb, float3(0, 0, 0), weight);
-    trans = lerp(PrevTransmittance.Sample(SamplerPrev, samplePos).rgb, float3(1, 1, 1), weight);
+    rad = lerp(PrevRadiance.Sample(Sampler0, samplePos).rgb, float3(0, 0, 0), weight);
+    trans = lerp(PrevTransmittance.Sample(Sampler0, samplePos).rgb, float3(1, 1, 1), weight);
 }
 
 void MergeCone(float2 probe, float plane, float intrv, float vrays, float index, float side,
@@ -86,7 +83,6 @@ void MergeCone(float2 probe, float plane, float intrv, float vrays, float index,
 
     float2 merge = probe + align * (limit + float2(0.0, vrayI * 2.0));
 
-    // Cone angle weighting
     float2 vrayLL = (limit * 2.0) + float2(0.0, coneI * 2.0);
     float2 vrayRR = (limit * 2.0) + float2(0.0, (coneI + 1.0) * 2.0);
     float coneW = atan(vrayRR.y / vrayRR.x) - atan(vrayLL.y / vrayLL.x);
@@ -97,7 +93,6 @@ void MergeCone(float2 probe, float plane, float intrv, float vrays, float index,
 
     if (fmod(plane, 2.0) < 0.5)
     {
-        // EVEN PLANE: extend ray, then merge with interpolated prev
         float2 probeFar = probe + (limit + float2(0.0, vrayI * 2.0));
         float2 probeNear = probe;
 
@@ -105,22 +100,18 @@ void MergeCone(float2 probe, float plane, float intrv, float vrays, float index,
         GetVolumeVrays(probeFar, vrayI, intrv, vrays, vrayExtRad, vrayExtTrans);
         GetVolumePrev(probeNear, coneI, 1.0, 1.0, coneNearRad, coneNearTrans);
 
-        // Extend the ray first
         float3 extRad, extTrans;
         MergeRadiance(vrayRad, vrayTrans, vrayExtRad, vrayExtTrans, extRad, extTrans);
 
-        // Merge with far cone (with cone weighting)
         float3 weightedRad = extRad * coneW;
         float3 resultRad, resultTrans;
         MergeRadiance(weightedRad, extTrans, coneFarRad, coneFarTrans, resultRad, resultTrans);
 
-        // Interpolate with near cone
         outRad = lerp(resultRad, coneNearRad, 0.5);
         outTrans = lerp(resultTrans, coneNearTrans, 0.5);
     }
     else
     {
-        // ODD PLANE: direct merge with cone weighting
         outRad = (vrayRad * coneW) + (coneFarRad * vrayTrans);
         outTrans = vrayTrans * coneFarTrans;
     }
@@ -141,7 +132,6 @@ PixelShaderOutput MainPS(PixelShaderInput input)
     MergeCone(probe, plane, intrv, vrays, index, 0.0, radL, transL);
     MergeCone(probe, plane, intrv, vrays, index, 1.0, radR, transR);
 
-    // Sum radiance, sum transmittance (matching GLSL reference)
     output.Radiance = float4(radL + radR, 1.0);
     output.Transmittance = float4(transL + transR, 1.0);
     return output;

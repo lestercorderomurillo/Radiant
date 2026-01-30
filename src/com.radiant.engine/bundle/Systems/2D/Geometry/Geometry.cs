@@ -37,8 +37,12 @@ public class Geometry : core.System
     // Motion vector tracking with N-frame history (weighted: recent frames have more influence)
     public int MotionHistoryFrames = 2;
     private ConcurrentDictionary<int, Queue<Vector3>> PositionHistory = new();
-    
+
     private List<(Vector2 pos, Vector2 size, Vector2 velocity, bool isCircle, float radius)>[] MotionShapesByThread;
+
+    // Reusable collections to avoid per-frame allocations
+    private ConcurrentDictionary<int, bool> _activeEntities = new();
+    private List<int> _toRemove = new();
 
     private enum DebugMode { None, Emissive, Absorption, SDF, JFADirection, JFARaw, MotionVectors }
     private DebugMode CurrentDebug = DebugMode.None;
@@ -196,9 +200,7 @@ public class Geometry : core.System
 
         PrevKeyState = key;
 
-        RenderEmissiveTexture();
-        RenderAbsorptionTexture();
-        RenderMotionVectorTexture();
+        CollectAndRenderGeometry();
 
         bool needsSDF = EnableSDF ||
             CurrentDebug == DebugMode.SDF ||
@@ -211,205 +213,200 @@ public class Geometry : core.System
         UpdateGizmos();
     }
 
-    private void RenderEmissiveTexture()
+    private void CollectAndRenderGeometry()
+    {
+        // Clear all thread-local lists once
+        for (int i = 0; i < ThreadCount; i++)
+        {
+            EmissiveShapesByThread[i].Clear();
+            AbsorptionShapesByThread[i].Clear();
+            MotionShapesByThread[i].Clear();
+        }
+        _activeEntities.Clear();
+
+        // Single query for rectangles - collect emissive, absorption, and motion
+        Scene.ECS.ForEach<Transform, Rectangle2D, Material>((int threadIdx, int entity, ref Transform transform, ref Rectangle2D rect, ref Material mat) =>
+        {
+            Vector2 position = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
+            bool inBounds = position.X + rect.Size.X >= 0 && position.X < WorldBounds.X &&
+                            position.Y + rect.Size.Y >= 0 && position.Y < WorldBounds.Y;
+
+            if (inBounds)
+            {
+                // Emissive
+                if (mat.Emissive.A > 0)
+                {
+                    float intensity = mat.Emissive.A / 255f;
+                    Color emissive = new Color(
+                        (int)(mat.Emissive.R * intensity),
+                        (int)(mat.Emissive.G * intensity),
+                        (int)(mat.Emissive.B * intensity),
+                        mat.Albedo.A);
+                    EmissiveShapesByThread[threadIdx].Add(new ShapeData(position, rect.Size, emissive, transform.Position.Z));
+                }
+
+                // Absorption
+                if (mat.Albedo.A > 0)
+                {
+                    AbsorptionShapesByThread[threadIdx].Add(new ShapeData(position, rect.Size, mat.Absorption, transform.Position.Z));
+                }
+            }
+
+            // Motion (track all entities for history)
+            _activeEntities[entity] = true;
+            Vector2 velocity = CalculateVelocityFromHistory(entity, transform.Position);
+            if (velocity.LengthSquared() > 0.0001f)
+            {
+                MotionShapesByThread[threadIdx].Add((position, rect.Size, velocity, false, 0));
+            }
+            UpdatePositionHistory(entity, transform.Position);
+        });
+
+        // Single query for circles
+        Scene.ECS.ForEach<Transform, Circle2D, Material>((int threadIdx, int entity, ref Transform transform, ref Circle2D circle, ref Material mat) =>
+        {
+            Vector2 center = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
+            bool inBounds = center.X + circle.Radius >= 0 && center.X - circle.Radius < WorldBounds.X &&
+                            center.Y + circle.Radius >= 0 && center.Y - circle.Radius < WorldBounds.Y;
+
+            if (inBounds)
+            {
+                // Emissive
+                if (mat.Emissive.A > 0)
+                {
+                    float intensity = mat.Emissive.A / 255f;
+                    Color emissive = new Color(
+                        (int)(mat.Emissive.R * intensity),
+                        (int)(mat.Emissive.G * intensity),
+                        (int)(mat.Emissive.B * intensity),
+                        mat.Emissive.A);
+                    EmissiveShapesByThread[threadIdx].Add(new ShapeData(center, circle.Radius, emissive, transform.Position.Z));
+                }
+
+                // Absorption
+                if (mat.Albedo.A > 0)
+                {
+                    AbsorptionShapesByThread[threadIdx].Add(new ShapeData(center, circle.Radius, mat.Absorption, transform.Position.Z));
+                }
+            }
+
+            // Motion
+            _activeEntities[entity] = true;
+            Vector2 velocity = CalculateVelocityFromHistory(entity, transform.Position);
+            if (velocity.LengthSquared() > 0.0001f)
+            {
+                MotionShapesByThread[threadIdx].Add((center, Vector2.Zero, velocity, true, circle.Radius));
+            }
+            UpdatePositionHistory(entity, transform.Position);
+        });
+
+        // Single query for triangles (no motion for triangles currently)
+        Scene.ECS.ForEach<Transform, Triangle2D, Material>((int threadIdx, int entity, ref Transform transform, ref Triangle2D tri, ref Material mat) =>
+        {
+            Vector2 position = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
+            bool inBounds = position.X + tri.Size.X >= 0 && position.X < WorldBounds.X &&
+                            position.Y + tri.Size.Y >= 0 && position.Y < WorldBounds.Y;
+
+            if (!inBounds) return;
+
+            ShapeType type = tri.Bordered ? ShapeType.TriangleBorder : ShapeType.Triangle;
+
+            // Emissive
+            if (mat.Emissive.A > 0)
+            {
+                float intensity = mat.Emissive.A / 255f;
+                Color emissive = new Color(
+                    (int)(mat.Emissive.R * intensity),
+                    (int)(mat.Emissive.G * intensity),
+                    (int)(mat.Emissive.B * intensity),
+                    mat.Albedo.A);
+                EmissiveShapesByThread[threadIdx].Add(new ShapeData(position, tri.Size, emissive, transform.Position.Z, type));
+            }
+
+            // Absorption
+            if (mat.Albedo.A > 0)
+            {
+                AbsorptionShapesByThread[threadIdx].Add(new ShapeData(position, tri.Size, mat.Absorption, transform.Position.Z, type));
+            }
+        });
+
+        // Clean up stale motion history
+        _toRemove.Clear();
+        foreach (var kvp in PositionHistory)
+        {
+            if (!_activeEntities.ContainsKey(kvp.Key))
+                _toRemove.Add(kvp.Key);
+        }
+        foreach (var key in _toRemove)
+            PositionHistory.TryRemove(key, out _);
+
+        // Render emissive
+        RenderEmissiveFromCollected();
+
+        // Render absorption
+        RenderAbsorptionFromCollected();
+
+        // Render motion vectors
+        RenderMotionFromCollected();
+    }
+
+    private void RenderEmissiveFromCollected()
     {
         Renderer.ClearShapes();
 
-        // Clear thread-local lists
-        for (int i = 0; i < ThreadCount; i++)
-            EmissiveShapesByThread[i].Clear();
-
-        // Parallel visibility filter for rectangles
-        Scene.ECS.ForEach<Transform, Rectangle2D, Material>((int threadIdx, int entity, ref Transform transform, ref Rectangle2D rect, ref Material mat) =>
-        {
-            if (mat.Emissive.A == 0) return;
-
-            Vector2 position = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
-
-            if (position.X + rect.Size.X >= 0 && position.X < WorldBounds.X &&
-                position.Y + rect.Size.Y >= 0 && position.Y < WorldBounds.Y)
-            {
-                // Scale emissive color by alpha (intensity)
-                float intensity = mat.Emissive.A / 255f;
-                Color emissive = new Color(
-                    (int)(mat.Emissive.R * intensity),
-                    (int)(mat.Emissive.G * intensity),
-                    (int)(mat.Emissive.B * intensity),
-                    mat.Albedo.A);
-                EmissiveShapesByThread[threadIdx].Add(new ShapeData(position, rect.Size, emissive, transform.Position.Z));
-            }
-        });
-
-        // Parallel visibility filter for circles
-        Scene.ECS.ForEach<Transform, Circle2D, Material>((int threadIdx, int entity, ref Transform transform, ref Circle2D circle, ref Material mat) =>
-        {
-            if (mat.Emissive.A == 0) return;
-
-            Vector2 center = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
-
-            if (center.X + circle.Radius >= 0 && center.X - circle.Radius < WorldBounds.X &&
-                center.Y + circle.Radius >= 0 && center.Y - circle.Radius < WorldBounds.Y)
-            {
-                // Scale emissive color by alpha (intensity)
-                float intensity = mat.Emissive.A / 255f;
-                Color emissive = new Color(
-                    (int)(mat.Emissive.R * intensity),
-                    (int)(mat.Emissive.G * intensity),
-                    (int)(mat.Emissive.B * intensity),
-                    mat.Emissive.A);
-
-                EmissiveShapesByThread[threadIdx].Add(new ShapeData(center, circle.Radius, emissive, transform.Position.Z));
-            }
-        });
-
-        // Parallel visibility filter for triangles
-        Scene.ECS.ForEach<Transform, Triangle2D, Material>((int threadIdx, int entity, ref Transform transform, ref Triangle2D tri, ref Material mat) =>
-        {
-            if (mat.Emissive.A == 0) return;
-
-            Vector2 position = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
-
-            if (position.X + tri.Size.X >= 0 && position.X < WorldBounds.X &&
-                position.Y + tri.Size.Y >= 0 && position.Y < WorldBounds.Y)
-            {
-                // Scale emissive color by alpha (intensity)
-                float intensity = mat.Emissive.A / 255f;
-                Color emissive = new Color(
-                    (int)(mat.Emissive.R * intensity),
-                    (int)(mat.Emissive.G * intensity),
-                    (int)(mat.Emissive.B * intensity),
-                    mat.Albedo.A);
-                EmissiveShapesByThread[threadIdx].Add(new ShapeData(position, tri.Size, emissive, transform.Position.Z, tri.Bordered ? ShapeType.TriangleBorder : ShapeType.Triangle));
-            }
-        });
-
-        // Count total for threshold check
         int total = 0;
         for (int t = 0; t < ThreadCount; t++)
             total += EmissiveShapesByThread[t].Count;
 
-        // Only parallel sort if above threshold (heap merge needs sorted lists)
         if (total >= ParallelThreshold)
         {
-            Parallel.For(0, ThreadCount, t =>
-            {
-                EmissiveShapesByThread[t].Sort();
-            });
+            Parallel.For(0, ThreadCount, t => EmissiveShapesByThread[t].Sort());
         }
 
-        // Merge and draw
         DrawShapesMerged(EmissiveShapesByThread);
-
         EmissiveCount = Renderer.ShapeBatchCount;
         Renderer.Configure(BlendState.AlphaBlend).FlushShapes(EmissiveTexture, Color.Transparent);
     }
 
-    /// <summary>
-    /// Converts intuitive material properties to HRC absorption format.
-    /// - Emissive objects: absorption = emissive color (required for emission)
-    /// - Non-emissive objects: base opacity + color filtering
-    /// Alpha controls opacity, color controls tint.
-    /// </summary>
-    private static Color CalculateAbsorption(ref Material mat)
-    {
-        bool isEmissive = mat.Emissive.R > 0 || mat.Emissive.G > 0 || mat.Emissive.B > 0;
-        float alpha = mat.Albedo.A / 255f;
-
-        if (isEmissive)
-        {
-            // Lights: absorption = emissive color scaled by intensity
-            float intensity = mat.Emissive.A / 255f;
-            return new Color(
-                (int)(mat.Emissive.R * intensity),
-                (int)(mat.Emissive.G * intensity),
-                (int)(mat.Emissive.B * intensity),
-                mat.Albedo.A);  // Use alpha for proper blending, shaders use RGB
-        }
-        else
-        {
-            // Non-emissive: color filtering based on albedo
-            // Albedo 255 = 0 absorption (full pass), Albedo 0 = 255 absorption (full block)
-            // Cyan (0,255,255) → blocks red, passes green/blue
-            return new Color(
-                (int)((255 - mat.Albedo.R) * alpha),
-                (int)((255 - mat.Albedo.G) * alpha),
-                (int)((255 - mat.Albedo.B) * alpha),
-                mat.Albedo.A);
-        }
-    }
-
-    private void RenderAbsorptionTexture()
+    private void RenderAbsorptionFromCollected()
     {
         Renderer.ClearShapes();
 
-        // Clear thread-local lists
-        for (int i = 0; i < ThreadCount; i++)
-            AbsorptionShapesByThread[i].Clear();
-
-        // Parallel visibility filter for rectangles
-        Scene.ECS.ForEach<Transform, Rectangle2D, Material>((int threadIdx, int entity, ref Transform transform, ref Rectangle2D rect, ref Material mat) =>
-        {
-            if (mat.Albedo.A == 0) return;
-
-            Vector2 position = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
-
-            if (position.X + rect.Size.X >= 0 && position.X < WorldBounds.X &&
-                position.Y + rect.Size.Y >= 0 && position.Y < WorldBounds.Y)
-            {
-                Color absorption = CalculateAbsorption(ref mat);
-                AbsorptionShapesByThread[threadIdx].Add(new ShapeData(position, rect.Size, absorption, transform.Position.Z));
-            }
-        });
-
-        // Parallel visibility filter for circles
-        Scene.ECS.ForEach<Transform, Circle2D, Material>((int threadIdx, int entity, ref Transform transform, ref Circle2D circle, ref Material mat) =>
-        {
-            if (mat.Albedo.A == 0) return;
-
-            Vector2 center = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
-
-            if (center.X + circle.Radius >= 0 && center.X - circle.Radius < WorldBounds.X &&
-                center.Y + circle.Radius >= 0 && center.Y - circle.Radius < WorldBounds.Y)
-            {
-                Color absorption = CalculateAbsorption(ref mat);
-                AbsorptionShapesByThread[threadIdx].Add(new ShapeData(center, circle.Radius, absorption, transform.Position.Z));
-            }
-        });
-
-        // Parallel visibility filter for triangles
-        Scene.ECS.ForEach<Transform, Triangle2D, Material>((int threadIdx, int entity, ref Transform transform, ref Triangle2D tri, ref Material mat) =>
-        {
-            if (mat.Albedo.A == 0) return;
-
-            Vector2 position = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
-
-            if (position.X + tri.Size.X >= 0 && position.X < WorldBounds.X &&
-                position.Y + tri.Size.Y >= 0 && position.Y < WorldBounds.Y)
-            {
-                Color absorption = CalculateAbsorption(ref mat);
-                AbsorptionShapesByThread[threadIdx].Add(new ShapeData(position, tri.Size, absorption, transform.Position.Z, tri.Bordered ? ShapeType.TriangleBorder : ShapeType.Triangle));
-            }
-        });
-
-        // Count total for threshold check
         int total = 0;
         for (int t = 0; t < ThreadCount; t++)
             total += AbsorptionShapesByThread[t].Count;
 
-        // Only parallel sort if above threshold (heap merge needs sorted lists)
         if (total >= ParallelThreshold)
         {
-            Parallel.For(0, ThreadCount, t =>
-            {
-                AbsorptionShapesByThread[t].Sort();
-            });
+            Parallel.For(0, ThreadCount, t => AbsorptionShapesByThread[t].Sort());
         }
 
-        // Merge and draw
         DrawShapesMerged(AbsorptionShapesByThread);
-
         AbsorptionCount = Renderer.ShapeBatchCount;
         Renderer.Configure(BlendState.AlphaBlend).FlushShapes(AbsorptionTexture, Color.Transparent);
+    }
+
+    private void RenderMotionFromCollected()
+    {
+        Renderer.ClearShapes();
+
+        for (int t = 0; t < ThreadCount; t++)
+        {
+            foreach (var (pos, size, velocity, isCircle, radius) in MotionShapesByThread[t])
+            {
+                float vx = (velocity.X / 10f) * 0.5f + 0.5f;
+                float vy = (velocity.Y / 10f) * 0.5f + 0.5f;
+                Color motionColor = new Color(vx, vy, 0f, 1f);
+
+                if (isCircle)
+                    Renderer.DrawCircle(pos, radius, motionColor);
+                else
+                    Renderer.DrawRect(pos, size, motionColor);
+            }
+        }
+
+        var motionClear = new Color(0.5f, 0.5f, 0f, 1f);
+        Renderer.Configure(BlendState.Opaque).FlushShapes(MotionVectorTexture, motionClear, "Sharp");
     }
 
     private Vector2 CalculateVelocityFromHistory(int entity, Vector3 currentPos)
@@ -417,23 +414,31 @@ public class Geometry : core.System
         if (!PositionHistory.TryGetValue(entity, out var history) || history.Count == 0)
             return Vector2.Zero;
 
-        // Convert queue to array for indexed access (oldest first)
-        var positions = history.ToArray();
-        int count = positions.Length;
-
+        // Iterate queue directly - no allocation
         Vector2 weightedVelocity = Vector2.Zero;
         float totalWeight = 0;
+        int i = 0;
+        Vector3 prev = default;
 
-        // Calculate weighted velocity for each frame transition
-        // More recent transitions get higher weight (1, 2, 3, ...)
-        for (int i = 0; i < count; i++)
+        foreach (var pos in history)
         {
-            Vector3 from = positions[i];
-            Vector3 to = (i < count - 1) ? positions[i + 1] : currentPos;
+            if (i > 0)
+            {
+                float weight = i;
+                weightedVelocity.X += (pos.X - prev.X) * weight;
+                weightedVelocity.Y += (pos.Y - prev.Y) * weight;
+                totalWeight += weight;
+            }
+            prev = pos;
+            i++;
+        }
 
-            float weight = i + 1;
-            weightedVelocity.X += (to.X - from.X) * weight;
-            weightedVelocity.Y += (to.Y - from.Y) * weight;
+        // Final transition to current position
+        if (i > 0)
+        {
+            float weight = i;
+            weightedVelocity.X += (currentPos.X - prev.X) * weight;
+            weightedVelocity.Y += (currentPos.Y - prev.Y) * weight;
             totalWeight += weight;
         }
 
@@ -453,89 +458,6 @@ public class Geometry : core.System
         // Keep only N frames of history
         while (history.Count > MotionHistoryFrames)
             history.Dequeue();
-    }
-
-    private void RenderMotionVectorTexture()
-    {
-        // Clear thread-local lists
-        for (int i = 0; i < ThreadCount; i++)
-            MotionShapesByThread[i].Clear();
-
-        var activeEntities = new ConcurrentDictionary<int, bool>();
-
-        // Collect motion for rectangles
-        Scene.ECS.ForEach<Transform, Rectangle2D, Material>((int threadIdx, int entity, ref Transform transform, ref Rectangle2D rect, ref Material mat) =>
-        {
-            Vector2 position = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
-            activeEntities[entity] = true;
-
-            // Calculate velocity from position history
-            Vector2 velocity = CalculateVelocityFromHistory(entity, transform.Position);
-
-            // Only add if there's motion (very low threshold to catch slow movement)
-            if (velocity.LengthSquared() > 0.0001f)
-            {
-                MotionShapesByThread[threadIdx].Add((position, rect.Size, velocity, false, 0));
-            }
-
-            // Update history (must be done after velocity calculation)
-            UpdatePositionHistory(entity, transform.Position);
-        });
-
-        // Collect motion for circles
-        Scene.ECS.ForEach<Transform, Circle2D, Material>((int threadIdx, int entity, ref Transform transform, ref Circle2D circle, ref Material mat) =>
-        {
-            Vector2 center = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
-            activeEntities[entity] = true;
-
-            // Calculate velocity from position history
-            Vector2 velocity = CalculateVelocityFromHistory(entity, transform.Position);
-
-            // Only add if there's motion (very low threshold to catch slow movement)
-            if (velocity.LengthSquared() > 0.0001f)
-            {
-                MotionShapesByThread[threadIdx].Add((center, Vector2.Zero, velocity, true, circle.Radius));
-            }
-
-            // Update history (must be done after velocity calculation)
-            UpdatePositionHistory(entity, transform.Position);
-        });
-
-        // Clean up history for entities that no longer exist
-        var toRemove = new List<int>();
-        foreach (var kvp in PositionHistory)
-        {
-            if (!activeEntities.ContainsKey(kvp.Key))
-                toRemove.Add(kvp.Key);
-        }
-        foreach (var key in toRemove)
-            PositionHistory.TryRemove(key, out _);
-
-        // Render motion vectors
-        Renderer.ClearShapes();
-
-        for (int t = 0; t < ThreadCount; t++)
-        {
-            foreach (var (pos, size, velocity, isCircle, radius) in MotionShapesByThread[t])
-            {
-                // Encode velocity as color: RG = velocity XY, normalized to screen
-                // Scale velocity to 0-1 range (max ±10 pixels/frame for better precision at slow speeds)
-                float vx = (velocity.X / 10f) * 0.5f + 0.5f;  // -10..+10 -> 0..1
-                float vy = (velocity.Y / 10f) * 0.5f + 0.5f;
-                Color motionColor = new Color(vx, vy, 0f, 1f);
-
-                if (isCircle)
-                    Renderer.DrawCircle(pos, radius, motionColor);
-                else
-                    Renderer.DrawRect(pos, size, motionColor);
-            }
-        }
-
-        // Clear with Color(0.5f) which produces byte 127 -> 127/255 when read
-        // Shader decodes with 127/255, so they match perfectly
-        // Use "Sharp" technique to avoid edge fading which corrupts motion encoding
-        var motionClear = new Color(0.5f, 0.5f, 0f, 1f);
-        Renderer.Configure(BlendState.Opaque).FlushShapes(MotionVectorTexture, motionClear, "Sharp");
     }
 
     private void DrawShapesMerged(List<ShapeData>[] shapesByThread)

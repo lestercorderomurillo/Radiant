@@ -2,10 +2,10 @@
    Ray extension combines chained rays from cascade N-1 to form rays of cascade N.
    Uses separate textures for radiance and transmittance (RGB each). */
 
-Texture2D PrevRadiance : register(t0);     // RGB = radiance
-Texture2D PrevTransmittance : register(t1); // RGB = transmittance
+Texture2D PrevRadiance : register(t0);
+Texture2D PrevTransmittance : register(t1);
 
-SamplerState SamplerPrev : register(s0);
+SamplerState Sampler0 : register(s0);
 
 float2 PrevSize;
 float2 CascadeSize;
@@ -32,14 +32,19 @@ PixelShaderInput MainVS(VertexShaderInput input)
     return output;
 }
 
-// MRT Output
 struct PixelShaderOutput
 {
-    float4 Radiance     : SV_Target0;  // RGB = radiance
-    float4 Transmittance: SV_Target1;  // RGB = transmittance
+    float4 Radiance     : SV_Target0;
+    float4 Transmittance: SV_Target1;
 };
 
-// Sample both radiance and transmittance
+void MergeRadiance(float3 nearRad, float3 nearTrans, float3 farRad, float3 farTrans,
+                   out float3 outRad, out float3 outTrans)
+{
+    outRad = nearRad + farRad * nearTrans;
+    outTrans = nearTrans * farTrans;
+}
+
 void GetVolume(float2 probe, float index, float interval, float lookupWidth,
                float2 resolution, out float3 rad, out float3 trans)
 {
@@ -49,21 +54,11 @@ void GetVolume(float2 probe, float index, float interval, float lookupWidth,
     float2 floorPos = floor(samplePos);
     float weight = (floorPos.x != 0.0 || floorPos.y != 0.0) ? 1.0 : 0.0;
 
-    float3 sampledRad = PrevRadiance.Sample(SamplerPrev, samplePos).rgb;
-    float3 sampledTrans = PrevTransmittance.Sample(SamplerPrev, samplePos).rgb;
+    float3 sampledRad = PrevRadiance.Sample(Sampler0, samplePos).rgb;
+    float3 sampledTrans = PrevTransmittance.Sample(Sampler0, samplePos).rgb;
 
     rad = lerp(sampledRad, float3(0, 0, 0), weight);
     trans = lerp(sampledTrans, float3(1, 1, 1), weight);
-}
-
-// Merge with RGB transmittance
-void MergeRadiance(float3 nearRad, float3 nearTrans, float3 farRad, float3 farTrans,
-                   out float3 outRad, out float3 outTrans)
-{
-    // radiance = nearR + farR * nearT
-    // transmit = nearT * farT
-    outRad = nearRad + farRad * nearTrans;
-    outTrans = nearTrans * farTrans;
 }
 
 void ExtendRay(float2 probe, float loIndex, float hiIndex,

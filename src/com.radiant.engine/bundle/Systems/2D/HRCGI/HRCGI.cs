@@ -181,7 +181,7 @@ public class HRCGI : core.System
         Renderer
             .Reset()
             .SetShader("HRC/HRC_FrustumSeed")
-            .Configure((0, SamplerState.PointClamp), (1, SamplerState.PointClamp))
+            .Configure(SamplerState.PointClamp)
             .SetParameter("Emissivity", emissive)
             .SetParameter("Absorption", absorption)
             .SetParameter("WorldSize", WorldSize)
@@ -202,7 +202,7 @@ public class HRCGI : core.System
         Renderer
             .Reset()
             .SetShader("HRC/HRC_Extensions")
-            .Configure((0, SamplerState.LinearClamp), (1, SamplerState.LinearClamp))
+            .Configure(SamplerState.LinearClamp)
             .SetParameter("PrevRadiance", VraysRadiance[cascade - 1])
             .SetParameter("PrevTransmittance", VraysTransmittance[cascade - 1])
             .SetParameter("PrevSize", CascadeSizes[cascade - 1])
@@ -225,11 +225,7 @@ public class HRCGI : core.System
         Renderer
             .Reset()
             .SetShader("HRC/HRC_MergingCones")
-            .Configure(
-                (0, SamplerState.LinearClamp),
-                (1, SamplerState.LinearClamp),
-                (2, SamplerState.LinearClamp),
-                (3, SamplerState.LinearClamp))
+            .Configure(SamplerState.LinearClamp)
             .SetParameter("VraysRadiance", VraysRadiance[cascade])
             .SetParameter("VraysTransmittance", VraysTransmittance[cascade])
             .SetParameter("PrevRadiance", hasNext ? MergeRadiance[nextCascade] : BlackTexture)
@@ -263,11 +259,7 @@ public class HRCGI : core.System
         Renderer
             .Reset()
             .SetShader("HRC/HRC_FluenceSum")
-            .Configure(
-                (0, SamplerState.LinearClamp),
-                (1, SamplerState.LinearClamp),
-                (2, SamplerState.LinearClamp),
-                (3, SamplerState.LinearClamp))
+            .Configure(SamplerState.LinearClamp)
             .SetTarget(FinalTexture)
             .SetParameter("FrustumIndex0", FrustumRadiance[0])
             .SetParameter("FrustumIndex1", FrustumRadiance[1])
