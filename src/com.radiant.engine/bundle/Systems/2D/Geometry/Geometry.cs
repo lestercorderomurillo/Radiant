@@ -105,6 +105,7 @@ public class Geometry : core.System
         MergeIndices = new int[ThreadCount];
         MergeHeap = new (float, int)[ThreadCount];
         SingleBuffer = new List<ShapeData>();
+        
         for (int i = 0; i < ThreadCount; i++)
         {
             EmissiveShapesByThread[i] = new List<ShapeData>();
@@ -621,7 +622,7 @@ public class Geometry : core.System
                     .SetTarget(null)
                     .SetParameter("JFATexture", JFAResult)
                     .SetParameter("JFATextureInterior", JFAResultInterior)
-                    .SetParameter("EmissiveTexture", EmissiveTexture)
+                    .SetParameter("EmissiveTexture", AbsorptionTexture)
                     .SetParameter("WorldsBounds", WorldBounds)
                     .SetParameter("JFASize", SDFBounds)
                     .SetParameter("ScreenDiagonal", ScreenDiagonal)
@@ -637,7 +638,7 @@ public class Geometry : core.System
                     .SetTarget(null)
                     .SetParameter("JFATexture", JFAResult)
                     .SetParameter("JFATextureInterior", JFAResultInterior)
-                    .SetParameter("EmissiveTexture", EmissiveTexture)
+                    .SetParameter("EmissiveTexture", AbsorptionTexture)
                     .SetParameter("WorldsBounds", WorldBounds)
                     .SetParameter("JFASize", SDFBounds)
                     .SetParameter("ScreenDiagonal", ScreenDiagonal)
