@@ -46,7 +46,7 @@ public class Geometry : core.System
     // Parallel shape collection
     private enum ShapeType { Rectangle, Circle, Triangle, TriangleBorder }
 
-    private readonly struct ShapeData : IComparable<ShapeData>
+    private readonly struct Shape : IComparable<Shape>
     {
         public readonly Vector2 Position;
         public readonly Vector2 Size;
@@ -55,19 +55,19 @@ public class Geometry : core.System
         public readonly float Z;
         public readonly ShapeType Type;
 
-        public ShapeData(Vector2 pos, Vector2 size, Color color, float z, ShapeType type = ShapeType.Rectangle)
+        public Shape(Vector2 pos, Vector2 size, Color color, float z, ShapeType type = ShapeType.Rectangle)
         {
             Position = pos; Size = size; Radius = 0; Color = color; Z = z; Type = type;
         }
-        public ShapeData(Vector2 pos, float radius, Color color, float z)
+        public Shape(Vector2 pos, float radius, Color color, float z)
         {
             Position = pos; Size = default; Radius = radius; Color = color; Z = z; Type = ShapeType.Circle;
         }
 
-        public int CompareTo(ShapeData other) => Z.CompareTo(other.Z);
+        public int CompareTo(Shape other) => Z.CompareTo(other.Z);
     }
-    private List<ShapeData>[] EmissiveShapesByThread;
-    private List<ShapeData>[] AbsorptionShapesByThread;
+    private List<Shape>[] EmissiveShapesByThread;
+    private List<Shape>[] AbsorptionShapesByThread;
     private int[] MergeIndices;
     private int ThreadCount;
 
@@ -76,7 +76,7 @@ public class Geometry : core.System
     private int HeapSize;
 
     // Single-thread buffer for small counts
-    private List<ShapeData> SingleBuffer;
+    private List<Shape> SingleBuffer;
     private const int ParallelThreshold = 16000;
 
     public override void Initialize()
@@ -99,17 +99,17 @@ public class Geometry : core.System
 
         // Initialize thread-local shape lists
         ThreadCount = Environment.ProcessorCount;
-        EmissiveShapesByThread = new List<ShapeData>[ThreadCount];
-        AbsorptionShapesByThread = new List<ShapeData>[ThreadCount];
+        EmissiveShapesByThread = new List<Shape>[ThreadCount];
+        AbsorptionShapesByThread = new List<Shape>[ThreadCount];
         MotionShapesByThread = new List<(Vector2, Vector2, Vector2, bool, float)>[ThreadCount];
         MergeIndices = new int[ThreadCount];
         MergeHeap = new (float, int)[ThreadCount];
-        SingleBuffer = new List<ShapeData>();
+        SingleBuffer = new List<Shape>();
         
         for (int i = 0; i < ThreadCount; i++)
         {
-            EmissiveShapesByThread[i] = new List<ShapeData>();
-            AbsorptionShapesByThread[i] = new List<ShapeData>();
+            EmissiveShapesByThread[i] = new List<Shape>();
+            AbsorptionShapesByThread[i] = new List<Shape>();
             MotionShapesByThread[i] = new();
         }
 
@@ -219,7 +219,7 @@ public class Geometry : core.System
         }
 
         // Single query for rectangles - collect emissive, absorption, and motion
-        Scene.ECS.ForEach<Transform, Rectangle2D, Material>((int threadIdx, int entity, ref Transform transform, ref Rectangle2D rect, ref Material mat) =>
+        Scene.ECS.Query((int threadIdx, int entity, ref Transform transform, ref Rectangle2D rect, ref Material mat) =>
         {
             Vector2 position = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
             bool inBounds = position.X + rect.Size.X >= 0 && position.X < WorldBounds.X &&
@@ -230,19 +230,19 @@ public class Geometry : core.System
                 // Emissive (uses pre-cached EmissiveScaled)
                 if (mat.Emissive.A > 0 && (mat.Emissive.R > 0 || mat.Emissive.G > 0 || mat.Emissive.B > 0))
                 {
-                    EmissiveShapesByThread[threadIdx].Add(new ShapeData(position, rect.Size, mat.EmissiveScaled, transform.Position.Z));
+                    EmissiveShapesByThread[threadIdx].Add(new Shape(position, rect.Size, mat.EmissiveScaled, transform.Position.Z));
                 }
 
                 // Absorption
                 if (mat.Albedo.A > 0)
                 {
-                    AbsorptionShapesByThread[threadIdx].Add(new ShapeData(position, rect.Size, mat.Absorption, transform.Position.Z));
+                    AbsorptionShapesByThread[threadIdx].Add(new Shape(position, rect.Size, mat.Absorption, transform.Position.Z));
                 }
             }
         });
 
         // Single query for circles
-        Scene.ECS.ForEach<Transform, Circle2D, Material>((int threadIdx, int entity, ref Transform transform, ref Circle2D circle, ref Material mat) =>
+        Scene.ECS.Query((int threadIdx, int entity, ref Transform transform, ref Circle2D circle, ref Material mat) =>
         {
             Vector2 center = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
             bool inBounds = center.X + circle.Radius >= 0 && center.X - circle.Radius < WorldBounds.X &&
@@ -250,22 +250,13 @@ public class Geometry : core.System
 
             if (inBounds)
             {
-                // Emissive (uses pre-cached EmissiveScaled)
-                if (mat.Emissive.A > 0 && (mat.Emissive.R > 0 || mat.Emissive.G > 0 || mat.Emissive.B > 0))
-                {
-                    EmissiveShapesByThread[threadIdx].Add(new ShapeData(center, circle.Radius, mat.EmissiveScaled, transform.Position.Z));
-                }
-
-                // Absorption
-                if (mat.Albedo.A > 0)
-                {
-                    AbsorptionShapesByThread[threadIdx].Add(new ShapeData(center, circle.Radius, mat.Absorption, transform.Position.Z));
-                }
+                EmissiveShapesByThread[threadIdx].Add(new Shape(center, circle.Radius, mat.EmissiveScaled, transform.Position.Z));
+                AbsorptionShapesByThread[threadIdx].Add(new Shape(center, circle.Radius, mat.Absorption, transform.Position.Z));
             }
         });
 
         // Single query for triangles (no motion for triangles currently)
-        Scene.ECS.ForEach<Transform, Triangle2D, Material>((int threadIdx, int entity, ref Transform transform, ref Triangle2D tri, ref Material mat) =>
+        Scene.ECS.Query((int threadIdx, int entity, ref Transform transform, ref Triangle2D tri, ref Material mat) =>
         {
             Vector2 position = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
             bool inBounds = position.X + tri.Size.X >= 0 && position.X < WorldBounds.X &&
@@ -276,38 +267,42 @@ public class Geometry : core.System
             ShapeType type = tri.Bordered ? ShapeType.TriangleBorder : ShapeType.Triangle;
 
             // Emissive (uses pre-cached EmissiveScaled)
-            if (mat.Emissive.A > 0 && (mat.Emissive.R > 0 || mat.Emissive.G > 0 || mat.Emissive.B > 0))
+            //if (mat.Emissive.A > 0 && (mat.Emissive.R > 0 || mat.Emissive.G > 0 || mat.Emissive.B > 0))
             {
-                EmissiveShapesByThread[threadIdx].Add(new ShapeData(position, tri.Size, mat.EmissiveScaled, transform.Position.Z, type));
+                EmissiveShapesByThread[threadIdx].Add(new Shape(position, tri.Size, mat.EmissiveScaled, transform.Position.Z, type));
             }
 
             // Absorption
-            if (mat.Albedo.A > 0)
+            //if (mat.Albedo.A > 0)
             {
-                AbsorptionShapesByThread[threadIdx].Add(new ShapeData(position, tri.Size, mat.Absorption, transform.Position.Z, type));
+                AbsorptionShapesByThread[threadIdx].Add(new Shape(position, tri.Size, mat.Absorption, transform.Position.Z, type));
             }
         });
 
         // Motion tracking - only for entities with MotionTrackable component
-        Scene.ECS.ForEach<Transform, Rectangle2D, MotionTrackable>((int threadIdx, int entity, ref Transform transform, ref Rectangle2D rect, ref MotionTrackable motion) =>
+        Scene.ECS.Query((int threadIdx, int entity, ref Transform transform, ref Rectangle2D rect, ref MotionTrackable motion) =>
         {
             Vector2 position = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
             Vector2 velocity = motion.CalculateVelocity(transform.Position, MotionHistoryFrames);
+
             if (velocity.LengthSquared() > 0.0001f)
             {
                 MotionShapesByThread[threadIdx].Add((position, rect.Size, velocity, false, 0));
             }
+
             motion.Push(transform.Position);
         });
 
-        Scene.ECS.ForEach<Transform, Circle2D, MotionTrackable>((int threadIdx, int entity, ref Transform transform, ref Circle2D circle, ref MotionTrackable motion) =>
+        Scene.ECS.Query((int threadIdx, int entity, ref Transform transform, ref Circle2D circle, ref MotionTrackable motion) =>
         {
             Vector2 center = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
             Vector2 velocity = motion.CalculateVelocity(transform.Position, MotionHistoryFrames);
+
             if (velocity.LengthSquared() > 0.0001f)
             {
                 MotionShapesByThread[threadIdx].Add((center, Vector2.Zero, velocity, true, circle.Radius));
             }
+
             motion.Push(transform.Position);
         });
 
@@ -380,7 +375,7 @@ public class Geometry : core.System
         Renderer.Configure(BlendState.Opaque).FlushShapes(MotionVectorTexture, motionClear, "Sharp");
     }
 
-    private void DrawShapesMerged(List<ShapeData>[] shapesByThread)
+    private void DrawShapesMerged(List<Shape>[] shapesByThread)
     {
         // Count total
         int total = 0;

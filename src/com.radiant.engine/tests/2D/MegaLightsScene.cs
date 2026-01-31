@@ -124,7 +124,7 @@ public class MegaLightsScene : Scene
             float hue = i / (float)LightCount;
             var color = HueToRGB(hue);
 
-            RotatingLightIds[i] = CreateLight(new Vector2(x, y), 25f, color);
+            RotatingLightIds[i] = CreateLight(new Vector2(x, y), 25f, color, color);
 
             // Add motion tracking for rotating lights (these move every frame)
             ECS.AddComponent<MotionTrackable>(RotatingLightIds[i]);
@@ -176,7 +176,7 @@ public class MegaLightsScene : Scene
     private void CreateMouseLight()
     {
         var mouse = Mouse.GetState();
-        MouseLightId = CreateLight(new Vector2(mouse.X, mouse.Y), 100f, new Color(0, 0, 0, 128), Color.Black);
+        MouseLightId = CreateLight(new Vector2(mouse.X, mouse.Y), 100f, new Color(0, 0, 0, 128), new Color(0, 0, 0, 128));
 
         // Add motion tracking for mouse-controlled light
         ECS.AddComponent<MotionTrackable>(MouseLightId);
@@ -184,7 +184,7 @@ public class MegaLightsScene : Scene
         PrevMouse = mouse;
     }
 
-    private int CreateLight(Vector2 position, float radius, Color color, Color? emissive = null)
+    private int CreateLight(Vector2 position, float radius, Color color, Color emissive)
     {
         int id = ECS.CreateEntity();
 
@@ -196,7 +196,7 @@ public class MegaLightsScene : Scene
         transform.Rotation = Vector3.UnitX;
 
         material.Albedo = color;
-        material.Emissive = emissive ?? color;
+        material.Emissive = emissive;
 
         circle.Radius = radius;
 
@@ -514,7 +514,7 @@ public class MegaLightsScene : Scene
         }
 
         // No overlap, create new light
-        CreateLight(position, PaintRadius, color);
+        CreateLight(position, PaintRadius, color, color);
     }
 
     private void PaintBlackDotAt(Vector2 position)
@@ -537,7 +537,7 @@ public class MegaLightsScene : Scene
         }
 
         // No overlap, create new black dot
-        CreateLight(position, PaintRadius, color);
+        CreateLight(position, PaintRadius, color, Color.Black);
     }
 
     private void PaintWhiteDotAt(Vector2 position)
@@ -585,7 +585,7 @@ public class MegaLightsScene : Scene
             float y = (float)Rng.NextDouble() * screen.Y;
             var color = HueToRGB((float)Rng.NextDouble());
 
-            CreateLight(new Vector2(x, y), 3f, color);
+            CreateLight(new Vector2(x, y), 3f, color, color);
         }
     }
 

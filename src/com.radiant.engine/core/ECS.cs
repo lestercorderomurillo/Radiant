@@ -305,7 +305,7 @@ public class ECS : IGameObject
     }
 
     /// <summary>Parallel ForEach for three components.</summary>
-    public void ForEach<T1, T2, T3>(ForEachAction<T1, T2, T3> action)
+    public void Query<T1, T2, T3>(ForEachAction<T1, T2, T3> action)
         where T1 : struct, Component
         where T2 : struct, Component
         where T3 : struct, Component

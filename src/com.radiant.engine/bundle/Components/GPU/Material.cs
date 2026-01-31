@@ -42,7 +42,7 @@ public struct Material : Component
             (int)(_emissive.R * intensity),
             (int)(_emissive.G * intensity),
             (int)(_emissive.B * intensity),
-            255);
+            _emissive.A);
 
         // Absorption depends on whether object emits light
         // HRC formula: radiance = absorption * emission, so emitters need absorption = emission
