@@ -32,14 +32,14 @@ public class MegaLightsScene : Scene
 
     private HRCGI HRCGISystem;
     private RCGI RCGISystem;
-    private Bilinear BilinearSystem;
+    private Bilinear Bilinear;
     private UDR1 UDR1System;
     private UDR2 UDR2System;
     private UDR3 UDR3System;
     private GizmosRenderer Gizmos;
 
     private bool UseHRCGI = true;
-    private int UDRMode = 0;  // 0 = Bilinear, 1 = UDR1, 2 = UDR2, 3 = UDR3
+    private int UDRMode = 3;  // 0 = Bilinear, 1 = UDR1, 2 = UDR2, 3 = UDR3
 
     private const float RotationSpeed = 0.12f;
     private const float OrbitRadius = 360f;
@@ -55,10 +55,12 @@ public class MegaLightsScene : Scene
         ECS.AddSystem<Geometry>();
         HRCGISystem = ECS.AddSystem<HRCGI>();
         RCGISystem = ECS.AddSystem<RCGI>(enabled: false);
-        BilinearSystem = ECS.AddSystem<Bilinear>();
+
+        Bilinear = ECS.AddSystem<Bilinear>(enabled: false);
         UDR1System = ECS.AddSystem<UDR1>(enabled: false);
         UDR2System = ECS.AddSystem<UDR2>(enabled: false);
-        UDR3System = ECS.AddSystem<UDR3>(enabled: false);
+        UDR3System = ECS.AddSystem<UDR3>();
+        
         Gizmos = ECS.AddSystem<GizmosRenderer>();
 
         base.SetupECS();
@@ -236,7 +238,7 @@ public class MegaLightsScene : Scene
         rect.Size = new Vector2(size);
 
         material.Albedo = new Color((byte)0, (byte)0, (byte)0, alpha);
-        material.Emissive = Color.Black;
+        material.Emissive = Color.Transparent;
 
         return id;
     }
@@ -425,7 +427,7 @@ public class MegaLightsScene : Scene
     private void UpdateUDRInput()
     {
         var inputSource = new Func<Texture2D>(() => UseHRCGI ? HRCGISystem.GetOutput() : RCGISystem.GetOutput());
-        BilinearSystem.SetInputSource(inputSource);
+        Bilinear.SetInputSource(inputSource);
         UDR1System.SetInputSource(inputSource);
         UDR2System.SetInputSource(inputSource);
         UDR3System.SetInputSource(inputSource);
@@ -437,8 +439,8 @@ public class MegaLightsScene : Scene
         switch (UDRMode)
         {
             case 0:
-                BilinearSystem.Dispose();
-                BilinearSystem.Enabled = false;
+                Bilinear.Dispose();
+                Bilinear.Enabled = false;
                 break;
             case 1:
                 UDR1System.Dispose();
@@ -461,8 +463,8 @@ public class MegaLightsScene : Scene
         switch (UDRMode)
         {
             case 0:
-                BilinearSystem.Initialize();
-                BilinearSystem.Enabled = true;
+                Bilinear.Initialize();
+                Bilinear.Enabled = true;
                 break;
             case 1:
                 UDR1System.Initialize();

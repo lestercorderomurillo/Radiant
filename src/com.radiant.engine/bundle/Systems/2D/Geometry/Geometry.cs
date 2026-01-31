@@ -227,17 +227,8 @@ public class Geometry : core.System
 
             if (inBounds)
             {
-                // Emissive (uses pre-cached EmissiveScaled)
-                if (mat.Emissive.A > 0 && (mat.Emissive.R > 0 || mat.Emissive.G > 0 || mat.Emissive.B > 0))
-                {
-                    EmissiveShapesByThread[threadIdx].Add(new Shape(position, rect.Size, mat.EmissiveScaled, transform.Position.Z));
-                }
-
-                // Absorption
-                if (mat.Albedo.A > 0)
-                {
-                    AbsorptionShapesByThread[threadIdx].Add(new Shape(position, rect.Size, mat.Absorption, transform.Position.Z));
-                }
+                EmissiveShapesByThread[threadIdx].Add(new Shape(position, rect.Size, mat.EmissiveScaled, transform.Position.Z));
+                AbsorptionShapesByThread[threadIdx].Add(new Shape(position, rect.Size, mat.Absorption, transform.Position.Z));
             }
         });
 
@@ -266,17 +257,9 @@ public class Geometry : core.System
 
             ShapeType type = tri.Bordered ? ShapeType.TriangleBorder : ShapeType.Triangle;
 
-            // Emissive (uses pre-cached EmissiveScaled)
-            //if (mat.Emissive.A > 0 && (mat.Emissive.R > 0 || mat.Emissive.G > 0 || mat.Emissive.B > 0))
-            {
-                EmissiveShapesByThread[threadIdx].Add(new Shape(position, tri.Size, mat.EmissiveScaled, transform.Position.Z, type));
-            }
+            EmissiveShapesByThread[threadIdx].Add(new Shape(position, tri.Size, mat.EmissiveScaled, transform.Position.Z, type));
 
-            // Absorption
-            //if (mat.Albedo.A > 0)
-            {
-                AbsorptionShapesByThread[threadIdx].Add(new Shape(position, tri.Size, mat.Absorption, transform.Position.Z, type));
-            }
+            AbsorptionShapesByThread[threadIdx].Add(new Shape(position, tri.Size, mat.Absorption, transform.Position.Z, type));
         });
 
         // Motion tracking - only for entities with MotionTrackable component
