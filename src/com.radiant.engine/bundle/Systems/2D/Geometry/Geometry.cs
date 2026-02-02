@@ -73,6 +73,12 @@ public class Geometry : core.System
     private int EmissiveMinLayer, EmissiveMaxLayer;
     private int AbsorptionMinLayer, AbsorptionMaxLayer;
 
+    // Per-thread layer tracking - reduces post-collection scan from O(MaxZLayers * ThreadCount) to O(ThreadCount)
+    private int[] EmissiveMinLayerByThread;
+    private int[] EmissiveMaxLayerByThread;
+    private int[] AbsorptionMinLayerByThread;
+    private int[] AbsorptionMaxLayerByThread;
+
     public override void Initialize()
     {
         WorldBounds = Renderer.ScreenSize;
@@ -109,6 +115,12 @@ public class Geometry : core.System
         MotionShapesByThread = new List<(Vector2, Vector2, Vector2, bool, float)>[ThreadCount];
         for (int threadIndex = 0; threadIndex < ThreadCount; threadIndex++)
             MotionShapesByThread[threadIndex] = new();
+
+        // Per-thread layer tracking arrays
+        EmissiveMinLayerByThread = new int[ThreadCount];
+        EmissiveMaxLayerByThread = new int[ThreadCount];
+        AbsorptionMinLayerByThread = new int[ThreadCount];
+        AbsorptionMaxLayerByThread = new int[ThreadCount];
 
         Gizmos = Scene.ECS.GetSystem<GizmosRenderer>();
         PrevKeyState = Keyboard.GetState();
@@ -210,13 +222,16 @@ public class Geometry : core.System
         // Reset counts only (arrays stay allocated)
         Array.Clear(EmissiveCounts, 0, BucketCount);
         Array.Clear(AbsorptionCounts, 0, BucketCount);
-        EmissiveMinLayer = MaxZLayers;
-        EmissiveMaxLayer = -1;
-        AbsorptionMinLayer = MaxZLayers;
-        AbsorptionMaxLayer = -1;
 
-        for (int threadIndex = 0; threadIndex < ThreadCount; threadIndex++)
-            MotionShapesByThread[threadIndex].Clear();
+        // Reset per-thread layer tracking (avoids 4096 iteration scan later)
+        for (int t = 0; t < ThreadCount; t++)
+        {
+            EmissiveMinLayerByThread[t] = MaxZLayers;
+            EmissiveMaxLayerByThread[t] = -1;
+            AbsorptionMinLayerByThread[t] = MaxZLayers;
+            AbsorptionMaxLayerByThread[t] = -1;
+            MotionShapesByThread[t].Clear();
+        }
 
         // Rectangles - bucket by Z layer
         Scene.ECS.Query((int threadIndex, int entity, ref Transform transform, ref Rectangle2D rectangle, ref Material material) =>
@@ -227,6 +242,12 @@ public class Geometry : core.System
 
             int layer = Math.Clamp((int)transform.Position.Z + ZLayerOffset, 0, MaxZLayers - 1);
             int bucketIndex = layer * ThreadCount + threadIndex;
+
+            // Track per-thread layer range (replaces 4096 iteration post-scan)
+            if (layer < EmissiveMinLayerByThread[threadIndex]) EmissiveMinLayerByThread[threadIndex] = layer;
+            if (layer > EmissiveMaxLayerByThread[threadIndex]) EmissiveMaxLayerByThread[threadIndex] = layer;
+            if (layer < AbsorptionMinLayerByThread[threadIndex]) AbsorptionMinLayerByThread[threadIndex] = layer;
+            if (layer > AbsorptionMaxLayerByThread[threadIndex]) AbsorptionMaxLayerByThread[threadIndex] = layer;
 
             int emissiveIndex = EmissiveCounts[bucketIndex];
             if (emissiveIndex >= EmissiveBuffers[bucketIndex].Length)
@@ -258,6 +279,12 @@ public class Geometry : core.System
 
             int layer = Math.Clamp((int)transform.Position.Z + ZLayerOffset, 0, MaxZLayers - 1);
             int bucketIndex = layer * ThreadCount + threadIndex;
+
+            // Track per-thread layer range
+            if (layer < EmissiveMinLayerByThread[threadIndex]) EmissiveMinLayerByThread[threadIndex] = layer;
+            if (layer > EmissiveMaxLayerByThread[threadIndex]) EmissiveMaxLayerByThread[threadIndex] = layer;
+            if (layer < AbsorptionMinLayerByThread[threadIndex]) AbsorptionMinLayerByThread[threadIndex] = layer;
+            if (layer > AbsorptionMaxLayerByThread[threadIndex]) AbsorptionMaxLayerByThread[threadIndex] = layer;
 
             int emissiveIndex = EmissiveCounts[bucketIndex];
             if (emissiveIndex >= EmissiveBuffers[bucketIndex].Length)
@@ -291,6 +318,12 @@ public class Geometry : core.System
             int bucketIndex = layer * ThreadCount + threadIndex;
             ShapeType shapeType = triangle.Bordered ? ShapeType.TriangleBorder : ShapeType.Triangle;
 
+            // Track per-thread layer range
+            if (layer < EmissiveMinLayerByThread[threadIndex]) EmissiveMinLayerByThread[threadIndex] = layer;
+            if (layer > EmissiveMaxLayerByThread[threadIndex]) EmissiveMaxLayerByThread[threadIndex] = layer;
+            if (layer < AbsorptionMinLayerByThread[threadIndex]) AbsorptionMinLayerByThread[threadIndex] = layer;
+            if (layer > AbsorptionMaxLayerByThread[threadIndex]) AbsorptionMaxLayerByThread[threadIndex] = layer;
+
             int emissiveIndex = EmissiveCounts[bucketIndex];
             if (emissiveIndex >= EmissiveBuffers[bucketIndex].Length)
                 GrowBuffer(ref EmissiveBuffers[bucketIndex], emissiveIndex);
@@ -312,22 +345,23 @@ public class Geometry : core.System
             AbsorptionCounts[bucketIndex] = absorptionIndex + 1;
         });
 
-        // Compute actual layer ranges after parallel collection
-        for (int layer = 0; layer < MaxZLayers; layer++)
+        // Merge per-thread layer ranges - O(ThreadCount) instead of O(MaxZLayers * ThreadCount)
+        // Only include threads that actually processed shapes (MaxLayer >= 0 means valid)
+        EmissiveMinLayer = MaxZLayers;
+        EmissiveMaxLayer = -1;
+        AbsorptionMinLayer = MaxZLayers;
+        AbsorptionMaxLayer = -1;
+        for (int t = 0; t < ThreadCount; t++)
         {
-            for (int threadIndex = 0; threadIndex < ThreadCount; threadIndex++)
+            if (EmissiveMaxLayerByThread[t] >= 0) // Thread processed at least one emissive shape
             {
-                int bucketIndex = layer * ThreadCount + threadIndex;
-                if (EmissiveCounts[bucketIndex] > 0)
-                {
-                    if (layer < EmissiveMinLayer) EmissiveMinLayer = layer;
-                    if (layer > EmissiveMaxLayer) EmissiveMaxLayer = layer;
-                }
-                if (AbsorptionCounts[bucketIndex] > 0)
-                {
-                    if (layer < AbsorptionMinLayer) AbsorptionMinLayer = layer;
-                    if (layer > AbsorptionMaxLayer) AbsorptionMaxLayer = layer;
-                }
+                if (EmissiveMinLayerByThread[t] < EmissiveMinLayer) EmissiveMinLayer = EmissiveMinLayerByThread[t];
+                if (EmissiveMaxLayerByThread[t] > EmissiveMaxLayer) EmissiveMaxLayer = EmissiveMaxLayerByThread[t];
+            }
+            if (AbsorptionMaxLayerByThread[t] >= 0) // Thread processed at least one absorption shape
+            {
+                if (AbsorptionMinLayerByThread[t] < AbsorptionMinLayer) AbsorptionMinLayer = AbsorptionMinLayerByThread[t];
+                if (AbsorptionMaxLayerByThread[t] > AbsorptionMaxLayer) AbsorptionMaxLayer = AbsorptionMaxLayerByThread[t];
             }
         }
 
@@ -383,7 +417,9 @@ public class Geometry : core.System
                 int shapeCount = EmissiveCounts[bucketIndex];
                 var shapeBuffer = EmissiveBuffers[bucketIndex];
 
-                for (int shapeIndex = 0; shapeIndex < shapeCount; shapeIndex++)
+                // Bounds check to prevent crashes at extreme entity counts
+                int maxShapes = Math.Min(shapeCount, shapeBuffer.Length);
+                for (int shapeIndex = 0; shapeIndex < maxShapes; shapeIndex++)
                     DrawShape(ref shapeBuffer[shapeIndex]);
             }
         }
@@ -411,7 +447,9 @@ public class Geometry : core.System
                 int shapeCount = AbsorptionCounts[bucketIndex];
                 var shapeBuffer = AbsorptionBuffers[bucketIndex];
 
-                for (int shapeIndex = 0; shapeIndex < shapeCount; shapeIndex++)
+                // Bounds check to prevent crashes at extreme entity counts
+                int maxShapes = Math.Min(shapeCount, shapeBuffer.Length);
+                for (int shapeIndex = 0; shapeIndex < maxShapes; shapeIndex++)
                     DrawShape(ref shapeBuffer[shapeIndex]);
             }
         }

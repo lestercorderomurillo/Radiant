@@ -184,7 +184,7 @@ public class Renderer : IDisposable
 
     // Instanced shape rendering
     private const int DefaultShapeCapacity = 65536;
-    private const int MaxShapeCapacity = 4_000_000;
+    private const int MaxShapeCapacity = 8_000_000;
     private VertexBuffer ShapeQuadBuffer;
     private IndexBuffer ShapeIndexBuffer;
     private DynamicVertexBuffer ShapeInstanceBuffer;
@@ -201,6 +201,10 @@ public class Renderer : IDisposable
     private int[] ParallelShapeCounts;
     private int[] ParallelMergeIndices;
     private int ParallelCapacityPerThread;
+
+    // Min-heap for O(N log T) k-way merge (replaces O(N*T) linear scan)
+    private (float z, int thread)[] MergeHeap;
+    private int MergeHeapSize;
 
     #endregion
 
@@ -357,9 +361,11 @@ public class Renderer : IDisposable
 
     /// <summary>
     /// Adds a shape to the current batch. Call FlushShapes() to render.
+    /// Silently drops shapes beyond MaxShapeCapacity.
     /// </summary>
     public Renderer DrawShape(Shape shape)
     {
+        if (ShapeCount >= MaxShapeCapacity) return this; // At capacity limit
         EnsureShapeCapacity(ShapeCount + 1);
         Shapes[ShapeCount++] = shape;
         return this;
@@ -495,6 +501,9 @@ public class Renderer : IDisposable
         ParallelSortIndices = new int[threadCount][];
         ParallelShapeCounts = new int[threadCount];
         ParallelMergeIndices = new int[threadCount];
+
+        // Min-heap for O(N log T) k-way merge
+        MergeHeap = new (float, int)[threadCount];
 
         for (int i = 0; i < threadCount; i++)
         {
@@ -652,6 +661,7 @@ public class Renderer : IDisposable
     /// Collects all parallel thread buffers with k-way merge by Z order.
     /// Each thread's buffer must be pre-sorted via SortParallelBufferByZ.
     /// Call on main thread after parallel work completes.
+    /// Uses min-heap for O(N log T) instead of O(N*T).
     /// </summary>
     public Renderer CollectParallelShapesSorted()
     {
@@ -670,28 +680,37 @@ public class Renderer : IDisposable
         // Reset merge indices
         Array.Clear(ParallelMergeIndices, 0, ParallelThreadCount);
 
-        int outputIndex = 0;
-        while (outputIndex < totalCount)
+        // Build initial min-heap with first element from each non-empty thread
+        MergeHeapSize = 0;
+        for (int t = 0; t < ParallelThreadCount; t++)
         {
-            int bestThread = -1;
-            float bestZ = float.MaxValue;
-
-            // Find thread with smallest current Z
-            for (int t = 0; t < ParallelThreadCount; t++)
+            if (ParallelShapeCounts[t] > 0)
             {
-                int idx = ParallelMergeIndices[t];
-                if (idx < ParallelShapeCounts[t])
-                {
-                    float z = ParallelZBuffers[t][idx];
-                    if (z < bestZ)
-                    {
-                        bestZ = z;
-                        bestThread = t;
-                    }
-                }
+                MergeHeap[MergeHeapSize++] = (ParallelZBuffers[t][0], t);
             }
+        }
+        HeapifyAll();
 
-            Shapes[outputIndex++] = ParallelShapeBuffers[bestThread][ParallelMergeIndices[bestThread]++];
+        int outputIndex = 0;
+        while (MergeHeapSize > 0)
+        {
+            // Extract min (root of heap)
+            var (_, bestThread) = MergeHeap[0];
+            int idx = ParallelMergeIndices[bestThread]++;
+            Shapes[outputIndex++] = ParallelShapeBuffers[bestThread][idx];
+
+            // Replace root with next element from same thread, or remove if exhausted
+            if (ParallelMergeIndices[bestThread] < ParallelShapeCounts[bestThread])
+            {
+                MergeHeap[0] = (ParallelZBuffers[bestThread][ParallelMergeIndices[bestThread]], bestThread);
+                HeapSiftDown(0);
+            }
+            else
+            {
+                // Remove root by replacing with last element
+                MergeHeap[0] = MergeHeap[--MergeHeapSize];
+                if (MergeHeapSize > 0) HeapSiftDown(0);
+            }
         }
 
         // Reset counts
@@ -700,6 +719,32 @@ public class Renderer : IDisposable
 
         ShapeCount = totalCount;
         return this;
+    }
+
+    private void HeapifyAll()
+    {
+        for (int i = MergeHeapSize / 2 - 1; i >= 0; i--)
+            HeapSiftDown(i);
+    }
+
+    private void HeapSiftDown(int i)
+    {
+        while (true)
+        {
+            int smallest = i;
+            int left = 2 * i + 1;
+            int right = 2 * i + 2;
+
+            if (left < MergeHeapSize && MergeHeap[left].z < MergeHeap[smallest].z)
+                smallest = left;
+            if (right < MergeHeapSize && MergeHeap[right].z < MergeHeap[smallest].z)
+                smallest = right;
+
+            if (smallest == i) break;
+
+            (MergeHeap[i], MergeHeap[smallest]) = (MergeHeap[smallest], MergeHeap[i]);
+            i = smallest;
+        }
     }
 
     #endregion
@@ -1563,6 +1608,7 @@ public class Renderer : IDisposable
         ParallelSortIndices = null;
         ParallelShapeCounts = null;
         ParallelMergeIndices = null;
+        MergeHeap = null;
     }
 
     #endregion
