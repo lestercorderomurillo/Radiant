@@ -13,7 +13,9 @@
       "Bash(gh api:*)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(dir:*)",
-      "Read(//e/**)"
+      "Read(//e/**)",
+      "Bash(grep:*)",
+      "Bash(find:*)"
     ]
   }
 }

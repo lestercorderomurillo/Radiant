@@ -285,6 +285,8 @@ public class SpatialIndex
 
     public ReadOnlySpan<int> InRadius(float cx, float cy, float cz, float radius)
     {
+        using var _ = Profiler.Section("SpatialIndex.InRadius");
+
         ResultCount = 0;
         float radiusSq = radius * radius;
 
@@ -370,6 +372,8 @@ public class SpatialIndex
 
     public ReadOnlySpan<int> InBox(float minX, float minY, float minZ, float maxX, float maxY, float maxZ)
     {
+        using var _ = Profiler.Section("SpatialIndex.InBox");
+
         ResultCount = 0;
 
         int minCX = (int)MathF.Floor(minX * InverseCellSize);
@@ -416,6 +420,8 @@ public class SpatialIndex
 
     public ReadOnlySpan<int> Nearest(float cx, float cy, float cz, int count, float maxRadius = float.MaxValue)
     {
+        using var _ = Profiler.Section("SpatialIndex.Nearest");
+
         var candidates = InRadius(cx, cy, cz, maxRadius);
         if (candidates.Length <= count)
             return candidates;

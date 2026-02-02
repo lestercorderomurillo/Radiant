@@ -75,6 +75,14 @@ public class GameLoop : IGameObject
 
     public void Dispose()
     {
+        // Write profiler results on shutdown
+        try
+        {
+            string desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+            string filePath = Profiler.WriteResultsToFile(desktop);
+        }
+        catch { }
+
         GC.SuppressFinalize(this);
     }
 
@@ -102,6 +110,8 @@ public class GameLoop : IGameObject
 
     public void Update()
     {
+        using var _ = Profiler.Section("GameLoop.Update");
+
         // Auto-start first scene if no active scene
         if (SceneId == NO_SCENE && Scenes.Length > 0)
         {
@@ -124,7 +134,10 @@ public class GameLoop : IGameObject
             {
                 Scenes[SceneId].GameTime = GameTime;
                 Scenes[SceneId].DeltaTime = (float)(1.0f / TargetUpdatesPerSecond);
-                Scenes[SceneId].InternalFixedUpdate();
+                using (Profiler.Section("Scene.FixedUpdate"))
+                {
+                    Scenes[SceneId].InternalFixedUpdate();
+                }
             }
 
             FixedUpdateAccumulator -= UpdateInterval;
@@ -138,7 +151,10 @@ public class GameLoop : IGameObject
         if (SceneId != NO_SCENE)
             Scenes[SceneId].GameTime = GameTime;
         Scenes[SceneId].DeltaTime = (float)deltaTime;
-        Scenes[SceneId].InternalUpdate();
+        using (Profiler.Section("Scene.Update"))
+        {
+            Scenes[SceneId].InternalUpdate();
+        }
 
         if (NextSceneId != NO_SCENE && NextSceneId != SceneId)
             TransitionScene(NextSceneId);
@@ -203,9 +219,17 @@ public class GameLoop : IGameObject
         {
             Scenes[SceneId].Renderer.Window.GraphicsDevice.Clear(Color.Black);
             Scenes[SceneId].GameTime = GameTime;
-            Scenes[SceneId].InternalRender();
-            Scenes[SceneId].InternalLateRender();
+            using (Profiler.Section("Scene.Render"))
+            {
+                Scenes[SceneId].InternalRender();
+            }
+            using (Profiler.Section("Scene.LateRender"))
+            {
+                Scenes[SceneId].InternalLateRender();
+            }
         }
+
+        Profiler.MarkFrame();
     }
 
     public void FixedUpdate() { }

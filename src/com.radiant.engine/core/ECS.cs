@@ -238,6 +238,8 @@ public class ECS : IGameObject
     public void ForEach<T1>(ForEachAction<T1> action)
         where T1 : struct, Component
     {
+        using var _ = Profiler.Section($"ECS.ForEach<{typeof(T1).Name}>");
+
         var set1 = GetComponentSet<T1>();
         int count = set1.EntityCount;
         if (count == 0) return;
@@ -264,6 +266,8 @@ public class ECS : IGameObject
         where T1 : struct, Component
         where T2 : struct, Component
     {
+        using var _ = Profiler.Section($"ECS.ForEach<{typeof(T1).Name},{typeof(T2).Name}>");
+
         var set1 = GetComponentSet<T1>();
         var set2 = GetComponentSet<T2>();
 
@@ -310,6 +314,8 @@ public class ECS : IGameObject
         where T2 : struct, Component
         where T3 : struct, Component
     {
+        using var _ = Profiler.Section($"ECS.Query<{typeof(T1).Name},{typeof(T2).Name},{typeof(T3).Name}>");
+
         var set1 = GetComponentSet<T1>();
         var set2 = GetComponentSet<T2>();
         var set3 = GetComponentSet<T3>();
@@ -368,6 +374,8 @@ public class ECS : IGameObject
         where T3 : struct, Component
         where T4 : struct, Component
     {
+        using var _ = Profiler.Section($"ECS.ForEach<{typeof(T1).Name},{typeof(T2).Name},{typeof(T3).Name},{typeof(T4).Name}>");
+
         var set1 = GetComponentSet<T1>();
         var set2 = GetComponentSet<T2>();
         var set3 = GetComponentSet<T3>();
@@ -448,7 +456,10 @@ public class ECS : IGameObject
         {
             if (!Systems[i].Enabled) continue;
             Systems[i].GameTime = Scene.GameTime;
-            Systems[i].Update();
+            using (Profiler.Section($"Update:{Systems[i].GetType().Name}"))
+            {
+                Systems[i].Update();
+            }
         }
     }
 
@@ -458,7 +469,10 @@ public class ECS : IGameObject
         {
             if (!Systems[i].Enabled) continue;
             Systems[i].GameTime = Scene.GameTime;
-            Systems[i].FixedUpdate();
+            using (Profiler.Section($"FixedUpdate:{Systems[i].GetType().Name}"))
+            {
+                Systems[i].FixedUpdate();
+            }
         }
     }
 
@@ -468,7 +482,10 @@ public class ECS : IGameObject
         {
             if (!Systems[i].Enabled) continue;
             Systems[i].GameTime = Scene.GameTime;
-            Systems[i].Render();
+            using (Profiler.Section($"Render:{Systems[i].GetType().Name}"))
+            {
+                Systems[i].Render();
+            }
         }
     }
 
@@ -478,7 +495,10 @@ public class ECS : IGameObject
         {
             if (!Systems[i].Enabled) continue;
             Systems[i].GameTime = Scene.GameTime;
-            Systems[i].LateRender();
+            using (Profiler.Section($"LateRender:{Systems[i].GetType().Name}"))
+            {
+                Systems[i].LateRender();
+            }
         }
     }
 }

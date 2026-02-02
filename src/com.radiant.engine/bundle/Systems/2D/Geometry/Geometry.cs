@@ -43,41 +43,35 @@ public class Geometry : core.System
     private KeyboardState PrevKeyState;
     private GizmosRenderer Gizmos;
 
-    // Parallel shape collection
-    private enum ShapeType { Rectangle, Circle, Triangle, TriangleBorder }
+    // Parallel shape collection with Z-layer bucketing - NO SORTING NEEDED
+    private enum ShapeType : byte { Rectangle, Circle, Triangle, TriangleBorder }
 
-    private readonly struct Shape : IComparable<Shape>
+    private struct Shape
     {
-        public readonly Vector2 Position;
-        public readonly Vector2 Size;
-        public readonly float Radius;
-        public readonly Color Color;
-        public readonly float Z;
-        public readonly ShapeType Type;
-
-        public Shape(Vector2 pos, Vector2 size, Color color, float z, ShapeType type = ShapeType.Rectangle)
-        {
-            Position = pos; Size = size; Radius = 0; Color = color; Z = z; Type = type;
-        }
-        public Shape(Vector2 pos, float radius, Color color, float z)
-        {
-            Position = pos; Size = default; Radius = radius; Color = color; Z = z; Type = ShapeType.Circle;
-        }
-
-        public int CompareTo(Shape other) => Z.CompareTo(other.Z);
+        public Vector2 Position;
+        public Vector2 Size;
+        public float Radius;
+        public Color Color;
+        public ShapeType Type;
     }
-    private List<Shape>[] EmissiveShapesByThread;
-    private List<Shape>[] AbsorptionShapesByThread;
-    private int[] MergeIndices;
+
+    // Z-layer config: supports Z from -ZLayerOffset to (MaxZLayers - ZLayerOffset - 1)
+    private const int MaxZLayers = 512;
+    private const int ZLayerOffset = 256;
+    private const int InitialBucketCapacity = 64;
+
     private int ThreadCount;
+    private int BucketCount;
 
-    // Min-heap for O(N log K) k-way merge
-    private (float z, int thread)[] MergeHeap;
-    private int HeapSize;
+    // Pre-allocated: [layer * ThreadCount + threadIdx] = array of shapes
+    private Shape[][] EmissiveBuffers;
+    private int[] EmissiveCounts;
+    private Shape[][] AbsorptionBuffers;
+    private int[] AbsorptionCounts;
 
-    // Single-thread buffer for small counts
-    private List<Shape> SingleBuffer;
-    private const int ParallelThreshold = 16000;
+    // Track which layers have any shapes (avoid iterating empty layers)
+    private int EmissiveMinLayer, EmissiveMaxLayer;
+    private int AbsorptionMinLayer, AbsorptionMaxLayer;
 
     public override void Initialize()
     {
@@ -97,21 +91,24 @@ public class Geometry : core.System
         JFAResult = JFATexture1;
         JFAResultInterior = JFATextureInterior1;
 
-        // Initialize thread-local shape lists
+        // Initialize Z-layer bucketed shape storage
         ThreadCount = Environment.ProcessorCount;
-        EmissiveShapesByThread = new List<Shape>[ThreadCount];
-        AbsorptionShapesByThread = new List<Shape>[ThreadCount];
-        MotionShapesByThread = new List<(Vector2, Vector2, Vector2, bool, float)>[ThreadCount];
-        MergeIndices = new int[ThreadCount];
-        MergeHeap = new (float, int)[ThreadCount];
-        SingleBuffer = new List<Shape>();
-        
-        for (int i = 0; i < ThreadCount; i++)
+        BucketCount = MaxZLayers * ThreadCount;
+
+        EmissiveBuffers = new Shape[BucketCount][];
+        EmissiveCounts = new int[BucketCount];
+        AbsorptionBuffers = new Shape[BucketCount][];
+        AbsorptionCounts = new int[BucketCount];
+
+        for (int i = 0; i < BucketCount; i++)
         {
-            EmissiveShapesByThread[i] = new List<Shape>();
-            AbsorptionShapesByThread[i] = new List<Shape>();
-            MotionShapesByThread[i] = new();
+            EmissiveBuffers[i] = new Shape[InitialBucketCapacity];
+            AbsorptionBuffers[i] = new Shape[InitialBucketCapacity];
         }
+
+        MotionShapesByThread = new List<(Vector2, Vector2, Vector2, bool, float)>[ThreadCount];
+        for (int i = 0; i < ThreadCount; i++)
+            MotionShapesByThread[i] = new();
 
         Gizmos = Scene.ECS.GetSystem<GizmosRenderer>();
         PrevKeyState = Keyboard.GetState();
@@ -210,69 +207,121 @@ public class Geometry : core.System
 
     private void CollectAndRenderGeometry()
     {
-        // Clear all thread-local lists once
-        for (int i = 0; i < ThreadCount; i++)
-        {
-            EmissiveShapesByThread[i].Clear();
-            AbsorptionShapesByThread[i].Clear();
-            MotionShapesByThread[i].Clear();
-        }
+        // Reset counts only (arrays stay allocated)
+        Array.Clear(EmissiveCounts, 0, BucketCount);
+        Array.Clear(AbsorptionCounts, 0, BucketCount);
+        EmissiveMinLayer = MaxZLayers;
+        EmissiveMaxLayer = -1;
+        AbsorptionMinLayer = MaxZLayers;
+        AbsorptionMaxLayer = -1;
 
-        // Single query for rectangles - collect emissive, absorption, and motion
+        for (int i = 0; i < ThreadCount; i++)
+            MotionShapesByThread[i].Clear();
+
+        // Rectangles - bucket by Z layer (inlined for perf)
         Scene.ECS.Query((int threadIdx, int entity, ref Transform transform, ref Rectangle2D rect, ref Material mat) =>
         {
             Vector2 position = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
-            bool inBounds = position.X + rect.Size.X >= 0 && position.X < WorldBounds.X &&
-                            position.Y + rect.Size.Y >= 0 && position.Y < WorldBounds.Y;
+            if (position.X + rect.Size.X < 0 || position.X >= WorldBounds.X ||
+                position.Y + rect.Size.Y < 0 || position.Y >= WorldBounds.Y) return;
 
-            if (inBounds)
-            {
-                EmissiveShapesByThread[threadIdx].Add(new Shape(position, rect.Size, mat.EmissiveScaled, transform.Position.Z));
-                AbsorptionShapesByThread[threadIdx].Add(new Shape(position, rect.Size, mat.Absorption, transform.Position.Z));
-            }
+            int layer = Math.Clamp((int)transform.Position.Z + ZLayerOffset, 0, MaxZLayers - 1);
+            int bucketIdx = layer * ThreadCount + threadIdx;
+
+            // Emissive
+            int ec = EmissiveCounts[bucketIdx];
+            if (ec >= EmissiveBuffers[bucketIdx].Length)
+                GrowBuffer(ref EmissiveBuffers[bucketIdx], ec);
+            ref var es = ref EmissiveBuffers[bucketIdx][ec];
+            es.Position = position; es.Size = rect.Size; es.Color = mat.EmissiveScaled; es.Type = ShapeType.Rectangle;
+            EmissiveCounts[bucketIdx] = ec + 1;
+
+            // Absorption
+            int ac = AbsorptionCounts[bucketIdx];
+            if (ac >= AbsorptionBuffers[bucketIdx].Length)
+                GrowBuffer(ref AbsorptionBuffers[bucketIdx], ac);
+            ref var abs = ref AbsorptionBuffers[bucketIdx][ac];
+            abs.Position = position; abs.Size = rect.Size; abs.Color = mat.Absorption; abs.Type = ShapeType.Rectangle;
+            AbsorptionCounts[bucketIdx] = ac + 1;
         });
 
-        // Single query for circles
+        // Circles
         Scene.ECS.Query((int threadIdx, int entity, ref Transform transform, ref Circle2D circle, ref Material mat) =>
         {
             Vector2 center = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
-            bool inBounds = center.X + circle.Radius >= 0 && center.X - circle.Radius < WorldBounds.X &&
-                            center.Y + circle.Radius >= 0 && center.Y - circle.Radius < WorldBounds.Y;
+            if (center.X + circle.Radius < 0 || center.X - circle.Radius >= WorldBounds.X ||
+                center.Y + circle.Radius < 0 || center.Y - circle.Radius >= WorldBounds.Y) return;
 
-            if (inBounds)
-            {
-                EmissiveShapesByThread[threadIdx].Add(new Shape(center, circle.Radius, mat.EmissiveScaled, transform.Position.Z));
-                AbsorptionShapesByThread[threadIdx].Add(new Shape(center, circle.Radius, mat.Absorption, transform.Position.Z));
-            }
+            int layer = Math.Clamp((int)transform.Position.Z + ZLayerOffset, 0, MaxZLayers - 1);
+            int bucketIdx = layer * ThreadCount + threadIdx;
+
+            int ec = EmissiveCounts[bucketIdx];
+            if (ec >= EmissiveBuffers[bucketIdx].Length)
+                GrowBuffer(ref EmissiveBuffers[bucketIdx], ec);
+            ref var es = ref EmissiveBuffers[bucketIdx][ec];
+            es.Position = center; es.Radius = circle.Radius; es.Color = mat.EmissiveScaled; es.Type = ShapeType.Circle;
+            EmissiveCounts[bucketIdx] = ec + 1;
+
+            int ac = AbsorptionCounts[bucketIdx];
+            if (ac >= AbsorptionBuffers[bucketIdx].Length)
+                GrowBuffer(ref AbsorptionBuffers[bucketIdx], ac);
+            ref var abs = ref AbsorptionBuffers[bucketIdx][ac];
+            abs.Position = center; abs.Radius = circle.Radius; abs.Color = mat.Absorption; abs.Type = ShapeType.Circle;
+            AbsorptionCounts[bucketIdx] = ac + 1;
         });
 
-        // Single query for triangles (no motion for triangles currently)
+        // Triangles
         Scene.ECS.Query((int threadIdx, int entity, ref Transform transform, ref Triangle2D tri, ref Material mat) =>
         {
             Vector2 position = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
-            bool inBounds = position.X + tri.Size.X >= 0 && position.X < WorldBounds.X &&
-                            position.Y + tri.Size.Y >= 0 && position.Y < WorldBounds.Y;
+            if (position.X + tri.Size.X < 0 || position.X >= WorldBounds.X ||
+                position.Y + tri.Size.Y < 0 || position.Y >= WorldBounds.Y) return;
 
-            if (!inBounds) return;
-
+            int layer = Math.Clamp((int)transform.Position.Z + ZLayerOffset, 0, MaxZLayers - 1);
+            int bucketIdx = layer * ThreadCount + threadIdx;
             ShapeType type = tri.Bordered ? ShapeType.TriangleBorder : ShapeType.Triangle;
 
-            EmissiveShapesByThread[threadIdx].Add(new Shape(position, tri.Size, mat.EmissiveScaled, transform.Position.Z, type));
+            int ec = EmissiveCounts[bucketIdx];
+            if (ec >= EmissiveBuffers[bucketIdx].Length)
+                GrowBuffer(ref EmissiveBuffers[bucketIdx], ec);
+            ref var es = ref EmissiveBuffers[bucketIdx][ec];
+            es.Position = position; es.Size = tri.Size; es.Color = mat.EmissiveScaled; es.Type = type;
+            EmissiveCounts[bucketIdx] = ec + 1;
 
-            AbsorptionShapesByThread[threadIdx].Add(new Shape(position, tri.Size, mat.Absorption, transform.Position.Z, type));
+            int ac = AbsorptionCounts[bucketIdx];
+            if (ac >= AbsorptionBuffers[bucketIdx].Length)
+                GrowBuffer(ref AbsorptionBuffers[bucketIdx], ac);
+            ref var abs = ref AbsorptionBuffers[bucketIdx][ac];
+            abs.Position = position; abs.Size = tri.Size; abs.Color = mat.Absorption; abs.Type = type;
+            AbsorptionCounts[bucketIdx] = ac + 1;
         });
 
-        // Motion tracking - only for entities with MotionTrackable component
+        // Compute actual layer ranges after parallel collection
+        for (int layer = 0; layer < MaxZLayers; layer++)
+        {
+            for (int t = 0; t < ThreadCount; t++)
+            {
+                int idx = layer * ThreadCount + t;
+                if (EmissiveCounts[idx] > 0)
+                {
+                    if (layer < EmissiveMinLayer) EmissiveMinLayer = layer;
+                    if (layer > EmissiveMaxLayer) EmissiveMaxLayer = layer;
+                }
+                if (AbsorptionCounts[idx] > 0)
+                {
+                    if (layer < AbsorptionMinLayer) AbsorptionMinLayer = layer;
+                    if (layer > AbsorptionMaxLayer) AbsorptionMaxLayer = layer;
+                }
+            }
+        }
+
+        // Motion tracking
         Scene.ECS.Query((int threadIdx, int entity, ref Transform transform, ref Rectangle2D rect, ref MotionTrackable motion) =>
         {
             Vector2 position = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
             Vector2 velocity = motion.CalculateVelocity(transform.Position, MotionHistoryFrames);
-
             if (velocity.LengthSquared() > 0.0001f)
-            {
                 MotionShapesByThread[threadIdx].Add((position, rect.Size, velocity, false, 0));
-            }
-
             motion.Push(transform.Position);
         });
 
@@ -280,39 +329,48 @@ public class Geometry : core.System
         {
             Vector2 center = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
             Vector2 velocity = motion.CalculateVelocity(transform.Position, MotionHistoryFrames);
-
             if (velocity.LengthSquared() > 0.0001f)
-            {
                 MotionShapesByThread[threadIdx].Add((center, Vector2.Zero, velocity, true, circle.Radius));
-            }
-
             motion.Push(transform.Position);
         });
 
-        // Render emissive
         RenderEmissiveFromCollected();
-
-        // Render absorption
         RenderAbsorptionFromCollected();
-
-        // Render motion vectors
         RenderMotionFromCollected();
+    }
+
+    private static void GrowBuffer(ref Shape[] buffer, int currentCount)
+    {
+        var newBuffer = new Shape[buffer.Length * 2];
+        Array.Copy(buffer, newBuffer, currentCount);
+        buffer = newBuffer;
     }
 
     private void RenderEmissiveFromCollected()
     {
         Renderer.ClearShapes();
 
-        int total = 0;
-        for (int t = 0; t < ThreadCount; t++)
-            total += EmissiveShapesByThread[t].Count;
-
-        if (total >= ParallelThreshold)
+        if (EmissiveMaxLayer < 0) // No shapes
         {
-            Parallel.For(0, ThreadCount, t => EmissiveShapesByThread[t].Sort());
+            EmissiveCount = 0;
+            Renderer.Configure(BlendState.AlphaBlend).FlushShapes(EmissiveTexture, Color.Transparent);
+            return;
         }
 
-        DrawShapesMerged(EmissiveShapesByThread);
+        // Iterate layers in Z-order - NO SORTING NEEDED
+        for (int layer = EmissiveMinLayer; layer <= EmissiveMaxLayer; layer++)
+        {
+            for (int t = 0; t < ThreadCount; t++)
+            {
+                int bucketIdx = layer * ThreadCount + t;
+                int count = EmissiveCounts[bucketIdx];
+                var buffer = EmissiveBuffers[bucketIdx];
+
+                for (int i = 0; i < count; i++)
+                    DrawShape(ref buffer[i]);
+            }
+        }
+
         EmissiveCount = Renderer.ShapeBatchCount;
         Renderer.Configure(BlendState.AlphaBlend).FlushShapes(EmissiveTexture, Color.Transparent);
     }
@@ -321,18 +379,47 @@ public class Geometry : core.System
     {
         Renderer.ClearShapes();
 
-        int total = 0;
-        for (int t = 0; t < ThreadCount; t++)
-            total += AbsorptionShapesByThread[t].Count;
-
-        if (total >= ParallelThreshold)
+        if (AbsorptionMaxLayer < 0)
         {
-            Parallel.For(0, ThreadCount, t => AbsorptionShapesByThread[t].Sort());
+            AbsorptionCount = 0;
+            Renderer.Configure(BlendState.AlphaBlend).FlushShapes(AbsorptionTexture, Color.Transparent);
+            return;
         }
 
-        DrawShapesMerged(AbsorptionShapesByThread);
+        for (int layer = AbsorptionMinLayer; layer <= AbsorptionMaxLayer; layer++)
+        {
+            for (int t = 0; t < ThreadCount; t++)
+            {
+                int bucketIdx = layer * ThreadCount + t;
+                int count = AbsorptionCounts[bucketIdx];
+                var buffer = AbsorptionBuffers[bucketIdx];
+
+                for (int i = 0; i < count; i++)
+                    DrawShape(ref buffer[i]);
+            }
+        }
+
         AbsorptionCount = Renderer.ShapeBatchCount;
         Renderer.Configure(BlendState.AlphaBlend).FlushShapes(AbsorptionTexture, Color.Transparent);
+    }
+
+    private void DrawShape(ref Shape shape)
+    {
+        switch (shape.Type)
+        {
+            case ShapeType.Circle:
+                Renderer.DrawCircle(shape.Position, shape.Radius, shape.Color);
+                break;
+            case ShapeType.Triangle:
+                Renderer.DrawTriangle(shape.Position, shape.Size, shape.Color);
+                break;
+            case ShapeType.TriangleBorder:
+                Renderer.DrawTriangleBorder(shape.Position, shape.Size, shape.Color);
+                break;
+            default:
+                Renderer.DrawRect(shape.Position, shape.Size, shape.Color);
+                break;
+        }
     }
 
     private void RenderMotionFromCollected()
@@ -356,121 +443,6 @@ public class Geometry : core.System
 
         var motionClear = new Color(0.5f, 0.5f, 0f, 1f);
         Renderer.Configure(BlendState.Opaque).FlushShapes(MotionVectorTexture, motionClear, "Sharp");
-    }
-
-    private void DrawShapesMerged(List<Shape>[] shapesByThread)
-    {
-        // Count total
-        int total = 0;
-        for (int t = 0; t < ThreadCount; t++)
-            total += shapesByThread[t].Count;
-
-        if (total == 0) return;
-
-        if (total < ParallelThreshold)
-        {
-            // Small count: single buffer + sort (no parallel overhead)
-            SingleBuffer.Clear();
-            for (int t = 0; t < ThreadCount; t++)
-            {
-                var list = shapesByThread[t];
-                for (int i = 0; i < list.Count; i++)
-                    SingleBuffer.Add(list[i]);
-            }
-            SingleBuffer.Sort();
-
-            for (int i = 0; i < SingleBuffer.Count; i++)
-            {
-                var shape = SingleBuffer[i];
-                switch (shape.Type)
-                {
-                    case ShapeType.Circle:
-                        Renderer.DrawCircle(shape.Position, shape.Radius, shape.Color);
-                        break;
-                    case ShapeType.Triangle:
-                        Renderer.DrawTriangle(shape.Position, shape.Size, shape.Color);
-                        break;
-                    case ShapeType.TriangleBorder:
-                        Renderer.DrawTriangleBorder(shape.Position, shape.Size, shape.Color);
-                        break;
-                    default:
-                        Renderer.DrawRect(shape.Position, shape.Size, shape.Color);
-                        break;
-                }
-            }
-        }
-        else
-        {
-            // Large count: parallel sort already done, use heap merge
-            Array.Clear(MergeIndices, 0, ThreadCount);
-            HeapSize = 0;
-
-            // Initialize heap with first element from each non-empty list
-            for (int t = 0; t < ThreadCount; t++)
-            {
-                if (shapesByThread[t].Count > 0)
-                    MergeHeap[HeapSize++] = (shapesByThread[t][0].Z, t);
-            }
-
-            // Heapify - build min-heap
-            for (int i = HeapSize / 2 - 1; i >= 0; i--)
-                HeapifyDown(i);
-
-            // K-way merge using min-heap: O(N log K)
-            while (HeapSize > 0)
-            {
-                var (_, bestThread) = MergeHeap[0];
-                var shape = shapesByThread[bestThread][MergeIndices[bestThread]++];
-
-                switch (shape.Type)
-                {
-                    case ShapeType.Circle:
-                        Renderer.DrawCircle(shape.Position, shape.Radius, shape.Color);
-                        break;
-                    case ShapeType.Triangle:
-                        Renderer.DrawTriangle(shape.Position, shape.Size, shape.Color);
-                        break;
-                    case ShapeType.TriangleBorder:
-                        Renderer.DrawTriangleBorder(shape.Position, shape.Size, shape.Color);
-                        break;
-                    default:
-                        Renderer.DrawRect(shape.Position, shape.Size, shape.Color);
-                        break;
-                }
-
-                if (MergeIndices[bestThread] < shapesByThread[bestThread].Count)
-                {
-                    MergeHeap[0] = (shapesByThread[bestThread][MergeIndices[bestThread]].Z, bestThread);
-                    HeapifyDown(0);
-                }
-                else
-                {
-                    MergeHeap[0] = MergeHeap[--HeapSize];
-                    if (HeapSize > 0)
-                        HeapifyDown(0);
-                }
-            }
-        }
-    }
-
-    private void HeapifyDown(int i)
-    {
-        while (true)
-        {
-            int left = 2 * i + 1;
-            int right = 2 * i + 2;
-            int smallest = i;
-
-            if (left < HeapSize && MergeHeap[left].z < MergeHeap[smallest].z)
-                smallest = left;
-            if (right < HeapSize && MergeHeap[right].z < MergeHeap[smallest].z)
-                smallest = right;
-
-            if (smallest == i) break;
-
-            (MergeHeap[i], MergeHeap[smallest]) = (MergeHeap[smallest], MergeHeap[i]);
-            i = smallest;
-        }
     }
 
     private void RenderSDFTexture()
