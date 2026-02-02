@@ -1,6 +1,8 @@
 using System;
 using System.Text;
 using System.Diagnostics;
+using System.Collections.Generic;
+using System.Threading;
 using com.radiant.engine.core;
 using Microsoft.Xna.Framework;
 
@@ -12,6 +14,7 @@ public class PerformanceMonitor : core.System
     private GizmosRenderer Gizmos;
     private Process Process;
     private PerformanceCounter CpuCounter;
+    private List<PerformanceCounter> GpuCounters;
 
     // Frame timing - zero-allocation circular buffer
     private const int FrameHistorySize = 64; // Power of 2 for fast modulo
@@ -27,12 +30,18 @@ public class PerformanceMonitor : core.System
     private int FrameCount;
     private float Elapsed;
 
-    // System metrics
-    private float MemoryMB;
-    private float PeakMemoryMB;
-    private float CpuUsage;
+    // System metrics (volatile for cross-thread reads)
+    private volatile float MemoryMB;
+    private volatile float PeakMemoryMB;
+    private volatile float CpuUsage;
     private int CpuCoreCount;
     private float CpuCoreCountInv;
+    private volatile float GpuUsage;
+
+    // Background sampling thread
+    private Thread SamplerThread;
+    private volatile bool SamplerRunning;
+    private const int SampleIntervalMs = 500; // Sample every 500ms in background
 
     // Precomputed constants
     private const float BytesToMB = 1f / (1024f * 1024f);
@@ -42,6 +51,7 @@ public class PerformanceMonitor : core.System
     private readonly StringBuilder FpsBuilder = new(32);
     private readonly StringBuilder FrameTimeBuilder = new(32);
     private readonly StringBuilder CpuBuilder = new(48);
+    private readonly StringBuilder GpuBuilder = new(32);
     private readonly StringBuilder RamBuilder = new(32);
     private readonly StringBuilder PeakBuilder = new(32);
 
@@ -53,6 +63,73 @@ public class PerformanceMonitor : core.System
         CpuCoreCountInv = 1f / CpuCoreCount;
 
         InitializeCpuCounter();
+        InitializeGpuCounters();
+        StartSamplerThread();
+    }
+
+    private void StartSamplerThread()
+    {
+        SamplerRunning = true;
+        SamplerThread = new Thread(SamplerLoop)
+        {
+            IsBackground = true,
+            Name = "PerformanceMonitor Sampler",
+            Priority = ThreadPriority.BelowNormal
+        };
+        SamplerThread.Start();
+    }
+
+    private void SamplerLoop()
+    {
+        while (SamplerRunning)
+        {
+            SampleSystemMetrics();
+            Thread.Sleep(SampleIntervalMs);
+        }
+    }
+
+    private void SampleSystemMetrics()
+    {
+        // CPU - runs in background, no main thread impact
+        if (CpuCounter != null)
+        {
+            try
+            {
+                CpuUsage = CpuCounter.NextValue() * CpuCoreCountInv;
+            }
+            catch
+            {
+                CpuUsage = -1f;
+            }
+        }
+
+        // GPU
+        if (GpuCounters != null && GpuCounters.Count > 0)
+        {
+            try
+            {
+                float totalGpu = 0f;
+                foreach (var counter in GpuCounters)
+                    totalGpu += counter.NextValue();
+                GpuUsage = totalGpu;
+            }
+            catch
+            {
+                GpuUsage = -1f;
+            }
+        }
+
+        // Memory - Process.Refresh() is expensive, now runs in background
+        try
+        {
+            Process.Refresh();
+            MemoryMB = Process.WorkingSet64 * BytesToMB;
+            PeakMemoryMB = Process.PeakWorkingSet64 * BytesToMB;
+        }
+        catch
+        {
+            // Process may be disposed
+        }
     }
 
     private void InitializeCpuCounter()
@@ -67,22 +144,45 @@ public class PerformanceMonitor : core.System
         }
     }
 
+    private void InitializeGpuCounters()
+    {
+        GpuCounters = new List<PerformanceCounter>();
+        try
+        {
+            var category = new PerformanceCounterCategory("GPU Engine");
+            var instanceNames = category.GetInstanceNames();
+
+            foreach (var instance in instanceNames)
+            {
+                // Filter for 3D engine instances (engtype_3D)
+                if (instance.Contains("engtype_3D"))
+                {
+                    var counter = new PerformanceCounter("GPU Engine", "Utilization Percentage", instance);
+                    GpuCounters.Add(counter);
+                }
+            }
+        }
+        catch
+        {
+            // GPU counters not available (older Windows or no GPU)
+            GpuCounters.Clear();
+        }
+    }
+
     public override void Update()
     {
         float Delta = (float)GameTime.ElapsedGameTime.TotalSeconds;
         float DeltaMs = Delta * 1000f;
 
         UpdateFrameHistory(DeltaMs);
-        
+
         FrameCount++;
         Elapsed += Delta;
 
         if (Elapsed >= UpdateInterval)
         {
             Fps = FrameCount / Elapsed;
-            
-            UpdateSystemMetrics();
-            
+            // System metrics now sampled in background thread - no syscalls here
             FrameCount = 0;
             Elapsed = 0f;
         }
@@ -113,6 +213,24 @@ public class PerformanceMonitor : core.System
             catch
             {
                 CpuUsage = -1f;
+            }
+        }
+
+        // GPU
+        if (GpuCounters.Count > 0)
+        {
+            try
+            {
+                float totalGpu = 0f;
+                foreach (var counter in GpuCounters)
+                {
+                    totalGpu += counter.NextValue();
+                }
+                GpuUsage = totalGpu;
+            }
+            catch
+            {
+                GpuUsage = -1f;
             }
         }
 
@@ -147,6 +265,9 @@ public class PerformanceMonitor : core.System
         CpuBuilder.Clear().Append("CPU: ").AppendFormat("{0:F1}", CpuUsage).Append("% (").Append(CpuCoreCount).Append(" cores)");
         Gizmos.Set("Performance", CpuBuilder.ToString());
 
+        GpuBuilder.Clear().Append("GPU: ").AppendFormat("{0:F1}", GpuUsage).Append('%');
+        Gizmos.Set("Performance", GpuBuilder.ToString());
+
         RamBuilder.Clear().Append("RAM: ").AppendFormat("{0:F1}", MemoryMB).Append("MB");
         Gizmos.Set("Memory", RamBuilder.ToString());
 
@@ -159,6 +280,7 @@ public class PerformanceMonitor : core.System
     public float GetFrameTimeAverage() => FrameTimeAverage;
     public float GetMemoryMB() => MemoryMB;
     public float GetCpuUsage() => CpuUsage;
+    public float GetGpuUsage() => GpuUsage;
     #endregion
 
     public override void Render() { }
@@ -166,6 +288,12 @@ public class PerformanceMonitor : core.System
     public override void Dispose()
     {
         CpuCounter?.Dispose();
+        if (GpuCounters != null)
+        {
+            foreach (var counter in GpuCounters)
+                counter.Dispose();
+            GpuCounters.Clear();
+        }
         Process?.Dispose();
     }
 }

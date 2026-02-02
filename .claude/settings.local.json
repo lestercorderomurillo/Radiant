@@ -13,7 +13,8 @@
       "Read(//e/**)",
       "Bash(grep:*)",
       "Bash(find:*)",
-      "Bash(del \"E:\\\\code\\\\beyond_proyects\\\\radiant\\\\src\\\\com.radiant.engine\\\\core\\\\Profiler.cs\")"
+      "Bash(del \"E:\\\\code\\\\beyond_proyects\\\\radiant\\\\src\\\\com.radiant.engine\\\\core\\\\Profiler.cs\")",
+      "Bash(cd:*)"
     ]
   }
 }

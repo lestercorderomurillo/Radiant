@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using com.radiant.engine.bundle;
 using Microsoft.Xna.Framework;
 
@@ -13,13 +12,19 @@ public class SpatialIndex
     private readonly float CellSize;
     private readonly float InverseCellSize;
 
+    private const int InitialEntityCapacity = 1024;
     private const int InitialCellCapacity = 64;
     private const int MaxEntitiesPerCell = 256;
 
+    // Cells still use dictionary (sparse cell keys)
     private readonly Dictionary<long, CellData> Cells;
 
-    private readonly Dictionary<int, EntitySpatialData> EntityData;
+    // Array-based entity data (entity ID as direct index)
+    private EntitySpatialData[] EntityDataArray;
+    private bool[] EntityExists;
+    private int EntityCapacity;
 
+    // Exact position lookup (position key -> entity)
     private readonly Dictionary<long, int> ExactLookup;
 
     private int[] ResultArray;
@@ -44,7 +49,7 @@ public class SpatialIndex
     {
         public long CellKey;
         public int IndexInCell;
-        public Vector3 Position;
+        public float PosX, PosY, PosZ;  // Inline instead of Vector3 to avoid struct copy
         public long ExactKey;
     }
 
@@ -55,7 +60,10 @@ public class SpatialIndex
         InverseCellSize = 1f / cellSize;
 
         Cells = new Dictionary<long, CellData>(InitialCellCapacity);
-        EntityData = new Dictionary<int, EntitySpatialData>();
+
+        EntityCapacity = InitialEntityCapacity;
+        EntityDataArray = new EntitySpatialData[EntityCapacity];
+        EntityExists = new bool[EntityCapacity];
         ExactLookup = new Dictionary<long, int>();
 
         ResultArray = new int[1024];
@@ -64,22 +72,25 @@ public class SpatialIndex
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void EnsureEntityCapacity(int entityId)
+    {
+        if (entityId < EntityCapacity) return;
+
+        int newCapacity = EntityCapacity;
+        while (newCapacity <= entityId)
+            newCapacity *= 2;
+
+        Array.Resize(ref EntityDataArray, newCapacity);
+        Array.Resize(ref EntityExists, newCapacity);
+        EntityCapacity = newCapacity;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private long PackCell(int x, int y, int z)
     {
         unchecked
         {
             return ((long)(x + 524288) << 40) | ((long)(y + 524288) << 20) | (long)(z + 524288);
-        }
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void UnpackCell(long key, out int x, out int y, out int z)
-    {
-        unchecked
-        {
-            z = (int)(key & 0xFFFFF) - 524288;
-            y = (int)((key >> 20) & 0xFFFFF) - 524288;
-            x = (int)((key >> 40) & 0xFFFFF) - 524288;
         }
     }
 
@@ -131,30 +142,39 @@ public class SpatialIndex
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Insert(int entity, float px, float py, float pz)
     {
-        long newCellKey = ToCellKey(px, py, pz);
-        long newExactKey = ToExactKey(px, py, pz);
+        EnsureEntityCapacity(entity);
 
-        if (EntityData.TryGetValue(entity, out var existing))
+        long newCellKey = ToCellKey(px, py, pz);
+
+        if (EntityExists[entity])
         {
+            ref var existing = ref EntityDataArray[entity];
+            long newExactKey = ToExactKey(px, py, pz);
+
+            // Same cell - just update position in-place
             if (existing.CellKey == newCellKey)
             {
-                existing.Position = new Vector3(px, py, pz);
-
+                // Update exact lookup if position changed
                 if (existing.ExactKey != newExactKey)
                 {
                     if (ExactLookup.TryGetValue(existing.ExactKey, out int e) && e == entity)
                         ExactLookup.Remove(existing.ExactKey);
-                    existing.ExactKey = newExactKey;
                     ExactLookup[newExactKey] = entity;
                 }
-
-                EntityData[entity] = existing;
+                existing.PosX = px;
+                existing.PosY = py;
+                existing.PosZ = pz;
+                existing.ExactKey = newExactKey;
                 return;
             }
 
-            RemoveFromCell(entity, existing);
+            // Different cell - remove from old cell and exact lookup
+            if (ExactLookup.TryGetValue(existing.ExactKey, out int old) && old == entity)
+                ExactLookup.Remove(existing.ExactKey);
+            RemoveFromCell(entity, ref existing);
         }
 
+        // Add to new cell
         if (!Cells.TryGetValue(newCellKey, out var cell))
         {
             cell = new CellData(MaxEntitiesPerCell);
@@ -162,30 +182,27 @@ public class SpatialIndex
         }
 
         if (cell.Count >= cell.Entities.Length)
-        {
             Array.Resize(ref cell.Entities, cell.Entities.Length * 2);
-        }
 
         int indexInCell = cell.Count++;
         cell.Entities[indexInCell] = entity;
         Cells[newCellKey] = cell;
 
-        var newData = new EntitySpatialData
-        {
-            CellKey = newCellKey,
-            IndexInCell = indexInCell,
-            Position = new Vector3(px, py, pz),
-            ExactKey = newExactKey
-        };
-        EntityData[entity] = newData;
-
-        if (existing.ExactKey != 0 && ExactLookup.TryGetValue(existing.ExactKey, out int old) && old == entity)
-            ExactLookup.Remove(existing.ExactKey);
-        ExactLookup[newExactKey] = entity;
+        // Update entity data in-place
+        long exactKey = ToExactKey(px, py, pz);
+        ref var data = ref EntityDataArray[entity];
+        data.CellKey = newCellKey;
+        data.IndexInCell = indexInCell;
+        data.PosX = px;
+        data.PosY = py;
+        data.PosZ = pz;
+        data.ExactKey = exactKey;
+        EntityExists[entity] = true;
+        ExactLookup[exactKey] = entity;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void RemoveFromCell(int entity, EntitySpatialData data)
+    private void RemoveFromCell(int entity, ref EntitySpatialData data)
     {
         if (!Cells.TryGetValue(data.CellKey, out var cell))
             return;
@@ -197,12 +214,7 @@ public class SpatialIndex
         {
             int lastEntity = cell.Entities[lastIndex];
             cell.Entities[indexInCell] = lastEntity;
-
-            if (EntityData.TryGetValue(lastEntity, out var lastData))
-            {
-                lastData.IndexInCell = indexInCell;
-                EntityData[lastEntity] = lastData;
-            }
+            EntityDataArray[lastEntity].IndexInCell = indexInCell;
         }
 
         cell.Count--;
@@ -215,15 +227,14 @@ public class SpatialIndex
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Remove(int entity)
     {
-        if (!EntityData.TryGetValue(entity, out var data))
+        if (entity >= EntityCapacity || !EntityExists[entity])
             return;
 
-        RemoveFromCell(entity, data);
-
+        ref var data = ref EntityDataArray[entity];
+        RemoveFromCell(entity, ref data);
         if (ExactLookup.TryGetValue(data.ExactKey, out int e) && e == entity)
             ExactLookup.Remove(data.ExactKey);
-
-        EntityData.Remove(entity);
+        EntityExists[entity] = false;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -235,8 +246,8 @@ public class SpatialIndex
     public void Clear()
     {
         Cells.Clear();
-        EntityData.Clear();
         ExactLookup.Clear();
+        Array.Clear(EntityExists, 0, EntityCapacity);
     }
 
     public void SyncAll()
@@ -252,15 +263,14 @@ public class SpatialIndex
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int? AtExact(Vector3 position)
     {
-        long key = ToExactKey(position.X, position.Y, position.Z);
-        return ExactLookup.TryGetValue(key, out int entity) ? entity : null;
+        return AtExact(position.X, position.Y, position.Z);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int? AtExact(float x, float y, float z)
     {
-        long key = ToExactKey(x, y, z);
-        return ExactLookup.TryGetValue(key, out int entity) ? entity : null;
+        long exactKey = ToExactKey(x, y, z);
+        return ExactLookup.TryGetValue(exactKey, out int entity) ? entity : null;
     }
 
     public ReadOnlySpan<int> InCell(int cx, int cy, int cz)
@@ -309,11 +319,11 @@ public class SpatialIndex
                     for (int i = 0; i < cell.Count; i++)
                     {
                         int entity = cell.Entities[i];
-                        if (!EntityData.TryGetValue(entity, out var data)) continue;
+                        ref var data = ref EntityDataArray[entity];
 
-                        float dx = data.Position.X - cx;
-                        float dy = data.Position.Y - cy;
-                        float dz = data.Position.Z - cz;
+                        float dx = data.PosX - cx;
+                        float dy = data.PosY - cy;
+                        float dz = data.PosZ - cz;
                         float distSq = dx * dx + dy * dy + dz * dz;
 
                         if (distSq <= radiusSq)
@@ -349,10 +359,10 @@ public class SpatialIndex
                 for (int i = 0; i < cell.Count; i++)
                 {
                     int entity = cell.Entities[i];
-                    if (!EntityData.TryGetValue(entity, out var data)) continue;
+                    ref var data = ref EntityDataArray[entity];
 
-                    float dx = data.Position.X - cx;
-                    float dz = data.Position.Z - cz;
+                    float dx = data.PosX - cx;
+                    float dz = data.PosZ - cz;
 
                     if (dx * dx + dz * dz <= radiusSq)
                         ResultArray[ResultCount++] = entity;
@@ -393,11 +403,11 @@ public class SpatialIndex
                     for (int i = 0; i < cell.Count; i++)
                     {
                         int entity = cell.Entities[i];
-                        if (!EntityData.TryGetValue(entity, out var data)) continue;
+                        ref var data = ref EntityDataArray[entity];
 
-                        if (data.Position.X >= minX && data.Position.X <= maxX &&
-                            data.Position.Y >= minY && data.Position.Y <= maxY &&
-                            data.Position.Z >= minZ && data.Position.Z <= maxZ)
+                        if (data.PosX >= minX && data.PosX <= maxX &&
+                            data.PosY >= minY && data.PosY <= maxY &&
+                            data.PosZ >= minZ && data.PosZ <= maxZ)
                         {
                             ResultArray[ResultCount++] = entity;
                         }
@@ -425,17 +435,11 @@ public class SpatialIndex
         for (int i = 0; i < candidates.Length; i++)
         {
             int entity = candidates[i];
-            if (EntityData.TryGetValue(entity, out var data))
-            {
-                float dx = data.Position.X - cx;
-                float dy = data.Position.Y - cy;
-                float dz = data.Position.Z - cz;
-                DistanceCache[i] = dx * dx + dy * dy + dz * dz;
-            }
-            else
-            {
-                DistanceCache[i] = float.MaxValue;
-            }
+            ref var data = ref EntityDataArray[entity];
+            float dx = data.PosX - cx;
+            float dy = data.PosY - cy;
+            float dz = data.PosZ - cz;
+            DistanceCache[i] = dx * dx + dy * dy + dz * dz;
             SortBuffer[i] = i;
         }
 

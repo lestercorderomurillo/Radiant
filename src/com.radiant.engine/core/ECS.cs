@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
-using System.Threading.Tasks;
+using System.Threading;
 using com.radiant.engine.bundle;
 using Microsoft.Xna.Framework;
 
@@ -20,6 +20,9 @@ public class ECS : IGameObject
     private readonly Dictionary<long, CachedQuery3> QueryCache3 = new();
     private readonly Dictionary<long, CachedQuery4> QueryCache4 = new();
     private int QueryVersion;
+
+    // Cached thread count - avoid Environment.ProcessorCount calls
+    private static readonly int CachedThreadCount = Environment.ProcessorCount;
 
     private struct CachedQuery2
     {
@@ -56,6 +59,13 @@ public class ECS : IGameObject
         Systems = new List<System>();
         ComponentSets = new Dictionary<Type, IComponentSet>();
         Spatial = new SpatialIndex(this, 64f);
+
+        // Initialize job system
+        Workers = new Thread[CachedThreadCount];
+        Jobs = new Action[CachedThreadCount];
+        JobReadyEvents = new ManualResetEventSlim[CachedThreadCount];
+        JobDoneEvents = new ManualResetEventSlim[CachedThreadCount];
+        InitializeJobSystem();
     }
 
     public void Initialize()
@@ -138,6 +148,7 @@ public class ECS : IGameObject
 
     public void Dispose()
     {
+        ShutdownJobSystem();
         for (int i = 0; i < Systems.Count; i++)
             Systems[i].Dispose();
         GC.SuppressFinalize(this);
@@ -334,7 +345,87 @@ public class ECS : IGameObject
     public delegate void ForEachAction<T1, T2, T3, T4>(int threadIndex, int entity, ref T1 component1, ref T2 component2, ref T3 component3, ref T4 component4) where T1 : struct where T2 : struct where T3 : struct where T4 : struct;
 
     /// <summary>Returns the number of threads used for parallel iteration.</summary>
-    public static int ThreadCount => Environment.ProcessorCount;
+    public static int ThreadCount => CachedThreadCount;
+
+    // Job system - persistent worker threads, zero allocation per frame
+    private readonly Thread[] Workers;
+    private readonly Action[] Jobs;
+    private readonly ManualResetEventSlim[] JobReadyEvents;
+    private readonly ManualResetEventSlim[] JobDoneEvents;
+    private volatile bool ShuttingDown;
+
+    private void InitializeJobSystem()
+    {
+        for (int i = 0; i < CachedThreadCount; i++)
+        {
+            int workerIdx = i;
+            JobReadyEvents[i] = new ManualResetEventSlim(false);
+            JobDoneEvents[i] = new ManualResetEventSlim(true); // Start as signaled (done)
+            Workers[i] = new Thread(() => WorkerLoop(workerIdx))
+            {
+                IsBackground = true,
+                Name = $"ECS Worker {workerIdx}"
+            };
+            Workers[i].Start();
+        }
+    }
+
+    private void WorkerLoop(int workerIdx)
+    {
+        while (!ShuttingDown)
+        {
+            JobReadyEvents[workerIdx].Wait();
+            if (ShuttingDown) return;
+            JobReadyEvents[workerIdx].Reset();
+
+            Jobs[workerIdx]?.Invoke();
+
+            JobDoneEvents[workerIdx].Set();
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void RunParallel(int count, Action<int, int, int> work)
+    {
+        if (count == 0) return;
+
+        int chunkSize = (count + CachedThreadCount - 1) / CachedThreadCount;
+
+        // Assign work to each thread
+        for (int i = 0; i < CachedThreadCount; i++)
+        {
+            int threadIdx = i;
+            int start = threadIdx * chunkSize;
+            int end = Math.Min(start + chunkSize, count);
+
+            if (start >= count)
+            {
+                // No work for this thread
+                JobDoneEvents[threadIdx].Set();
+                continue;
+            }
+
+            JobDoneEvents[threadIdx].Reset();
+            Jobs[threadIdx] = () => work(threadIdx, start, end);
+            JobReadyEvents[threadIdx].Set();
+        }
+
+        // Wait for all workers
+        for (int i = 0; i < CachedThreadCount; i++)
+            JobDoneEvents[i].Wait();
+    }
+
+    private void ShutdownJobSystem()
+    {
+        ShuttingDown = true;
+        for (int i = 0; i < CachedThreadCount; i++)
+        {
+            JobReadyEvents[i]?.Set(); // Wake up sleeping threads
+            Workers[i]?.Join(100);
+            JobReadyEvents[i]?.Dispose();
+            JobDoneEvents[i]?.Dispose();
+        }
+    }
 
     /// <summary>Parallel ForEach - divides entities across threads by range. Thread 0: 0-N, Thread 1: N-M, etc.</summary>
     public void ForEach<T1>(ForEachAction<T1> action)
@@ -344,18 +435,11 @@ public class ECS : IGameObject
         int count = set1.EntityCount;
         if (count == 0) return;
 
-        int threadCount = Environment.ProcessorCount;
-        int chunkSize = (count + threadCount - 1) / threadCount;
-
-        Parallel.For(0, threadCount, threadIdx =>
+        RunParallel(count, (threadIdx, start, end) =>
         {
-            int start = threadIdx * chunkSize;
-            int end = Math.Min(start + chunkSize, count);
-
             for (int i = start; i < end; i++)
             {
                 int entity = set1.GetEntityAt(i);
-                if (!ActiveEntities.Contains(entity)) continue;
                 action(threadIdx, entity, ref set1.GetComponentAt(i));
             }
         });
@@ -393,20 +477,13 @@ public class ECS : IGameObject
         int count = iterateSet1 ? set1.EntityCount : set2.EntityCount;
         if (count == 0) return;
 
-        int threadCount = Environment.ProcessorCount;
-        int chunkSize = (count + threadCount - 1) / threadCount;
-
-        Parallel.For(0, threadCount, threadIdx =>
+        RunParallel(count, (threadIdx, start, end) =>
         {
-            int start = threadIdx * chunkSize;
-            int end = Math.Min(start + chunkSize, count);
-
             if (iterateSet1)
             {
                 for (int i = start; i < end; i++)
                 {
                     int entity = set1.GetEntityAt(i);
-                    if (!ActiveEntities.Contains(entity)) continue;
                     int idx2 = set2.GetDenseIndex(entity);
                     if (idx2 < 0) continue;
                     action(threadIdx, entity, ref set1.GetComponentAt(i), ref set2.GetComponentAt(idx2));
@@ -417,7 +494,6 @@ public class ECS : IGameObject
                 for (int i = start; i < end; i++)
                 {
                     int entity = set2.GetEntityAt(i);
-                    if (!ActiveEntities.Contains(entity)) continue;
                     int idx1 = set1.GetDenseIndex(entity);
                     if (idx1 < 0) continue;
                     action(threadIdx, entity, ref set1.GetComponentAt(idx1), ref set2.GetComponentAt(i));
@@ -475,14 +551,8 @@ public class ECS : IGameObject
         int count = smallestIdx == 1 ? set1.EntityCount : smallestIdx == 2 ? set2.EntityCount : set3.EntityCount;
         if (count == 0) return;
 
-        int threadCount = Environment.ProcessorCount;
-        int chunkSize = (count + threadCount - 1) / threadCount;
-
-        Parallel.For(0, threadCount, threadIdx =>
+        RunParallel(count, (threadIdx, start, end) =>
         {
-            int start = threadIdx * chunkSize;
-            int end = Math.Min(start + chunkSize, count);
-
             for (int i = start; i < end; i++)
             {
                 int entity;
@@ -510,7 +580,6 @@ public class ECS : IGameObject
                     idx2 = set2.GetDenseIndex(entity); if (idx2 < 0) continue;
                 }
 
-                if (!ActiveEntities.Contains(entity)) continue;
                 action(threadIdx, entity, ref set1.GetComponentAt(idx1), ref set2.GetComponentAt(idx2), ref set3.GetComponentAt(idx3));
             }
         });
@@ -562,14 +631,8 @@ public class ECS : IGameObject
         int count = smallestIdx switch { 1 => set1.EntityCount, 2 => set2.EntityCount, 3 => set3.EntityCount, _ => set4.EntityCount };
         if (count == 0) return;
 
-        int threadCount = Environment.ProcessorCount;
-        int chunkSize = (count + threadCount - 1) / threadCount;
-
-        Parallel.For(0, threadCount, threadIdx =>
+        RunParallel(count, (threadIdx, start, end) =>
         {
-            int start = threadIdx * chunkSize;
-            int end = Math.Min(start + chunkSize, count);
-
             for (int i = start; i < end; i++)
             {
                 int entity;
@@ -607,7 +670,6 @@ public class ECS : IGameObject
                         break;
                 }
 
-                if (!ActiveEntities.Contains(entity)) continue;
                 action(threadIdx, entity, ref set1.GetComponentAt(idx1), ref set2.GetComponentAt(idx2), ref set3.GetComponentAt(idx3), ref set4.GetComponentAt(idx4));
             }
         });
