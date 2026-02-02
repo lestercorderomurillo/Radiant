@@ -14,6 +14,34 @@ public class ECS : IGameObject
     private readonly List<System> Systems;
     private readonly Dictionary<Type, IComponentSet> ComponentSets;
     private int NextEntityId;
+
+    // Query cache - avoids repeated dictionary lookups and smallest-set calculations
+    private readonly Dictionary<long, CachedQuery2> QueryCache2 = new();
+    private readonly Dictionary<long, CachedQuery3> QueryCache3 = new();
+    private readonly Dictionary<long, CachedQuery4> QueryCache4 = new();
+    private int QueryVersion;
+
+    private struct CachedQuery2
+    {
+        public IComponentSet Set1, Set2;
+        public int Version;
+        public bool IterateSet1;
+    }
+
+    private struct CachedQuery3
+    {
+        public IComponentSet Set1, Set2, Set3;
+        public int Version;
+        public int SmallestIdx;
+    }
+
+    private struct CachedQuery4
+    {
+        public IComponentSet Set1, Set2, Set3, Set4;
+        public int Version;
+        public int SmallestIdx;
+    }
+    
     public int EntityCount => ActiveEntities.Count;
     public Scene Scene { get; set; }
     public Renderer Renderer { get; private set; }
@@ -189,6 +217,7 @@ public class ECS : IGameObject
 
         ActiveEntities.Remove(entity);
         RecycledIds.Push(entity);
+        QueryVersion++;
         return true;
     }
 
@@ -209,6 +238,7 @@ public class ECS : IGameObject
     {
         var set = GetComponentSet<T>();
         set.Add(entity, new T());
+        QueryVersion++;
         return ref set.Get(entity);
     }
 
@@ -228,6 +258,7 @@ public class ECS : IGameObject
     public void RemoveComponent<T>(int entity) where T : struct, Component
     {
         GetComponentSet<T>().Remove(entity);
+        QueryVersion++;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -339,10 +370,30 @@ public class ECS : IGameObject
     {
         using var _ = Profiler.Section($"ECS.ForEach<{typeof(T1).Name},{typeof(T2).Name}>");
 
-        var set1 = GetComponentSet<T1>();
-        var set2 = GetComponentSet<T2>();
+        long key = ((long)typeof(T1).GetHashCode() << 32) | (uint)typeof(T2).GetHashCode();
+        SparseSet<T1> set1;
+        SparseSet<T2> set2;
+        bool iterateSet1;
 
-        bool iterateSet1 = set1.EntityCount <= set2.EntityCount;
+        if (QueryCache2.TryGetValue(key, out var cached) && cached.Version == QueryVersion)
+        {
+            set1 = (SparseSet<T1>)cached.Set1;
+            set2 = (SparseSet<T2>)cached.Set2;
+            iterateSet1 = cached.IterateSet1;
+        }
+        else
+        {
+            set1 = GetComponentSet<T1>();
+            set2 = GetComponentSet<T2>();
+            iterateSet1 = set1.EntityCount <= set2.EntityCount;
+            QueryCache2[key] = new CachedQuery2
+            {
+                Set1 = set1, Set2 = set2,
+                Version = QueryVersion,
+                IterateSet1 = iterateSet1
+            };
+        }
+
         int count = iterateSet1 ? set1.EntityCount : set2.EntityCount;
         if (count == 0) return;
 
@@ -379,6 +430,14 @@ public class ECS : IGameObject
         });
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static long HashTypes(int h1, int h2, int h3) =>
+        ((long)h1 * 397) ^ ((long)h2 * 23) ^ h3;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static long HashTypes(int h1, int h2, int h3, int h4) =>
+        ((long)h1 * 397) ^ ((long)h2 * 23) ^ ((long)h3 * 17) ^ h4;
+
     /// <summary>Parallel ForEach for three components.</summary>
     public void Query<T1, T2, T3>(ForEachAction<T1, T2, T3> action)
         where T1 : struct, Component
@@ -387,14 +446,39 @@ public class ECS : IGameObject
     {
         using var _ = Profiler.Section($"ECS.Query<{typeof(T1).Name},{typeof(T2).Name},{typeof(T3).Name}>");
 
-        var set1 = GetComponentSet<T1>();
-        var set2 = GetComponentSet<T2>();
-        var set3 = GetComponentSet<T3>();
+        long key = HashTypes(typeof(T1).GetHashCode(), typeof(T2).GetHashCode(), typeof(T3).GetHashCode());
+        SparseSet<T1> set1;
+        SparseSet<T2> set2;
+        SparseSet<T3> set3;
+        int smallestIdx;
 
-        int smallestIdx = 1;
-        int count = set1.EntityCount;
-        if (set2.EntityCount < count) { count = set2.EntityCount; smallestIdx = 2; }
-        if (set3.EntityCount < count) { count = set3.EntityCount; smallestIdx = 3; }
+        if (QueryCache3.TryGetValue(key, out var cached) && cached.Version == QueryVersion)
+        {
+            set1 = (SparseSet<T1>)cached.Set1;
+            set2 = (SparseSet<T2>)cached.Set2;
+            set3 = (SparseSet<T3>)cached.Set3;
+            smallestIdx = cached.SmallestIdx;
+        }
+        else
+        {
+            set1 = GetComponentSet<T1>();
+            set2 = GetComponentSet<T2>();
+            set3 = GetComponentSet<T3>();
+
+            smallestIdx = 1;
+            int minCount = set1.EntityCount;
+            if (set2.EntityCount < minCount) { minCount = set2.EntityCount; smallestIdx = 2; }
+            if (set3.EntityCount < minCount) { smallestIdx = 3; }
+
+            QueryCache3[key] = new CachedQuery3
+            {
+                Set1 = set1, Set2 = set2, Set3 = set3,
+                Version = QueryVersion,
+                SmallestIdx = smallestIdx
+            };
+        }
+
+        int count = smallestIdx == 1 ? set1.EntityCount : smallestIdx == 2 ? set2.EntityCount : set3.EntityCount;
         if (count == 0) return;
 
         int threadCount = Environment.ProcessorCount;
@@ -447,16 +531,43 @@ public class ECS : IGameObject
     {
         using var _ = Profiler.Section($"ECS.ForEach<{typeof(T1).Name},{typeof(T2).Name},{typeof(T3).Name},{typeof(T4).Name}>");
 
-        var set1 = GetComponentSet<T1>();
-        var set2 = GetComponentSet<T2>();
-        var set3 = GetComponentSet<T3>();
-        var set4 = GetComponentSet<T4>();
+        long key = HashTypes(typeof(T1).GetHashCode(), typeof(T2).GetHashCode(), typeof(T3).GetHashCode(), typeof(T4).GetHashCode());
+        SparseSet<T1> set1;
+        SparseSet<T2> set2;
+        SparseSet<T3> set3;
+        SparseSet<T4> set4;
+        int smallestIdx;
 
-        int smallestIdx = 1;
-        int count = set1.EntityCount;
-        if (set2.EntityCount < count) { count = set2.EntityCount; smallestIdx = 2; }
-        if (set3.EntityCount < count) { count = set3.EntityCount; smallestIdx = 3; }
-        if (set4.EntityCount < count) { count = set4.EntityCount; smallestIdx = 4; }
+        if (QueryCache4.TryGetValue(key, out var cached) && cached.Version == QueryVersion)
+        {
+            set1 = (SparseSet<T1>)cached.Set1;
+            set2 = (SparseSet<T2>)cached.Set2;
+            set3 = (SparseSet<T3>)cached.Set3;
+            set4 = (SparseSet<T4>)cached.Set4;
+            smallestIdx = cached.SmallestIdx;
+        }
+        else
+        {
+            set1 = GetComponentSet<T1>();
+            set2 = GetComponentSet<T2>();
+            set3 = GetComponentSet<T3>();
+            set4 = GetComponentSet<T4>();
+
+            smallestIdx = 1;
+            int minCount = set1.EntityCount;
+            if (set2.EntityCount < minCount) { minCount = set2.EntityCount; smallestIdx = 2; }
+            if (set3.EntityCount < minCount) { minCount = set3.EntityCount; smallestIdx = 3; }
+            if (set4.EntityCount < minCount) { smallestIdx = 4; }
+
+            QueryCache4[key] = new CachedQuery4
+            {
+                Set1 = set1, Set2 = set2, Set3 = set3, Set4 = set4,
+                Version = QueryVersion,
+                SmallestIdx = smallestIdx
+            };
+        }
+
+        int count = smallestIdx switch { 1 => set1.EntityCount, 2 => set2.EntityCount, 3 => set3.EntityCount, _ => set4.EntityCount };
         if (count == 0) return;
 
         int threadCount = Environment.ProcessorCount;
