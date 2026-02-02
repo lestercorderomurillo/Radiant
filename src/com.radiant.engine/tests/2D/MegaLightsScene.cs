@@ -29,6 +29,9 @@ public class MegaLightsScene : Scene
     private Vector2 LastMiddlePaintPos;
     private bool HasLastMiddlePaintPos = false;
     private bool IsAnimating = true;
+    // Z constants for layering (MaxZLayers = 65536, no offset)
+    private const float RotatingLightZ = 65530f;  // Near top
+    private const float MouseLightZ = 65535f;     // Always on top
 
     private HRCGI HRCGISystem;
     private RCGI RCGISystem;
@@ -103,7 +106,7 @@ public class MegaLightsScene : Scene
         ref var material = ref ECS.GetComponent<Material>(id);
 
         float centroidOffsetY = size * 0.117f;
-        transform.Position = new Vector3(center.X - size / 2, center.Y - size / 2 - centroidOffsetY, 0);
+        transform.Position = new Vector3(center.X - size / 2, center.Y - size / 2 - centroidOffsetY, 1f);  // Layer 1
         transform.Rotation = Vector3.UnitX;
 
         triangle.Size = new Vector2(size);
@@ -188,7 +191,7 @@ public class MegaLightsScene : Scene
         PrevMouse = mouse;
     }
 
-    private int CreateLight(Vector2 position, float radius, Color color, Color emissive, float z = 0f)
+    private int CreateLight(Vector2 position, float radius, Color color, Color emissive, float? z = null)
     {
         int id = ECS.CreateEntity();
 
@@ -202,7 +205,8 @@ public class MegaLightsScene : Scene
         ref var circle = ref ECS.GetComponent<Circle2D>(id);
         ref var material = ref ECS.GetComponent<Material>(id);
 
-        transform.Position = new Vector3(position, z);
+        // Use entity ID as Z by default (unique, monotonic = newer always on top)
+        transform.Position = new Vector3(position, z ?? id);
         transform.Rotation = Vector3.UnitX;
 
         material.Albedo = color;
@@ -225,7 +229,7 @@ public class MegaLightsScene : Scene
         ref var rect = ref ECS.GetComponent<Rectangle2D>(id);
         ref var material = ref ECS.GetComponent<Material>(id);
 
-        transform.Position = new Vector3(position, -100f);
+        transform.Position = new Vector3(position, 0f);  // Layer 0 (back)
         transform.Rotation = Vector3.UnitX;
 
         rect.Size = new Vector2(size);
@@ -248,7 +252,7 @@ public class MegaLightsScene : Scene
         ref var rect = ref ECS.GetComponent<Rectangle2D>(id);
         ref var material = ref ECS.GetComponent<Material>(id);
 
-        transform.Position = new Vector3(position, -100f);
+        transform.Position = new Vector3(position, 0f);  // Layer 0 (back)
         transform.Rotation = Vector3.UnitX;
 
         rect.Size = new Vector2(size);
@@ -284,12 +288,12 @@ public class MegaLightsScene : Scene
             float y = center.Y + OrbitRadius * MathF.Sin(angle);
 
             ref var transform = ref ECS.GetComponent<Transform>(RotatingLightIds[i]);
-            transform.Position = new Vector3(x, y, 100f);  // Fixed Z layer (above painted, below mouse)
+            transform.Position = new Vector3(x, y, RotatingLightZ);
         }
 
-        // Update mouse light (always on top, Z=255 maps to max layer 511)
+        // Update mouse light (always on top)
         ref var mouseTransform = ref ECS.GetComponent<Transform>(MouseLightId);
-        mouseTransform.Position = new Vector3(mouse.X, mouse.Y, 255f);
+        mouseTransform.Position = new Vector3(mouse.X, mouse.Y, MouseLightZ);
 
         // Only allow spawning when window is focused
         if (Renderer.Window.IsActive)
@@ -516,14 +520,11 @@ public class MegaLightsScene : Scene
         var color = HueToRGB(RainbowHue);
         RainbowHue = (RainbowHue + HueSpeed) % 1f;
 
-        // Check if there's an existing light at this position (ECS spatial query)
         var nearby = ECS.InRadius(new Vector3(position, 0), PaintRadius);
         foreach (int entityId in nearby)
         {
-            // Only replace if it has Circle2D (is a light, not an occluder)
             if (ECS.HasComponent<Circle2D>(entityId) && entityId != MouseLightId)
             {
-                // Replace existing light's color
                 ref var material = ref ECS.GetComponent<Material>(entityId);
                 material.Albedo = color;
                 material.Emissive = color;
@@ -531,7 +532,7 @@ public class MegaLightsScene : Scene
             }
         }
 
-        // No overlap, create new light
+        // Z defaults to entity ID (unique, newer = higher = on top)
         CreateLight(position, PaintRadius, color, color);
     }
 
@@ -539,14 +540,11 @@ public class MegaLightsScene : Scene
     {
         var color = Color.Black;
 
-        // Check if there's an existing light at this position (ECS spatial query)
         var nearby = ECS.InRadius(new Vector3(position, 0), PaintRadius);
         foreach (int entityId in nearby)
         {
-            // Only replace if it has Circle2D (is a light, not an occluder)
             if (ECS.HasComponent<Circle2D>(entityId) && entityId != MouseLightId)
             {
-                // Replace existing light's color
                 ref var material = ref ECS.GetComponent<Material>(entityId);
                 material.Albedo = color;
                 material.Emissive = color;
@@ -554,22 +552,18 @@ public class MegaLightsScene : Scene
             }
         }
 
-        // No overlap, create new black dot
         CreateLight(position, PaintRadius, color, Color.Black);
     }
 
     private void PaintWhiteDotAt(Vector2 position)
     {
-        var color = new Color(255, 255, 255, 128); // White with 50% opacity
+        var color = new Color(255, 255, 255, 128);
 
-        // Check if there's an existing light at this position (ECS spatial query)
         var nearby = ECS.InRadius(new Vector3(position, 0), PaintRadius);
         foreach (int entityId in nearby)
         {
-            // Only replace if it has Circle2D (is a light, not an occluder)
             if (ECS.HasComponent<Circle2D>(entityId) && entityId != MouseLightId)
             {
-                // Replace existing light's color
                 ref var material = ref ECS.GetComponent<Material>(entityId);
                 material.Albedo = color;
                 material.Emissive = new Color(255, 255, 255, 128);
@@ -577,7 +571,6 @@ public class MegaLightsScene : Scene
             }
         }
 
-        // No overlap, create new white dot
         CreateLight(position, PaintRadius, color, new Color(255, 255, 255, 128));
     }
 
@@ -603,6 +596,7 @@ public class MegaLightsScene : Scene
             float y = (float)Rng.NextDouble() * screen.Y;
             var color = HueToRGB((float)Rng.NextDouble());
 
+            // Z defaults to entity ID (unique, newer = higher = on top)
             CreateLight(new Vector2(x, y), 3f, color, color);
         }
     }

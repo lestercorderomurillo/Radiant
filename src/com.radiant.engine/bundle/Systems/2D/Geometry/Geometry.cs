@@ -43,10 +43,12 @@ public class Geometry : core.System
     private KeyboardState PrevKeyState;
     private GizmosRenderer Gizmos;
 
-    // Z-layer config: supports Z from -ZLayerOffset to (MaxZLayers - ZLayerOffset - 1)
-    private const int MaxZLayers = 512;
-    private const int ZLayerOffset = 256;
-    private const int InitialBucketCapacity = 64;
+    // Z-layer config: Z values map directly to layers (Z=0 -> layer 0, etc.)
+    // 65536 layers supports millions of entities with unique Z ordering
+    // Reserve top layers: 65530 for rotating, 65535 for mouse
+    private const int MaxZLayers = 65536;
+    private const int ZLayerOffset = 0;  // No offset, Z maps directly to layer
+    private const int InitialBucketCapacity = 64;  // Smaller since we have many more buckets now
 
     // Shape types for GPU (must match InstancedShapes.fx)
     private const float SHAPE_RECT = 0f;
@@ -296,7 +298,7 @@ public class Geometry : core.System
                 position.Y + rectangle.Size.Y < 0 || position.Y >= WorldBounds.Y) return;
 
             int layer = Math.Clamp((int)transform.Position.Z + ZLayerOffset, 0, MaxZLayers - 1);
-            int bucketIndex = layer * ThreadCount + threadIndex;
+            int bucketIndex = threadIndex * MaxZLayers + layer;
 
             if (layer < emissiveMinByThread[threadIndex]) emissiveMinByThread[threadIndex] = layer;
             if (layer > emissiveMaxByThread[threadIndex]) emissiveMaxByThread[threadIndex] = layer;
@@ -334,7 +336,7 @@ public class Geometry : core.System
                 center.Y + circle.Radius < 0 || center.Y - circle.Radius >= WorldBounds.Y) return;
 
             int layer = Math.Clamp((int)transform.Position.Z + ZLayerOffset, 0, MaxZLayers - 1);
-            int bucketIndex = layer * ThreadCount + threadIndex;
+            int bucketIndex = threadIndex * MaxZLayers + layer;
 
             if (layer < emissiveMinByThread[threadIndex]) emissiveMinByThread[threadIndex] = layer;
             if (layer > emissiveMaxByThread[threadIndex]) emissiveMaxByThread[threadIndex] = layer;
@@ -373,7 +375,7 @@ public class Geometry : core.System
                 position.Y + triangle.Size.Y < 0 || position.Y >= WorldBounds.Y) return;
 
             int layer = Math.Clamp((int)transform.Position.Z + ZLayerOffset, 0, MaxZLayers - 1);
-            int bucketIndex = layer * ThreadCount + threadIndex;
+            int bucketIndex = threadIndex * MaxZLayers + layer;
             float shapeType = triangle.Bordered ? SHAPE_TRIANGLE_BORDER : SHAPE_TRIANGLE;
 
             if (layer < emissiveMinByThread[threadIndex]) emissiveMinByThread[threadIndex] = layer;
@@ -462,13 +464,13 @@ public class Geometry : core.System
             return;
         }
 
-        // Count total shapes
+        // Count total shapes (new indexing: threadIndex * MaxZLayers + layer)
         int totalCount = 0;
         for (int layer = minLayer; layer <= maxLayer; layer++)
         {
             for (int t = 0; t < ThreadCount; t++)
             {
-                totalCount += counts[layer * ThreadCount + t];
+                totalCount += counts[t * MaxZLayers + layer];
             }
         }
 
@@ -487,7 +489,7 @@ public class Geometry : core.System
         {
             for (int t = 0; t < ThreadCount; t++)
             {
-                int bucketIndex = layer * ThreadCount + t;
+                int bucketIndex = t * MaxZLayers + layer;
                 int count = counts[bucketIndex];
                 if (count > 0)
                 {
