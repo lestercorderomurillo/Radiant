@@ -3,9 +3,23 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <RollForward>Major</RollForward>
-    <PublishReadyToRun>false</PublishReadyToRun>
-    <TieredCompilation>false</TieredCompilation>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <!-- Release optimizations -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <Optimize>true</Optimize>
+    <TieredCompilation>true</TieredCompilation>
+    <TieredCompilationQuickJit>false</TieredCompilationQuickJit>
+    <PublishReadyToRun>true</PublishReadyToRun>
+  </PropertyGroup>
+
+  <!-- Debug settings (optimized) -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <Optimize>true</Optimize>
+    <TieredCompilation>true</TieredCompilation>
+    <TieredCompilationQuickJit>false</TieredCompilationQuickJit>
+    <PublishReadyToRun>true</PublishReadyToRun>
   </PropertyGroup>
   <PropertyGroup>
     <ApplicationManifest>app.manifest</ApplicationManifest>

@@ -98,15 +98,7 @@ public class Window : Game
         GameLoop.Update();
 
         if (Keyboard.GetState().IsKeyDown(Keys.Escape))
-        {
-            try
-            {
-                string desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-                com.radiant.engine.core.Profiler.WriteResultsToFile(desktop);
-            }
-            catch { }
             Exit();
-        }
     }
 
     protected override void Draw(GameTime gameTime)

@@ -340,8 +340,6 @@ public class ECS : IGameObject
     public void ForEach<T1>(ForEachAction<T1> action)
         where T1 : struct, Component
     {
-        using var _ = Profiler.Section($"ECS.ForEach<{typeof(T1).Name}>");
-
         var set1 = GetComponentSet<T1>();
         int count = set1.EntityCount;
         if (count == 0) return;
@@ -368,8 +366,6 @@ public class ECS : IGameObject
         where T1 : struct, Component
         where T2 : struct, Component
     {
-        using var _ = Profiler.Section($"ECS.ForEach<{typeof(T1).Name},{typeof(T2).Name}>");
-
         long key = ((long)typeof(T1).GetHashCode() << 32) | (uint)typeof(T2).GetHashCode();
         SparseSet<T1> set1;
         SparseSet<T2> set2;
@@ -444,8 +440,6 @@ public class ECS : IGameObject
         where T2 : struct, Component
         where T3 : struct, Component
     {
-        using var _ = Profiler.Section($"ECS.Query<{typeof(T1).Name},{typeof(T2).Name},{typeof(T3).Name}>");
-
         long key = HashTypes(typeof(T1).GetHashCode(), typeof(T2).GetHashCode(), typeof(T3).GetHashCode());
         SparseSet<T1> set1;
         SparseSet<T2> set2;
@@ -529,8 +523,6 @@ public class ECS : IGameObject
         where T3 : struct, Component
         where T4 : struct, Component
     {
-        using var _ = Profiler.Section($"ECS.ForEach<{typeof(T1).Name},{typeof(T2).Name},{typeof(T3).Name},{typeof(T4).Name}>");
-
         long key = HashTypes(typeof(T1).GetHashCode(), typeof(T2).GetHashCode(), typeof(T3).GetHashCode(), typeof(T4).GetHashCode());
         SparseSet<T1> set1;
         SparseSet<T2> set2;
@@ -638,10 +630,7 @@ public class ECS : IGameObject
         {
             if (!Systems[i].Enabled) continue;
             Systems[i].GameTime = Scene.GameTime;
-            using (Profiler.Section($"Update:{Systems[i].GetType().Name}"))
-            {
-                Systems[i].Update();
-            }
+            Systems[i].Update();
         }
     }
 
@@ -651,10 +640,7 @@ public class ECS : IGameObject
         {
             if (!Systems[i].Enabled) continue;
             Systems[i].GameTime = Scene.GameTime;
-            using (Profiler.Section($"FixedUpdate:{Systems[i].GetType().Name}"))
-            {
-                Systems[i].FixedUpdate();
-            }
+            Systems[i].FixedUpdate();
         }
     }
 
@@ -664,10 +650,7 @@ public class ECS : IGameObject
         {
             if (!Systems[i].Enabled) continue;
             Systems[i].GameTime = Scene.GameTime;
-            using (Profiler.Section($"Render:{Systems[i].GetType().Name}"))
-            {
-                Systems[i].Render();
-            }
+            Systems[i].Render();
         }
     }
 
@@ -677,10 +660,7 @@ public class ECS : IGameObject
         {
             if (!Systems[i].Enabled) continue;
             Systems[i].GameTime = Scene.GameTime;
-            using (Profiler.Section($"LateRender:{Systems[i].GetType().Name}"))
-            {
-                Systems[i].LateRender();
-            }
+            Systems[i].LateRender();
         }
     }
 }

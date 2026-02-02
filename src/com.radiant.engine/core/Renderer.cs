@@ -421,8 +421,6 @@ public class Renderer : IDisposable
     /// <param name="technique">Shader technique: "Default" (AA), "Sharp" (no AA), or "Emissive" (sharp SDF for light sources).</param>
     public Renderer FlushShapes(RenderTarget2D target = null, Color? clearColor = null, string technique = "Default")
     {
-        using var _ = Profiler.Section("Renderer.FlushShapes");
-
         CommitTextures();
 
         Device.SetRenderTarget(target);
@@ -1329,8 +1327,6 @@ public class Renderer : IDisposable
     /// </summary>
     public Renderer Draw()
     {
-        using var _ = Profiler.Section($"Renderer.Draw:{CurrentShaderName ?? "NoShader"}");
-
         CommitTextures();
 
         Device.BlendState = BlendState;
