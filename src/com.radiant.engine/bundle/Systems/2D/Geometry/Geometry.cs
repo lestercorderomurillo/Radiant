@@ -100,15 +100,15 @@ public class Geometry : core.System
         AbsorptionBuffers = new Shape[BucketCount][];
         AbsorptionCounts = new int[BucketCount];
 
-        for (int i = 0; i < BucketCount; i++)
+        for (int bucketIndex = 0; bucketIndex < BucketCount; bucketIndex++)
         {
-            EmissiveBuffers[i] = new Shape[InitialBucketCapacity];
-            AbsorptionBuffers[i] = new Shape[InitialBucketCapacity];
+            EmissiveBuffers[bucketIndex] = new Shape[InitialBucketCapacity];
+            AbsorptionBuffers[bucketIndex] = new Shape[InitialBucketCapacity];
         }
 
         MotionShapesByThread = new List<(Vector2, Vector2, Vector2, bool, float)>[ThreadCount];
-        for (int i = 0; i < ThreadCount; i++)
-            MotionShapesByThread[i] = new();
+        for (int threadIndex = 0; threadIndex < ThreadCount; threadIndex++)
+            MotionShapesByThread[threadIndex] = new();
 
         Gizmos = Scene.ECS.GetSystem<GizmosRenderer>();
         PrevKeyState = Keyboard.GetState();
@@ -215,99 +215,115 @@ public class Geometry : core.System
         AbsorptionMinLayer = MaxZLayers;
         AbsorptionMaxLayer = -1;
 
-        for (int i = 0; i < ThreadCount; i++)
-            MotionShapesByThread[i].Clear();
+        for (int threadIndex = 0; threadIndex < ThreadCount; threadIndex++)
+            MotionShapesByThread[threadIndex].Clear();
 
-        // Rectangles - bucket by Z layer (inlined for perf)
-        Scene.ECS.Query((int threadIdx, int entity, ref Transform transform, ref Rectangle2D rect, ref Material mat) =>
+        // Rectangles - bucket by Z layer
+        Scene.ECS.Query((int threadIndex, int entity, ref Transform transform, ref Rectangle2D rectangle, ref Material material) =>
         {
             Vector2 position = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
-            if (position.X + rect.Size.X < 0 || position.X >= WorldBounds.X ||
-                position.Y + rect.Size.Y < 0 || position.Y >= WorldBounds.Y) return;
+            if (position.X + rectangle.Size.X < 0 || position.X >= WorldBounds.X ||
+                position.Y + rectangle.Size.Y < 0 || position.Y >= WorldBounds.Y) return;
 
             int layer = Math.Clamp((int)transform.Position.Z + ZLayerOffset, 0, MaxZLayers - 1);
-            int bucketIdx = layer * ThreadCount + threadIdx;
+            int bucketIndex = layer * ThreadCount + threadIndex;
 
-            // Emissive
-            int ec = EmissiveCounts[bucketIdx];
-            if (ec >= EmissiveBuffers[bucketIdx].Length)
-                GrowBuffer(ref EmissiveBuffers[bucketIdx], ec);
-            ref var es = ref EmissiveBuffers[bucketIdx][ec];
-            es.Position = position; es.Size = rect.Size; es.Color = mat.EmissiveScaled; es.Type = ShapeType.Rectangle;
-            EmissiveCounts[bucketIdx] = ec + 1;
+            int emissiveIndex = EmissiveCounts[bucketIndex];
+            if (emissiveIndex >= EmissiveBuffers[bucketIndex].Length)
+                GrowBuffer(ref EmissiveBuffers[bucketIndex], emissiveIndex);
+            ref var emissiveShape = ref EmissiveBuffers[bucketIndex][emissiveIndex];
+            emissiveShape.Position = position;
+            emissiveShape.Size = rectangle.Size;
+            emissiveShape.Color = material.EmissiveScaled;
+            emissiveShape.Type = ShapeType.Rectangle;
+            EmissiveCounts[bucketIndex] = emissiveIndex + 1;
 
-            // Absorption
-            int ac = AbsorptionCounts[bucketIdx];
-            if (ac >= AbsorptionBuffers[bucketIdx].Length)
-                GrowBuffer(ref AbsorptionBuffers[bucketIdx], ac);
-            ref var abs = ref AbsorptionBuffers[bucketIdx][ac];
-            abs.Position = position; abs.Size = rect.Size; abs.Color = mat.Absorption; abs.Type = ShapeType.Rectangle;
-            AbsorptionCounts[bucketIdx] = ac + 1;
+            int absorptionIndex = AbsorptionCounts[bucketIndex];
+            if (absorptionIndex >= AbsorptionBuffers[bucketIndex].Length)
+                GrowBuffer(ref AbsorptionBuffers[bucketIndex], absorptionIndex);
+            ref var absorptionShape = ref AbsorptionBuffers[bucketIndex][absorptionIndex];
+            absorptionShape.Position = position;
+            absorptionShape.Size = rectangle.Size;
+            absorptionShape.Color = material.Absorption;
+            absorptionShape.Type = ShapeType.Rectangle;
+            AbsorptionCounts[bucketIndex] = absorptionIndex + 1;
         });
 
         // Circles
-        Scene.ECS.Query((int threadIdx, int entity, ref Transform transform, ref Circle2D circle, ref Material mat) =>
+        Scene.ECS.Query((int threadIndex, int entity, ref Transform transform, ref Circle2D circle, ref Material material) =>
         {
             Vector2 center = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
             if (center.X + circle.Radius < 0 || center.X - circle.Radius >= WorldBounds.X ||
                 center.Y + circle.Radius < 0 || center.Y - circle.Radius >= WorldBounds.Y) return;
 
             int layer = Math.Clamp((int)transform.Position.Z + ZLayerOffset, 0, MaxZLayers - 1);
-            int bucketIdx = layer * ThreadCount + threadIdx;
+            int bucketIndex = layer * ThreadCount + threadIndex;
 
-            int ec = EmissiveCounts[bucketIdx];
-            if (ec >= EmissiveBuffers[bucketIdx].Length)
-                GrowBuffer(ref EmissiveBuffers[bucketIdx], ec);
-            ref var es = ref EmissiveBuffers[bucketIdx][ec];
-            es.Position = center; es.Radius = circle.Radius; es.Color = mat.EmissiveScaled; es.Type = ShapeType.Circle;
-            EmissiveCounts[bucketIdx] = ec + 1;
+            int emissiveIndex = EmissiveCounts[bucketIndex];
+            if (emissiveIndex >= EmissiveBuffers[bucketIndex].Length)
+                GrowBuffer(ref EmissiveBuffers[bucketIndex], emissiveIndex);
+            ref var emissiveShape = ref EmissiveBuffers[bucketIndex][emissiveIndex];
+            emissiveShape.Position = center;
+            emissiveShape.Radius = circle.Radius;
+            emissiveShape.Color = material.EmissiveScaled;
+            emissiveShape.Type = ShapeType.Circle;
+            EmissiveCounts[bucketIndex] = emissiveIndex + 1;
 
-            int ac = AbsorptionCounts[bucketIdx];
-            if (ac >= AbsorptionBuffers[bucketIdx].Length)
-                GrowBuffer(ref AbsorptionBuffers[bucketIdx], ac);
-            ref var abs = ref AbsorptionBuffers[bucketIdx][ac];
-            abs.Position = center; abs.Radius = circle.Radius; abs.Color = mat.Absorption; abs.Type = ShapeType.Circle;
-            AbsorptionCounts[bucketIdx] = ac + 1;
+            int absorptionIndex = AbsorptionCounts[bucketIndex];
+            if (absorptionIndex >= AbsorptionBuffers[bucketIndex].Length)
+                GrowBuffer(ref AbsorptionBuffers[bucketIndex], absorptionIndex);
+            ref var absorptionShape = ref AbsorptionBuffers[bucketIndex][absorptionIndex];
+            absorptionShape.Position = center;
+            absorptionShape.Radius = circle.Radius;
+            absorptionShape.Color = material.Absorption;
+            absorptionShape.Type = ShapeType.Circle;
+            AbsorptionCounts[bucketIndex] = absorptionIndex + 1;
         });
 
         // Triangles
-        Scene.ECS.Query((int threadIdx, int entity, ref Transform transform, ref Triangle2D tri, ref Material mat) =>
+        Scene.ECS.Query((int threadIndex, int entity, ref Transform transform, ref Triangle2D triangle, ref Material material) =>
         {
             Vector2 position = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
-            if (position.X + tri.Size.X < 0 || position.X >= WorldBounds.X ||
-                position.Y + tri.Size.Y < 0 || position.Y >= WorldBounds.Y) return;
+            if (position.X + triangle.Size.X < 0 || position.X >= WorldBounds.X ||
+                position.Y + triangle.Size.Y < 0 || position.Y >= WorldBounds.Y) return;
 
             int layer = Math.Clamp((int)transform.Position.Z + ZLayerOffset, 0, MaxZLayers - 1);
-            int bucketIdx = layer * ThreadCount + threadIdx;
-            ShapeType type = tri.Bordered ? ShapeType.TriangleBorder : ShapeType.Triangle;
+            int bucketIndex = layer * ThreadCount + threadIndex;
+            ShapeType shapeType = triangle.Bordered ? ShapeType.TriangleBorder : ShapeType.Triangle;
 
-            int ec = EmissiveCounts[bucketIdx];
-            if (ec >= EmissiveBuffers[bucketIdx].Length)
-                GrowBuffer(ref EmissiveBuffers[bucketIdx], ec);
-            ref var es = ref EmissiveBuffers[bucketIdx][ec];
-            es.Position = position; es.Size = tri.Size; es.Color = mat.EmissiveScaled; es.Type = type;
-            EmissiveCounts[bucketIdx] = ec + 1;
+            int emissiveIndex = EmissiveCounts[bucketIndex];
+            if (emissiveIndex >= EmissiveBuffers[bucketIndex].Length)
+                GrowBuffer(ref EmissiveBuffers[bucketIndex], emissiveIndex);
+            ref var emissiveShape = ref EmissiveBuffers[bucketIndex][emissiveIndex];
+            emissiveShape.Position = position;
+            emissiveShape.Size = triangle.Size;
+            emissiveShape.Color = material.EmissiveScaled;
+            emissiveShape.Type = shapeType;
+            EmissiveCounts[bucketIndex] = emissiveIndex + 1;
 
-            int ac = AbsorptionCounts[bucketIdx];
-            if (ac >= AbsorptionBuffers[bucketIdx].Length)
-                GrowBuffer(ref AbsorptionBuffers[bucketIdx], ac);
-            ref var abs = ref AbsorptionBuffers[bucketIdx][ac];
-            abs.Position = position; abs.Size = tri.Size; abs.Color = mat.Absorption; abs.Type = type;
-            AbsorptionCounts[bucketIdx] = ac + 1;
+            int absorptionIndex = AbsorptionCounts[bucketIndex];
+            if (absorptionIndex >= AbsorptionBuffers[bucketIndex].Length)
+                GrowBuffer(ref AbsorptionBuffers[bucketIndex], absorptionIndex);
+            ref var absorptionShape = ref AbsorptionBuffers[bucketIndex][absorptionIndex];
+            absorptionShape.Position = position;
+            absorptionShape.Size = triangle.Size;
+            absorptionShape.Color = material.Absorption;
+            absorptionShape.Type = shapeType;
+            AbsorptionCounts[bucketIndex] = absorptionIndex + 1;
         });
 
         // Compute actual layer ranges after parallel collection
         for (int layer = 0; layer < MaxZLayers; layer++)
         {
-            for (int t = 0; t < ThreadCount; t++)
+            for (int threadIndex = 0; threadIndex < ThreadCount; threadIndex++)
             {
-                int idx = layer * ThreadCount + t;
-                if (EmissiveCounts[idx] > 0)
+                int bucketIndex = layer * ThreadCount + threadIndex;
+                if (EmissiveCounts[bucketIndex] > 0)
                 {
                     if (layer < EmissiveMinLayer) EmissiveMinLayer = layer;
                     if (layer > EmissiveMaxLayer) EmissiveMaxLayer = layer;
                 }
-                if (AbsorptionCounts[idx] > 0)
+                if (AbsorptionCounts[bucketIndex] > 0)
                 {
                     if (layer < AbsorptionMinLayer) AbsorptionMinLayer = layer;
                     if (layer > AbsorptionMaxLayer) AbsorptionMaxLayer = layer;
@@ -315,22 +331,23 @@ public class Geometry : core.System
             }
         }
 
-        // Motion tracking
-        Scene.ECS.Query((int threadIdx, int entity, ref Transform transform, ref Rectangle2D rect, ref MotionTrackable motion) =>
+        // Motion tracking for rectangles
+        Scene.ECS.Query((int threadIndex, int entity, ref Transform transform, ref Rectangle2D rectangle, ref MotionTrackable motion) =>
         {
             Vector2 position = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
             Vector2 velocity = motion.CalculateVelocity(transform.Position, MotionHistoryFrames);
             if (velocity.LengthSquared() > 0.0001f)
-                MotionShapesByThread[threadIdx].Add((position, rect.Size, velocity, false, 0));
+                MotionShapesByThread[threadIndex].Add((position, rectangle.Size, velocity, false, 0));
             motion.Push(transform.Position);
         });
 
-        Scene.ECS.Query((int threadIdx, int entity, ref Transform transform, ref Circle2D circle, ref MotionTrackable motion) =>
+        // Motion tracking for circles
+        Scene.ECS.Query((int threadIndex, int entity, ref Transform transform, ref Circle2D circle, ref MotionTrackable motion) =>
         {
             Vector2 center = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
             Vector2 velocity = motion.CalculateVelocity(transform.Position, MotionHistoryFrames);
             if (velocity.LengthSquared() > 0.0001f)
-                MotionShapesByThread[threadIdx].Add((center, Vector2.Zero, velocity, true, circle.Radius));
+                MotionShapesByThread[threadIndex].Add((center, Vector2.Zero, velocity, true, circle.Radius));
             motion.Push(transform.Position);
         });
 
@@ -350,24 +367,24 @@ public class Geometry : core.System
     {
         Renderer.ClearShapes();
 
-        if (EmissiveMaxLayer < 0) // No shapes
+        if (EmissiveMaxLayer < 0)
         {
             EmissiveCount = 0;
             Renderer.Configure(BlendState.AlphaBlend).FlushShapes(EmissiveTexture, Color.Transparent);
             return;
         }
 
-        // Iterate layers in Z-order - NO SORTING NEEDED
+        // Iterate layers in Z-order (no sorting needed - layers are naturally ordered)
         for (int layer = EmissiveMinLayer; layer <= EmissiveMaxLayer; layer++)
         {
-            for (int t = 0; t < ThreadCount; t++)
+            for (int threadIndex = 0; threadIndex < ThreadCount; threadIndex++)
             {
-                int bucketIdx = layer * ThreadCount + t;
-                int count = EmissiveCounts[bucketIdx];
-                var buffer = EmissiveBuffers[bucketIdx];
+                int bucketIndex = layer * ThreadCount + threadIndex;
+                int shapeCount = EmissiveCounts[bucketIndex];
+                var shapeBuffer = EmissiveBuffers[bucketIndex];
 
-                for (int i = 0; i < count; i++)
-                    DrawShape(ref buffer[i]);
+                for (int shapeIndex = 0; shapeIndex < shapeCount; shapeIndex++)
+                    DrawShape(ref shapeBuffer[shapeIndex]);
             }
         }
 
@@ -388,14 +405,14 @@ public class Geometry : core.System
 
         for (int layer = AbsorptionMinLayer; layer <= AbsorptionMaxLayer; layer++)
         {
-            for (int t = 0; t < ThreadCount; t++)
+            for (int threadIndex = 0; threadIndex < ThreadCount; threadIndex++)
             {
-                int bucketIdx = layer * ThreadCount + t;
-                int count = AbsorptionCounts[bucketIdx];
-                var buffer = AbsorptionBuffers[bucketIdx];
+                int bucketIndex = layer * ThreadCount + threadIndex;
+                int shapeCount = AbsorptionCounts[bucketIndex];
+                var shapeBuffer = AbsorptionBuffers[bucketIndex];
 
-                for (int i = 0; i < count; i++)
-                    DrawShape(ref buffer[i]);
+                for (int shapeIndex = 0; shapeIndex < shapeCount; shapeIndex++)
+                    DrawShape(ref shapeBuffer[shapeIndex]);
             }
         }
 
@@ -426,23 +443,23 @@ public class Geometry : core.System
     {
         Renderer.ClearShapes();
 
-        for (int t = 0; t < ThreadCount; t++)
+        for (int threadIndex = 0; threadIndex < ThreadCount; threadIndex++)
         {
-            foreach (var (pos, size, velocity, isCircle, radius) in MotionShapesByThread[t])
+            foreach (var (position, size, velocity, isCircle, radius) in MotionShapesByThread[threadIndex])
             {
-                float vx = (velocity.X / 10f) * 0.5f + 0.5f;
-                float vy = (velocity.Y / 10f) * 0.5f + 0.5f;
-                Color motionColor = new Color(vx, vy, 0f, 1f);
+                float normalizedVelocityX = (velocity.X / 10f) * 0.5f + 0.5f;
+                float normalizedVelocityY = (velocity.Y / 10f) * 0.5f + 0.5f;
+                Color motionColor = new Color(normalizedVelocityX, normalizedVelocityY, 0f, 1f);
 
                 if (isCircle)
-                    Renderer.DrawCircle(pos, radius, motionColor);
+                    Renderer.DrawCircle(position, radius, motionColor);
                 else
-                    Renderer.DrawRect(pos, size, motionColor);
+                    Renderer.DrawRect(position, size, motionColor);
             }
         }
 
-        var motionClear = new Color(0.5f, 0.5f, 0f, 1f);
-        Renderer.Configure(BlendState.Opaque).FlushShapes(MotionVectorTexture, motionClear, "Sharp");
+        Color motionClearColor = new Color(0.5f, 0.5f, 0f, 1f);
+        Renderer.Configure(BlendState.Opaque).FlushShapes(MotionVectorTexture, motionClearColor, "Sharp");
     }
 
     private void RenderSDFTexture()

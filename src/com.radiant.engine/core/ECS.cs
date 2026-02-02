@@ -226,10 +226,10 @@ public class ECS : IGameObject
     }
 
     /// <summary>Action delegate for parallel ForEach iteration with thread index for ordered collection.</summary>
-    public delegate void ForEachAction<T1>(int threadIdx, int entity, ref T1 c1) where T1 : struct;
-    public delegate void ForEachAction<T1, T2>(int threadIdx, int entity, ref T1 c1, ref T2 c2) where T1 : struct where T2 : struct;
-    public delegate void ForEachAction<T1, T2, T3>(int threadIdx, int entity, ref T1 c1, ref T2 c2, ref T3 c3) where T1 : struct where T2 : struct where T3 : struct;
-    public delegate void ForEachAction<T1, T2, T3, T4>(int threadIdx, int entity, ref T1 c1, ref T2 c2, ref T3 c3, ref T4 c4) where T1 : struct where T2 : struct where T3 : struct where T4 : struct;
+    public delegate void ForEachAction<T1>(int threadIndex, int entity, ref T1 component1) where T1 : struct;
+    public delegate void ForEachAction<T1, T2>(int threadIndex, int entity, ref T1 component1, ref T2 component2) where T1 : struct where T2 : struct;
+    public delegate void ForEachAction<T1, T2, T3>(int threadIndex, int entity, ref T1 component1, ref T2 component2, ref T3 component3) where T1 : struct where T2 : struct where T3 : struct;
+    public delegate void ForEachAction<T1, T2, T3, T4>(int threadIndex, int entity, ref T1 component1, ref T2 component2, ref T3 component3, ref T4 component4) where T1 : struct where T2 : struct where T3 : struct where T4 : struct;
 
     /// <summary>Returns the number of threads used for parallel iteration.</summary>
     public static int ThreadCount => Environment.ProcessorCount;
