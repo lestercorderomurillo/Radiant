@@ -9,58 +9,59 @@ namespace com.radiant.engine.core;
 
 public class ECS : IGameObject
 {
-    private readonly PagedBitSet ActiveEntities;
+    // Entity tracking
     private readonly Stack<int> RecycledIds;
-    private readonly List<System> Systems;
-    private readonly Dictionary<Type, IComponentSet> ComponentSets;
     private int NextEntityId;
+    private int EntityCount_;
 
-    // Query cache - avoids repeated dictionary lookups and smallest-set calculations
-    private readonly Dictionary<long, CachedQuery2> QueryCache2 = new();
-    private readonly Dictionary<long, CachedQuery3> QueryCache3 = new();
-    private readonly Dictionary<long, CachedQuery4> QueryCache4 = new();
-    private int QueryVersion;
+    // Archetype storage - components live here
+    private readonly List<Archetype> Archetypes;
+    private readonly Dictionary<ulong, Archetype> ArchetypesBySignature;
+    private readonly Dictionary<Type, int> TypeToId;
+    private int NextTypeId;
 
-    // Cached thread count - avoid Environment.ProcessorCount calls
+    // Entity → location mapping
+    private EntityRecord[] EntityRecords;
+    private const int InitialEntityCapacity = 1024;
+
+    private struct EntityRecord
+    {
+        public Archetype Arch;
+        public int Index;
+    }
+
+    // Systems
+    private readonly List<System> Systems;
+
+    // Thread pool
     private static readonly int CachedThreadCount = Environment.ProcessorCount;
 
-    private struct CachedQuery2
-    {
-        public IComponentSet Set1, Set2;
-        public int Version;
-        public bool IterateSet1;
-    }
-
-    private struct CachedQuery3
-    {
-        public IComponentSet Set1, Set2, Set3;
-        public int Version;
-        public int SmallestIdx;
-    }
-
-    private struct CachedQuery4
-    {
-        public IComponentSet Set1, Set2, Set3, Set4;
-        public int Version;
-        public int SmallestIdx;
-    }
-    
-    public int EntityCount => ActiveEntities.Count;
+    public int EntityCount => EntityCount_;
     public Scene Scene { get; set; }
     public Renderer Renderer { get; private set; }
     public SpatialIndex Spatial { get; private set; }
+
+    // Job system
+    private readonly Thread[] Workers;
+    private readonly ManualResetEventSlim[] JobReadyEvents;
+    private readonly ManualResetEventSlim[] JobDoneEvents;
+    private volatile bool ShuttingDown;
+    private struct JobData { public int ThreadIdx, Start, End; }
+    private readonly JobData[] JobDataArray;
+    private Action<int, int, int> CurrentWork;
 
     public ECS(Scene scene, Renderer renderer)
     {
         Scene = scene;
         Renderer = renderer;
-        ActiveEntities = new PagedBitSet();
         RecycledIds = new Stack<int>();
         Systems = new List<System>();
-        ComponentSets = new Dictionary<Type, IComponentSet>();
+        Archetypes = new List<Archetype>();
+        ArchetypesBySignature = new Dictionary<ulong, Archetype>();
+        TypeToId = new Dictionary<Type, int>();
+        EntityRecords = new EntityRecord[InitialEntityCapacity];
         Spatial = new SpatialIndex(this, 64f);
 
-        // Initialize job system
         Workers = new Thread[CachedThreadCount];
         JobDataArray = new JobData[CachedThreadCount];
         JobReadyEvents = new ManualResetEventSlim[CachedThreadCount];
@@ -71,7 +72,6 @@ public class ECS : IGameObject
     public void Initialize()
     {
         SortSystemsByDependencies();
-
         for (int i = 0; i < Systems.Count; i++)
             if (Systems[i].Enabled)
                 Systems[i].Initialize();
@@ -80,13 +80,10 @@ public class ECS : IGameObject
     private void SortSystemsByDependencies()
     {
         if (Systems.Count <= 1) return;
-
-        // Build type -> index map
         var typeToIndex = new Dictionary<Type, int>();
         for (int i = 0; i < Systems.Count; i++)
             typeToIndex[Systems[i].GetType()] = i;
 
-        // Build dependency graph
         var outgoing = new List<int>[Systems.Count];
         var inDegree = new int[Systems.Count];
         for (int i = 0; i < Systems.Count; i++)
@@ -95,8 +92,6 @@ public class ECS : IGameObject
         for (int i = 0; i < Systems.Count; i++)
         {
             var type = Systems[i].GetType();
-
-            // RunAfter: this system runs after the specified system
             foreach (var attr in type.GetCustomAttributes(typeof(RunAfterAttribute), true))
             {
                 var runAfter = (RunAfterAttribute)attr;
@@ -106,8 +101,6 @@ public class ECS : IGameObject
                     inDegree[i]++;
                 }
             }
-
-            // RunBefore: this system runs before the specified system
             foreach (var attr in type.GetCustomAttributes(typeof(RunBeforeAttribute), true))
             {
                 var runBefore = (RunBeforeAttribute)attr;
@@ -119,7 +112,6 @@ public class ECS : IGameObject
             }
         }
 
-        // Kahn's algorithm - topological sort
         var queue = new Queue<int>();
         for (int i = 0; i < Systems.Count; i++)
             if (inDegree[i] == 0)
@@ -130,15 +122,11 @@ public class ECS : IGameObject
         {
             int current = queue.Dequeue();
             sorted.Add(Systems[current]);
-
             foreach (int next in outgoing[current])
-            {
                 if (--inDegree[next] == 0)
                     queue.Enqueue(next);
-            }
         }
 
-        // Only apply if no cycle detected
         if (sorted.Count == Systems.Count)
         {
             Systems.Clear();
@@ -163,54 +151,72 @@ public class ECS : IGameObject
         system.GameTime = Scene.GameTime;
         system.Enabled = enabled;
         Systems.Add(system);
-
         return system;
     }
 
     public T GetSystem<T>() where T : System
     {
         for (int i = 0; i < Systems.Count; i++)
-            if (Systems[i] is T typedSystem)
-                return typedSystem;
+            if (Systems[i] is T typed)
+                return typed;
         return null;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private SparseSet<T> GetComponentSet<T>() where T : struct, Component
+    private int GetTypeId(Type type)
     {
-        var type = typeof(T);
-        if (!ComponentSets.TryGetValue(type, out var set))
+        if (!TypeToId.TryGetValue(type, out int id))
         {
-            set = new SparseSet<T>();
-            ComponentSets[type] = set;
+            id = NextTypeId++;
+            TypeToId[type] = id;
         }
-        return (SparseSet<T>)set;
+        return id;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal IComponentSet GetComponentSetByType(Type type)
+    private ulong GetSignature(params Type[] types)
     {
-        return ComponentSets.TryGetValue(type, out var set) ? set : null;
+        ulong sig = 0;
+        foreach (var t in types)
+            sig |= 1UL << GetTypeId(t);
+        return sig;
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool HasComponentType(int entity, Type type)
+    private Archetype GetOrCreateArchetype(ulong signature, Type[] types)
     {
-        var set = GetComponentSetByType(type);
-        return set != null && set.Contains(entity);
+        if (!ArchetypesBySignature.TryGetValue(signature, out var arch))
+        {
+            arch = new Archetype(types, signature);
+            Archetypes.Add(arch);
+            ArchetypesBySignature[signature] = arch;
+        }
+        return arch;
+    }
+
+    private void EnsureEntityCapacity(int entityId)
+    {
+        if (entityId >= EntityRecords.Length)
+        {
+            int newSize = EntityRecords.Length;
+            while (newSize <= entityId) newSize *= 2;
+            Array.Resize(ref EntityRecords, newSize);
+        }
     }
 
     public int CreateEntity()
     {
         int id = RecycledIds.Count > 0 ? RecycledIds.Pop() : NextEntityId++;
-        ActiveEntities.Add(id);
+        EnsureEntityCapacity(id);
+        EntityRecords[id] = default;
+        EntityCount_++;
         return id;
     }
 
     public int CreateEntity(Vector3 position)
     {
         int id = CreateEntity();
-        ref var transform = ref AddComponent<Transform>(id);
+        AddComponent<Transform>(id);
+        ref var transform = ref GetComponent<Transform>(id);
         transform.Position = position;
         Spatial.Insert(id, position);
         return id;
@@ -218,97 +224,79 @@ public class ECS : IGameObject
 
     public bool DestroyEntity(int entity)
     {
-        if (!ActiveEntities.Contains(entity))
-            return false;
+        ref var record = ref EntityRecords[entity];
+        if (record.Arch == null) return false;
 
         Spatial.Remove(entity);
 
-        foreach (var set in ComponentSets.Values)
-            set.Remove(entity);
+        int movedEntity = record.Arch.Remove(record.Index);
+        if (movedEntity >= 0)
+            EntityRecords[movedEntity].Index = record.Index;
 
-        ActiveEntities.Remove(entity);
+        record.Arch = null;
+        record.Index = -1;
         RecycledIds.Push(entity);
-        QueryVersion++;
+        EntityCount_--;
         return true;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void SetEntityActive(int entity, bool active)
-    {
-        if (active)
-            ActiveEntities.Add(entity);
-        else
-            ActiveEntities.Remove(entity);
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool IsEntityActive(int entity) => ActiveEntities.Contains(entity);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ref T AddComponent<T>(int entity) where T : struct, Component
     {
-        var set = GetComponentSet<T>();
-        set.Add(entity, new T());
-        QueryVersion++;
-        return ref set.Get(entity);
+        ref var record = ref EntityRecords[entity];
+        var oldArch = record.Arch;
+        var type = typeof(T);
+
+        // Calculate new signature
+        ulong newSig = oldArch != null ? oldArch.Signature | (1UL << GetTypeId(type)) : (1UL << GetTypeId(type));
+
+        if (oldArch != null && oldArch.Signature == newSig)
+            return ref oldArch.Get<T>(record.Index);
+
+        // Build new type array
+        var types = new List<Type>();
+        if (oldArch != null)
+            types.AddRange(oldArch.Types);
+        if (!types.Contains(type))
+            types.Add(type);
+
+        var newArch = GetOrCreateArchetype(newSig, types.ToArray());
+        int newIndex = newArch.Add(entity);
+
+        if (oldArch != null)
+        {
+            newArch.CopyComponentsFrom(oldArch, record.Index, newIndex);
+            int movedEntity = oldArch.Remove(record.Index);
+            if (movedEntity >= 0)
+                EntityRecords[movedEntity].Index = record.Index;
+        }
+
+        record.Arch = newArch;
+        record.Index = newIndex;
+
+        return ref newArch.Get<T>(newIndex);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ref T GetComponent<T>(int entity) where T : struct, Component
     {
-        return ref GetComponentSet<T>().Get(entity);
+        ref var record = ref EntityRecords[entity];
+        return ref record.Arch.Get<T>(record.Index);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool HasComponent<T>(int entity) where T : struct, Component
     {
-        return GetComponentSet<T>().Contains(entity);
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void RemoveComponent<T>(int entity) where T : struct, Component
-    {
-        GetComponentSet<T>().Remove(entity);
-        QueryVersion++;
+        ref var record = ref EntityRecords[entity];
+        return record.Arch != null && record.Arch.HasComponent<T>();
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetPosition(int entity, Vector3 position)
     {
-        ref var transform = ref GetComponentSet<Transform>().Get(entity);
-        transform.Position = position;
+        GetComponent<Transform>(entity).Position = position;
         Spatial.Update(entity, position);
     }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void SetPosition(int entity, float x, float y, float z)
-    {
-        ref var transform = ref GetComponentSet<Transform>().Get(entity);
-        transform.Position.X = x;
-        transform.Position.Y = y;
-        transform.Position.Z = z;
-        Spatial.Update(entity, new Vector3(x, y, z));
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Move(int entity, Vector3 delta)
-    {
-        ref var transform = ref GetComponentSet<Transform>().Get(entity);
-        transform.Position += delta;
-        Spatial.Update(entity, transform.Position);
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Move(int entity, float dx, float dy, float dz)
-    {
-        ref var transform = ref GetComponentSet<Transform>().Get(entity);
-        transform.Position.X += dx;
-        transform.Position.Y += dy;
-        transform.Position.Z += dz;
-        Spatial.Update(entity, transform.Position);
-    }
-
-    public void SyncSpatial() => Spatial.SyncAll();
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ReadOnlySpan<int> InRadius(Vector3 center, float radius) => Spatial.InRadius(center, radius);
@@ -320,78 +308,48 @@ public class ECS : IGameObject
     public ReadOnlySpan<int> InBox(Vector3 min, Vector3 max) => Spatial.InBox(min, max);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public ReadOnlySpan<int> Nearest(Vector3 center, int count, float maxRadius = float.MaxValue) => Spatial.Nearest(center, count, maxRadius);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int? AtExact(Vector3 position) => Spatial.AtExact(position);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int? AtExact(float x, float y, float z) => Spatial.AtExact(x, y, z);
 
-    /// <summary>Returns all active entity IDs that have the specified component. For sequential iteration.</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IEnumerable<int> GetEntities<T>() where T : struct, Component
     {
-        var set = GetComponentSet<T>();
-        foreach (int entity in set.GetEntityIds())
-            if (ActiveEntities.Contains(entity))
-                yield return entity;
+        ulong sig = 1UL << GetTypeId(typeof(T));
+        foreach (var arch in Archetypes)
+        {
+            if ((arch.Signature & sig) != sig) continue;
+            var entities = arch.GetEntities();
+            for (int i = 0; i < arch.EntityCount; i++)
+                yield return entities[i];
+        }
     }
 
-    /// <summary>Action delegate for parallel ForEach iteration with thread index for ordered collection.</summary>
-    public delegate void ForEachAction<T1>(int threadIndex, int entity, ref T1 component1) where T1 : struct;
-    public delegate void ForEachAction<T1, T2>(int threadIndex, int entity, ref T1 component1, ref T2 component2) where T1 : struct where T2 : struct;
-    public delegate void ForEachAction<T1, T2, T3>(int threadIndex, int entity, ref T1 component1, ref T2 component2, ref T3 component3) where T1 : struct where T2 : struct where T3 : struct;
-    public delegate void ForEachAction<T1, T2, T3, T4>(int threadIndex, int entity, ref T1 component1, ref T2 component2, ref T3 component3, ref T4 component4) where T1 : struct where T2 : struct where T3 : struct where T4 : struct;
-
-    /// <summary>Returns the number of threads used for parallel iteration.</summary>
     public static int ThreadCount => CachedThreadCount;
 
-    // Job system - persistent worker threads, zero allocation per frame
-    private readonly Thread[] Workers;
-    private readonly ManualResetEventSlim[] JobReadyEvents;
-    private readonly ManualResetEventSlim[] JobDoneEvents;
-    private volatile bool ShuttingDown;
-
-    // Zero-allocation job data - replaces lambda closures
-    private struct JobData
-    {
-        public int ThreadIdx;
-        public int Start;
-        public int End;
-    }
-    private readonly JobData[] JobDataArray;
-    private Action<int, int, int> CurrentWork;
-
+    // Job system
     private void InitializeJobSystem()
     {
         for (int i = 0; i < CachedThreadCount; i++)
         {
-            int workerIdx = i;
+            int idx = i;
             JobReadyEvents[i] = new ManualResetEventSlim(false);
-            JobDoneEvents[i] = new ManualResetEventSlim(true); // Start as signaled (done)
-            Workers[i] = new Thread(() => WorkerLoop(workerIdx))
-            {
-                IsBackground = true,
-                Name = $"ECS Worker {workerIdx}"
-            };
+            JobDoneEvents[i] = new ManualResetEventSlim(true);
+            Workers[i] = new Thread(() => WorkerLoop(idx)) { IsBackground = true, Name = $"ECS Worker {idx}" };
             Workers[i].Start();
         }
     }
 
-    private void WorkerLoop(int workerIdx)
+    private void WorkerLoop(int idx)
     {
         while (!ShuttingDown)
         {
-            JobReadyEvents[workerIdx].Wait();
+            JobReadyEvents[idx].Wait();
             if (ShuttingDown) return;
-            JobReadyEvents[workerIdx].Reset();
-
-            // Read from pre-allocated struct, call stored delegate - no closure allocation
-            ref var data = ref JobDataArray[workerIdx];
+            JobReadyEvents[idx].Reset();
+            ref var data = ref JobDataArray[idx];
             CurrentWork?.Invoke(data.ThreadIdx, data.Start, data.End);
-
-            JobDoneEvents[workerIdx].Set();
+            JobDoneEvents[idx].Set();
         }
     }
 
@@ -399,33 +357,19 @@ public class ECS : IGameObject
     private void RunParallel(int count, Action<int, int, int> work)
     {
         if (count == 0) return;
-
-        CurrentWork = work; // Store reference once - no closure allocation
+        CurrentWork = work;
         int chunkSize = (count + CachedThreadCount - 1) / CachedThreadCount;
 
-        // Assign work to each thread using pre-allocated structs
         for (int i = 0; i < CachedThreadCount; i++)
         {
             int start = i * chunkSize;
             int end = Math.Min(start + chunkSize, count);
-
-            if (start >= count)
-            {
-                // No work for this thread
-                JobDoneEvents[i].Set();
-                continue;
-            }
-
-            // Store data in pre-allocated struct - no allocation
-            JobDataArray[i].ThreadIdx = i;
-            JobDataArray[i].Start = start;
-            JobDataArray[i].End = end;
-
+            if (start >= count) { JobDoneEvents[i].Set(); continue; }
+            JobDataArray[i] = new JobData { ThreadIdx = i, Start = start, End = end };
             JobDoneEvents[i].Reset();
             JobReadyEvents[i].Set();
         }
 
-        // Wait for all workers
         for (int i = 0; i < CachedThreadCount; i++)
             JobDoneEvents[i].Wait();
     }
@@ -435,269 +379,201 @@ public class ECS : IGameObject
         ShuttingDown = true;
         for (int i = 0; i < CachedThreadCount; i++)
         {
-            JobReadyEvents[i]?.Set(); // Wake up sleeping threads
+            JobReadyEvents[i]?.Set();
             Workers[i]?.Join(100);
             JobReadyEvents[i]?.Dispose();
             JobDoneEvents[i]?.Dispose();
         }
     }
 
-    /// <summary>Parallel ForEach - divides entities across threads by range. Thread 0: 0-N, Thread 1: N-M, etc.</summary>
-    public void ForEach<T1>(ForEachAction<T1> action)
-        where T1 : struct, Component
-    {
-        var set1 = GetComponentSet<T1>();
-        int count = set1.EntityCount;
-        if (count == 0) return;
+    // Query delegates
+    public delegate void ForEachAction<T1>(int threadIndex, int entity, ref T1 c1) where T1 : struct;
+    public delegate void ForEachAction<T1, T2>(int threadIndex, int entity, ref T1 c1, ref T2 c2) where T1 : struct where T2 : struct;
+    public delegate void ForEachAction<T1, T2, T3>(int threadIndex, int entity, ref T1 c1, ref T2 c2, ref T3 c3) where T1 : struct where T2 : struct where T3 : struct;
 
-        RunParallel(count, (threadIdx, start, end) =>
+    public void ForEach<T1>(ForEachAction<T1> action) where T1 : struct, Component
+    {
+        ulong sig = 1UL << GetTypeId(typeof(T1));
+
+        QueryMatchCache.Clear();
+        int totalCount = 0;
+        foreach (var arch in Archetypes)
         {
-            for (int i = start; i < end; i++)
+            if ((arch.Signature & sig) != sig) continue;
+            if (arch.EntityCount == 0) continue;
+            QueryMatchCache.Add(arch);
+            totalCount += arch.EntityCount;
+        }
+
+        if (totalCount == 0) return;
+
+        if (QueryMatchCache.Count == 1)
+        {
+            var arch = QueryMatchCache[0];
+            var entities = arch.GetEntities();
+            var data1 = arch.GetArray<T1>();
+            RunParallel(arch.EntityCount, (threadIdx, start, end) =>
             {
-                int entity = set1.GetEntityAt(i);
-                action(threadIdx, entity, ref set1.GetComponentAt(i));
+                for (int i = start; i < end; i++)
+                    action(threadIdx, entities[i], ref data1[i]);
+            });
+            return;
+        }
+
+        RunParallel(totalCount, (threadIdx, start, end) =>
+        {
+            int globalIdx = 0;
+            foreach (var arch in QueryMatchCache)
+            {
+                int archCount = arch.EntityCount;
+                int archEnd = globalIdx + archCount;
+                if (start >= archEnd) { globalIdx = archEnd; continue; }
+                if (end <= globalIdx) break;
+
+                int localStart = Math.Max(0, start - globalIdx);
+                int localEnd = Math.Min(archCount, end - globalIdx);
+                var entities = arch.GetEntities();
+                var data1 = arch.GetArray<T1>();
+
+                for (int i = localStart; i < localEnd; i++)
+                    action(threadIdx, entities[i], ref data1[i]);
+
+                globalIdx = archEnd;
             }
         });
     }
 
-    /// <summary>Parallel ForEach for two components.</summary>
     public void ForEach<T1, T2>(ForEachAction<T1, T2> action)
         where T1 : struct, Component
         where T2 : struct, Component
     {
-        long key = ((long)typeof(T1).GetHashCode() << 32) | (uint)typeof(T2).GetHashCode();
-        SparseSet<T1> set1;
-        SparseSet<T2> set2;
-        bool iterateSet1;
+        ulong sig = (1UL << GetTypeId(typeof(T1))) | (1UL << GetTypeId(typeof(T2)));
 
-        if (QueryCache2.TryGetValue(key, out var cached) && cached.Version == QueryVersion)
+        QueryMatchCache.Clear();
+        int totalCount = 0;
+        foreach (var arch in Archetypes)
         {
-            set1 = (SparseSet<T1>)cached.Set1;
-            set2 = (SparseSet<T2>)cached.Set2;
-            iterateSet1 = cached.IterateSet1;
-        }
-        else
-        {
-            set1 = GetComponentSet<T1>();
-            set2 = GetComponentSet<T2>();
-            iterateSet1 = set1.EntityCount <= set2.EntityCount;
-            QueryCache2[key] = new CachedQuery2
-            {
-                Set1 = set1, Set2 = set2,
-                Version = QueryVersion,
-                IterateSet1 = iterateSet1
-            };
+            if ((arch.Signature & sig) != sig) continue;
+            if (arch.EntityCount == 0) continue;
+            QueryMatchCache.Add(arch);
+            totalCount += arch.EntityCount;
         }
 
-        int count = iterateSet1 ? set1.EntityCount : set2.EntityCount;
-        if (count == 0) return;
+        if (totalCount == 0) return;
 
-        RunParallel(count, (threadIdx, start, end) =>
+        if (QueryMatchCache.Count == 1)
         {
-            if (iterateSet1)
+            var arch = QueryMatchCache[0];
+            var entities = arch.GetEntities();
+            var data1 = arch.GetArray<T1>();
+            var data2 = arch.GetArray<T2>();
+            RunParallel(arch.EntityCount, (threadIdx, start, end) =>
             {
                 for (int i = start; i < end; i++)
-                {
-                    int entity = set1.GetEntityAt(i);
-                    int idx2 = set2.GetDenseIndex(entity);
-                    if (idx2 < 0) continue;
-                    action(threadIdx, entity, ref set1.GetComponentAt(i), ref set2.GetComponentAt(idx2));
-                }
-            }
-            else
+                    action(threadIdx, entities[i], ref data1[i], ref data2[i]);
+            });
+            return;
+        }
+
+        RunParallel(totalCount, (threadIdx, start, end) =>
+        {
+            int globalIdx = 0;
+            foreach (var arch in QueryMatchCache)
             {
-                for (int i = start; i < end; i++)
-                {
-                    int entity = set2.GetEntityAt(i);
-                    int idx1 = set1.GetDenseIndex(entity);
-                    if (idx1 < 0) continue;
-                    action(threadIdx, entity, ref set1.GetComponentAt(idx1), ref set2.GetComponentAt(i));
-                }
+                int archCount = arch.EntityCount;
+                int archEnd = globalIdx + archCount;
+                if (start >= archEnd) { globalIdx = archEnd; continue; }
+                if (end <= globalIdx) break;
+
+                int localStart = Math.Max(0, start - globalIdx);
+                int localEnd = Math.Min(archCount, end - globalIdx);
+                var entities = arch.GetEntities();
+                var data1 = arch.GetArray<T1>();
+                var data2 = arch.GetArray<T2>();
+
+                for (int i = localStart; i < localEnd; i++)
+                    action(threadIdx, entities[i], ref data1[i], ref data2[i]);
+
+                globalIdx = archEnd;
             }
         });
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static long HashTypes(int h1, int h2, int h3) =>
-        ((long)h1 * 397) ^ ((long)h2 * 23) ^ h3;
+    // Cached archetype query results
+    private readonly List<Archetype> QueryMatchCache = new();
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static long HashTypes(int h1, int h2, int h3, int h4) =>
-        ((long)h1 * 397) ^ ((long)h2 * 23) ^ ((long)h3 * 17) ^ h4;
-
-    /// <summary>Parallel ForEach for three components.</summary>
     public void Query<T1, T2, T3>(ForEachAction<T1, T2, T3> action)
         where T1 : struct, Component
         where T2 : struct, Component
         where T3 : struct, Component
     {
-        long key = HashTypes(typeof(T1).GetHashCode(), typeof(T2).GetHashCode(), typeof(T3).GetHashCode());
-        SparseSet<T1> set1;
-        SparseSet<T2> set2;
-        SparseSet<T3> set3;
-        int smallestIdx;
+        ulong sig = (1UL << GetTypeId(typeof(T1))) | (1UL << GetTypeId(typeof(T2))) | (1UL << GetTypeId(typeof(T3)));
 
-        if (QueryCache3.TryGetValue(key, out var cached) && cached.Version == QueryVersion)
+        // Find all matching archetypes and total count
+        QueryMatchCache.Clear();
+        int totalCount = 0;
+        foreach (var arch in Archetypes)
         {
-            set1 = (SparseSet<T1>)cached.Set1;
-            set2 = (SparseSet<T2>)cached.Set2;
-            set3 = (SparseSet<T3>)cached.Set3;
-            smallestIdx = cached.SmallestIdx;
-        }
-        else
-        {
-            set1 = GetComponentSet<T1>();
-            set2 = GetComponentSet<T2>();
-            set3 = GetComponentSet<T3>();
-
-            smallestIdx = 1;
-            int minCount = set1.EntityCount;
-            if (set2.EntityCount < minCount) { minCount = set2.EntityCount; smallestIdx = 2; }
-            if (set3.EntityCount < minCount) { smallestIdx = 3; }
-
-            QueryCache3[key] = new CachedQuery3
-            {
-                Set1 = set1, Set2 = set2, Set3 = set3,
-                Version = QueryVersion,
-                SmallestIdx = smallestIdx
-            };
+            if ((arch.Signature & sig) != sig) continue;
+            if (arch.EntityCount == 0) continue;
+            QueryMatchCache.Add(arch);
+            totalCount += arch.EntityCount;
         }
 
-        int count = smallestIdx == 1 ? set1.EntityCount : smallestIdx == 2 ? set2.EntityCount : set3.EntityCount;
-        if (count == 0) return;
+        if (totalCount == 0) return;
 
-        RunParallel(count, (threadIdx, start, end) =>
+        // Single archetype - fast path
+        if (QueryMatchCache.Count == 1)
         {
-            for (int i = start; i < end; i++)
+            var arch = QueryMatchCache[0];
+            var entities = arch.GetEntities();
+            var data1 = arch.GetArray<T1>();
+            var data2 = arch.GetArray<T2>();
+            var data3 = arch.GetArray<T3>();
+            int count = arch.EntityCount;
+
+            RunParallel(count, (threadIdx, start, end) =>
             {
-                int entity;
-                int idx1, idx2, idx3;
-
-                if (smallestIdx == 1)
-                {
-                    entity = set1.GetEntityAt(i);
-                    idx1 = i;
-                    idx2 = set2.GetDenseIndex(entity); if (idx2 < 0) continue;
-                    idx3 = set3.GetDenseIndex(entity); if (idx3 < 0) continue;
-                }
-                else if (smallestIdx == 2)
-                {
-                    entity = set2.GetEntityAt(i);
-                    idx2 = i;
-                    idx1 = set1.GetDenseIndex(entity); if (idx1 < 0) continue;
-                    idx3 = set3.GetDenseIndex(entity); if (idx3 < 0) continue;
-                }
-                else
-                {
-                    entity = set3.GetEntityAt(i);
-                    idx3 = i;
-                    idx1 = set1.GetDenseIndex(entity); if (idx1 < 0) continue;
-                    idx2 = set2.GetDenseIndex(entity); if (idx2 < 0) continue;
-                }
-
-                action(threadIdx, entity, ref set1.GetComponentAt(idx1), ref set2.GetComponentAt(idx2), ref set3.GetComponentAt(idx3));
-            }
-        });
-    }
-
-    /// <summary>Parallel ForEach for four components.</summary>
-    public void ForEach<T1, T2, T3, T4>(ForEachAction<T1, T2, T3, T4> action)
-        where T1 : struct, Component
-        where T2 : struct, Component
-        where T3 : struct, Component
-        where T4 : struct, Component
-    {
-        long key = HashTypes(typeof(T1).GetHashCode(), typeof(T2).GetHashCode(), typeof(T3).GetHashCode(), typeof(T4).GetHashCode());
-        SparseSet<T1> set1;
-        SparseSet<T2> set2;
-        SparseSet<T3> set3;
-        SparseSet<T4> set4;
-        int smallestIdx;
-
-        if (QueryCache4.TryGetValue(key, out var cached) && cached.Version == QueryVersion)
-        {
-            set1 = (SparseSet<T1>)cached.Set1;
-            set2 = (SparseSet<T2>)cached.Set2;
-            set3 = (SparseSet<T3>)cached.Set3;
-            set4 = (SparseSet<T4>)cached.Set4;
-            smallestIdx = cached.SmallestIdx;
-        }
-        else
-        {
-            set1 = GetComponentSet<T1>();
-            set2 = GetComponentSet<T2>();
-            set3 = GetComponentSet<T3>();
-            set4 = GetComponentSet<T4>();
-
-            smallestIdx = 1;
-            int minCount = set1.EntityCount;
-            if (set2.EntityCount < minCount) { minCount = set2.EntityCount; smallestIdx = 2; }
-            if (set3.EntityCount < minCount) { minCount = set3.EntityCount; smallestIdx = 3; }
-            if (set4.EntityCount < minCount) { smallestIdx = 4; }
-
-            QueryCache4[key] = new CachedQuery4
-            {
-                Set1 = set1, Set2 = set2, Set3 = set3, Set4 = set4,
-                Version = QueryVersion,
-                SmallestIdx = smallestIdx
-            };
+                for (int i = start; i < end; i++)
+                    action(threadIdx, entities[i], ref data1[i], ref data2[i], ref data3[i]);
+            });
+            return;
         }
 
-        int count = smallestIdx switch { 1 => set1.EntityCount, 2 => set2.EntityCount, 3 => set3.EntityCount, _ => set4.EntityCount };
-        if (count == 0) return;
-
-        RunParallel(count, (threadIdx, start, end) =>
+        // Multiple archetypes - iterate with global index
+        RunParallel(totalCount, (threadIdx, start, end) =>
         {
-            for (int i = start; i < end; i++)
+            int globalIdx = 0;
+            foreach (var arch in QueryMatchCache)
             {
-                int entity;
-                int idx1, idx2, idx3, idx4;
+                int archCount = arch.EntityCount;
+                int archEnd = globalIdx + archCount;
 
-                switch (smallestIdx)
-                {
-                    case 1:
-                        entity = set1.GetEntityAt(i);
-                        idx1 = i;
-                        idx2 = set2.GetDenseIndex(entity); if (idx2 < 0) continue;
-                        idx3 = set3.GetDenseIndex(entity); if (idx3 < 0) continue;
-                        idx4 = set4.GetDenseIndex(entity); if (idx4 < 0) continue;
-                        break;
-                    case 2:
-                        entity = set2.GetEntityAt(i);
-                        idx2 = i;
-                        idx1 = set1.GetDenseIndex(entity); if (idx1 < 0) continue;
-                        idx3 = set3.GetDenseIndex(entity); if (idx3 < 0) continue;
-                        idx4 = set4.GetDenseIndex(entity); if (idx4 < 0) continue;
-                        break;
-                    case 3:
-                        entity = set3.GetEntityAt(i);
-                        idx3 = i;
-                        idx1 = set1.GetDenseIndex(entity); if (idx1 < 0) continue;
-                        idx2 = set2.GetDenseIndex(entity); if (idx2 < 0) continue;
-                        idx4 = set4.GetDenseIndex(entity); if (idx4 < 0) continue;
-                        break;
-                    default:
-                        entity = set4.GetEntityAt(i);
-                        idx4 = i;
-                        idx1 = set1.GetDenseIndex(entity); if (idx1 < 0) continue;
-                        idx2 = set2.GetDenseIndex(entity); if (idx2 < 0) continue;
-                        idx3 = set3.GetDenseIndex(entity); if (idx3 < 0) continue;
-                        break;
-                }
+                if (start >= archEnd) { globalIdx = archEnd; continue; }
+                if (end <= globalIdx) break;
 
-                action(threadIdx, entity, ref set1.GetComponentAt(idx1), ref set2.GetComponentAt(idx2), ref set3.GetComponentAt(idx3), ref set4.GetComponentAt(idx4));
+                int localStart = Math.Max(0, start - globalIdx);
+                int localEnd = Math.Min(archCount, end - globalIdx);
+
+                var entities = arch.GetEntities();
+                var data1 = arch.GetArray<T1>();
+                var data2 = arch.GetArray<T2>();
+                var data3 = arch.GetArray<T3>();
+
+                for (int i = localStart; i < localEnd; i++)
+                    action(threadIdx, entities[i], ref data1[i], ref data2[i], ref data3[i]);
+
+                globalIdx = archEnd;
             }
         });
     }
 
     public void Update()
     {
-        // Handle resize - each system decides if it needs to rebuild
         if (Renderer.Window.ResizePending)
         {
             Renderer.Window.ClearResizePending();
             Renderer.UpdateScreenInfo();
-
             for (int i = 0; i < Systems.Count; i++)
                 if (Systems[i].Enabled)
                     Systems[i].OnResize();

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using com.radiant.engine.runtime;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -205,6 +206,10 @@ public class Renderer : IDisposable
     // Min-heap for O(N log T) k-way merge (replaces O(N*T) linear scan)
     private (float z, int thread)[] MergeHeap;
     private int MergeHeapSize;
+
+    // GPU upload timing stats
+    public float LastSetDataMs { get; private set; }
+    public float LastDrawMs { get; private set; }
 
     #endregion
 
@@ -481,6 +486,70 @@ public class Renderer : IDisposable
     /// Current number of shapes in the batch.
     /// </summary>
     public int ShapeBatchCount => ShapeCount;
+
+    /// <summary>
+    /// Renders shapes directly from an external buffer - ZERO COPY.
+    /// Use this when shapes are pre-collected in Renderer.Shape format.
+    /// </summary>
+    public Renderer FlushShapesExternal(Shape[] shapes, int count, RenderTarget2D target = null, Color? clearColor = null, string technique = "Default")
+    {
+        CommitTextures();
+
+        Device.SetRenderTarget(target);
+
+        if (clearColor.HasValue)
+            Device.Clear(clearColor.Value);
+
+        if (count > 0)
+        {
+            // Ensure instance buffer can hold the shapes
+            if (count > ShapeCapacity)
+            {
+                int newCapacity = ShapeCapacity;
+                while (newCapacity < count && newCapacity < MaxShapeCapacity)
+                    newCapacity *= 2;
+                if (newCapacity > MaxShapeCapacity)
+                    newCapacity = MaxShapeCapacity;
+
+                ShapeInstanceBuffer?.Dispose();
+                ShapeInstanceBuffer = new DynamicVertexBuffer(Device, Shape.Declaration, newCapacity, BufferUsage.WriteOnly);
+                ShapeCapacity = newCapacity;
+            }
+
+            int uploadCount = Math.Min(count, ShapeCapacity);
+            var swSetData = Stopwatch.StartNew();
+            ShapeInstanceBuffer.SetData(shapes, 0, uploadCount, SetDataOptions.Discard);
+            LastSetDataMs = (float)swSetData.Elapsed.TotalMilliseconds;
+
+            Device.BlendState = BlendState;
+            Device.DepthStencilState = DepthStencilState.None;
+            Device.RasterizerState = RasterizerState.CullNone;
+
+            Device.SetVertexBuffers(
+                new VertexBufferBinding(ShapeQuadBuffer, 0, 0),
+                new VertexBufferBinding(ShapeInstanceBuffer, 0, 1)
+            );
+            Device.Indices = ShapeIndexBuffer;
+
+            float width = target?.Width ?? Device.Viewport.Width;
+            float height = target?.Height ?? Device.Viewport.Height;
+            var viewProjection = Matrix.CreateOrthographicOffCenter(0, width, height, 0, 0, 1);
+
+            ShapeShader ??= GetShaderEffect("InstancedShapes");
+            ShapeShader.CurrentTechnique = ShapeShader.Techniques[technique];
+            ShapeShader.Parameters["ViewProjection"]?.SetValue(viewProjection);
+
+            var swDraw = Stopwatch.StartNew();
+            foreach (var pass in ShapeShader.CurrentTechnique.Passes)
+            {
+                pass.Apply();
+                Device.DrawInstancedPrimitives(PrimitiveType.TriangleList, 0, 0, 2, uploadCount);
+            }
+            LastDrawMs = (float)swDraw.Elapsed.TotalMilliseconds;
+        }
+
+        return this;
+    }
 
     #endregion
 
