@@ -32,9 +32,80 @@ public class ECS : IGameObject
 
     public void Initialize()
     {
+        SortSystemsByDependencies();
+
         for (int i = 0; i < Systems.Count; i++)
             if (Systems[i].Enabled)
                 Systems[i].Initialize();
+    }
+
+    private void SortSystemsByDependencies()
+    {
+        if (Systems.Count <= 1) return;
+
+        // Build type -> index map
+        var typeToIndex = new Dictionary<Type, int>();
+        for (int i = 0; i < Systems.Count; i++)
+            typeToIndex[Systems[i].GetType()] = i;
+
+        // Build dependency graph
+        var outgoing = new List<int>[Systems.Count];
+        var inDegree = new int[Systems.Count];
+        for (int i = 0; i < Systems.Count; i++)
+            outgoing[i] = new List<int>();
+
+        for (int i = 0; i < Systems.Count; i++)
+        {
+            var type = Systems[i].GetType();
+
+            // RunAfter: this system runs after the specified system
+            foreach (var attr in type.GetCustomAttributes(typeof(RunAfterAttribute), true))
+            {
+                var runAfter = (RunAfterAttribute)attr;
+                if (typeToIndex.TryGetValue(runAfter.SystemType, out int beforeIdx))
+                {
+                    outgoing[beforeIdx].Add(i);
+                    inDegree[i]++;
+                }
+            }
+
+            // RunBefore: this system runs before the specified system
+            foreach (var attr in type.GetCustomAttributes(typeof(RunBeforeAttribute), true))
+            {
+                var runBefore = (RunBeforeAttribute)attr;
+                if (typeToIndex.TryGetValue(runBefore.SystemType, out int afterIdx))
+                {
+                    outgoing[i].Add(afterIdx);
+                    inDegree[afterIdx]++;
+                }
+            }
+        }
+
+        // Kahn's algorithm - topological sort
+        var queue = new Queue<int>();
+        for (int i = 0; i < Systems.Count; i++)
+            if (inDegree[i] == 0)
+                queue.Enqueue(i);
+
+        var sorted = new List<System>(Systems.Count);
+        while (queue.Count > 0)
+        {
+            int current = queue.Dequeue();
+            sorted.Add(Systems[current]);
+
+            foreach (int next in outgoing[current])
+            {
+                if (--inDegree[next] == 0)
+                    queue.Enqueue(next);
+            }
+        }
+
+        // Only apply if no cycle detected
+        if (sorted.Count == Systems.Count)
+        {
+            Systems.Clear();
+            Systems.AddRange(sorted);
+        }
     }
 
     public void Dispose()
