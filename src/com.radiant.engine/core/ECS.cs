@@ -62,7 +62,7 @@ public class ECS : IGameObject
 
         // Initialize job system
         Workers = new Thread[CachedThreadCount];
-        Jobs = new Action[CachedThreadCount];
+        JobDataArray = new JobData[CachedThreadCount];
         JobReadyEvents = new ManualResetEventSlim[CachedThreadCount];
         JobDoneEvents = new ManualResetEventSlim[CachedThreadCount];
         InitializeJobSystem();
@@ -349,10 +349,19 @@ public class ECS : IGameObject
 
     // Job system - persistent worker threads, zero allocation per frame
     private readonly Thread[] Workers;
-    private readonly Action[] Jobs;
     private readonly ManualResetEventSlim[] JobReadyEvents;
     private readonly ManualResetEventSlim[] JobDoneEvents;
     private volatile bool ShuttingDown;
+
+    // Zero-allocation job data - replaces lambda closures
+    private struct JobData
+    {
+        public int ThreadIdx;
+        public int Start;
+        public int End;
+    }
+    private readonly JobData[] JobDataArray;
+    private Action<int, int, int> CurrentWork;
 
     private void InitializeJobSystem()
     {
@@ -378,7 +387,9 @@ public class ECS : IGameObject
             if (ShuttingDown) return;
             JobReadyEvents[workerIdx].Reset();
 
-            Jobs[workerIdx]?.Invoke();
+            // Read from pre-allocated struct, call stored delegate - no closure allocation
+            ref var data = ref JobDataArray[workerIdx];
+            CurrentWork?.Invoke(data.ThreadIdx, data.Start, data.End);
 
             JobDoneEvents[workerIdx].Set();
         }
@@ -389,25 +400,29 @@ public class ECS : IGameObject
     {
         if (count == 0) return;
 
+        CurrentWork = work; // Store reference once - no closure allocation
         int chunkSize = (count + CachedThreadCount - 1) / CachedThreadCount;
 
-        // Assign work to each thread
+        // Assign work to each thread using pre-allocated structs
         for (int i = 0; i < CachedThreadCount; i++)
         {
-            int threadIdx = i;
-            int start = threadIdx * chunkSize;
+            int start = i * chunkSize;
             int end = Math.Min(start + chunkSize, count);
 
             if (start >= count)
             {
                 // No work for this thread
-                JobDoneEvents[threadIdx].Set();
+                JobDoneEvents[i].Set();
                 continue;
             }
 
-            JobDoneEvents[threadIdx].Reset();
-            Jobs[threadIdx] = () => work(threadIdx, start, end);
-            JobReadyEvents[threadIdx].Set();
+            // Store data in pre-allocated struct - no allocation
+            JobDataArray[i].ThreadIdx = i;
+            JobDataArray[i].Start = start;
+            JobDataArray[i].End = end;
+
+            JobDoneEvents[i].Reset();
+            JobReadyEvents[i].Set();
         }
 
         // Wait for all workers

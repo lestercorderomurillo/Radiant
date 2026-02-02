@@ -29,6 +29,7 @@ public class PerformanceMonitor : core.System
     private float Fps;
     private int FrameCount;
     private float Elapsed;
+    private float SmoothedDisplayFps; // Smoothed FPS for display (less flickery)
 
     // System metrics (volatile for cross-thread reads)
     private volatile float MemoryMB;
@@ -201,56 +202,19 @@ public class PerformanceMonitor : core.System
         FrameTimeAverage = FrameTimeSum * FrameHistorySizeInv;
     }
 
-    private void UpdateSystemMetrics()
-    {
-        // CPU
-        if (CpuCounter != null)
-        {
-            try
-            {
-                CpuUsage = CpuCounter.NextValue() * CpuCoreCountInv;
-            }
-            catch
-            {
-                CpuUsage = -1f;
-            }
-        }
-
-        // GPU
-        if (GpuCounters.Count > 0)
-        {
-            try
-            {
-                float totalGpu = 0f;
-                foreach (var counter in GpuCounters)
-                {
-                    totalGpu += counter.NextValue();
-                }
-                GpuUsage = totalGpu;
-            }
-            catch
-            {
-                GpuUsage = -1f;
-            }
-        }
-
-        // Memory
-        Process.Refresh();
-        MemoryMB = Process.WorkingSet64 * BytesToMB;
-        PeakMemoryMB = Process.PeakWorkingSet64 * BytesToMB;
-    }
-
     private void UpdateDisplay()
     {
         var gameLoop = Renderer.Window.GameLoop;
         int TargetFps = gameLoop?.TargetFramesPerSecond ?? 144;
         float ActualFps = gameLoop?.FramesPerSecond ?? 1f;
-        int ActualFpsRounded = (int)MathF.Round(ActualFps);
-        float FrameTimeReal = gameLoop?.FrameTimeSmoothed ?? 0f;
         float TargetMs = 1000f / TargetFps;
 
+        // Smooth FPS display - exponential moving average (less flickery)
+        SmoothedDisplayFps = SmoothedDisplayFps == 0 ? ActualFps : SmoothedDisplayFps * 0.9f + ActualFps * 0.1f;
+        int DisplayFps = (int)MathF.Round(SmoothedDisplayFps);
+
         // Reuse StringBuilders - zero allocation
-        FpsBuilder.Clear().Append("FPS: ").Append(ActualFpsRounded).Append('/').Append(TargetFps);
+        FpsBuilder.Clear().Append("FPS: ").Append(DisplayFps).Append('/').Append(TargetFps);
         Gizmos.Set("Performance", FpsBuilder.ToString());
 
         // Show both: avg frametime and actual frame pacing time
@@ -287,6 +251,10 @@ public class PerformanceMonitor : core.System
 
     public override void Dispose()
     {
+        // Stop sampler thread first
+        SamplerRunning = false;
+        SamplerThread?.Join(500);
+
         CpuCounter?.Dispose();
         if (GpuCounters != null)
         {
