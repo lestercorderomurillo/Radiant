@@ -250,15 +250,6 @@ public class SpatialIndex
         Array.Clear(EntityExists, 0, EntityCapacity);
     }
 
-    public void SyncAll()
-    {
-        Clear();
-        foreach (int entity in Ecs.GetEntities<Transform>())
-        {
-            ref var t = ref Ecs.GetComponent<Transform>(entity);
-            Insert(entity, t.Position.X, t.Position.Y, t.Position.Z);
-        }
-    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int? AtExact(Vector3 position)

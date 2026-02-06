@@ -185,7 +185,7 @@ public class Renderer : IDisposable
 
     // Instanced shape rendering
     private const int DefaultShapeCapacity = 65536;
-    private const int MaxShapeCapacity = 8_000_000;
+    private const int MaxShapeCapacity = int.MaxValue;
     private VertexBuffer ShapeQuadBuffer;
     private IndexBuffer ShapeIndexBuffer;
     private DynamicVertexBuffer ShapeInstanceBuffer;

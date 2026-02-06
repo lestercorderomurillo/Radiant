@@ -68,12 +68,14 @@ public class ECS : IGameObject
         JobDataArray = new JobData[CachedThreadCount];
         JobReadyEvents = new ManualResetEventSlim[CachedThreadCount];
         JobDoneEvents = new ManualResetEventSlim[CachedThreadCount];
+
         InitializeJobSystem();
     }
 
     public void Initialize()
     {
         SortSystemsByDependencies();
+        
         for (int i = 0; i < Systems.Count; i++)
             if (Systems[i].Enabled)
                 Systems[i].Initialize();
@@ -313,17 +315,6 @@ public class ECS : IGameObject
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int? AtExact(float x, float y, float z) => Spatial.AtExact(x, y, z);
 
-    public IEnumerable<int> GetEntities<T>() where T : struct, Component
-    {
-        ulong sig = 1UL << GetTypeId(typeof(T));
-        foreach (var arch in Archetypes)
-        {
-            if ((arch.Signature & sig) != sig) continue;
-            var entities = arch.GetEntities();
-            for (int i = 0; i < arch.EntityCount; i++)
-                yield return entities[i];
-        }
-    }
 
     public static int ThreadCount => CachedThreadCount;
 
