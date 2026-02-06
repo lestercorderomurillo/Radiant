@@ -32,6 +32,7 @@ public class ECS : IGameObject
 
     // Systems
     private readonly List<System> Systems;
+    private readonly Dictionary<Type, System> SystemCache;
 
     // Thread pool
     private static readonly int CachedThreadCount = Environment.ProcessorCount;
@@ -56,6 +57,7 @@ public class ECS : IGameObject
         Renderer = renderer;
         RecycledIds = new Stack<int>();
         Systems = new List<System>();
+        SystemCache = new Dictionary<Type, System>();
         Archetypes = new List<Archetype>();
         ArchetypesBySignature = new Dictionary<ulong, Archetype>();
         TypeToId = new Dictionary<Type, int>();
@@ -151,15 +153,14 @@ public class ECS : IGameObject
         system.GameTime = Scene.GameTime;
         system.Enabled = enabled;
         Systems.Add(system);
+        SystemCache[typeof(T)] = system;
         return system;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public T GetSystem<T>() where T : System
     {
-        for (int i = 0; i < Systems.Count; i++)
-            if (Systems[i] is T typed)
-                return typed;
-        return null;
+        return SystemCache.TryGetValue(typeof(T), out var system) ? (T)system : null;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -253,12 +254,11 @@ public class ECS : IGameObject
         if (oldArch != null && oldArch.Signature == newSig)
             return ref oldArch.Get<T>(record.Index);
 
-        // Build new type array
+        // Build new type array - signature check above guarantees type not in oldArch
         var types = new List<Type>();
         if (oldArch != null)
             types.AddRange(oldArch.Types);
-        if (!types.Contains(type))
-            types.Add(type);
+        types.Add(type);
 
         var newArch = GetOrCreateArchetype(newSig, types.ToArray());
         int newIndex = newArch.Add(entity);
