@@ -23,15 +23,15 @@ public class Window : Game
 
         Window.AllowUserResizing = true;
         Window.IsBorderless = false;
-        Window.Title = "Radiant Engine";
+        Window.Title = "RADIANT ENGINE BUILD 1000";
 
         IsMouseVisible = true;
         IsFixedTimeStep = false;
 
         GraphicsDeviceManager.SynchronizeWithVerticalRetrace = false;
         GraphicsDeviceManager.PreferredDepthStencilFormat = DepthFormat.None;
-        GraphicsDeviceManager.PreferredBackBufferWidth = (int)(1920 * 1.5);
-        GraphicsDeviceManager.PreferredBackBufferHeight = (int)(1080 * 1.5);
+        GraphicsDeviceManager.PreferredBackBufferWidth = (int)(1920 * 1.75);
+        GraphicsDeviceManager.PreferredBackBufferHeight = (int)(1080 * 1.75);
         GraphicsDeviceManager.GraphicsProfile = GraphicsProfile.HiDef;
         GraphicsDeviceManager.IsFullScreen = false;
         GraphicsDeviceManager.HardwareModeSwitch = true;

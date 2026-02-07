@@ -11,25 +11,21 @@ namespace com.radiant.engine.core;
 public class MegaLightsScene : Scene
 {
     private int MouseLightId;
-    private int[] RotatingLightIds;
 
     private MouseState PrevMouse;
     private KeyboardState PrevKeyboard;
     private Random Rng = new();
 
-    private float Rotation;
     private float RainbowHue = 0f;
     private const float HueSpeed = 0.008f;
     private const float PaintRadius = 8f;
-    private const float PaintSpacing = 3f; // Spacing between painted lights (half radius for overlap)
+    private const float PaintSpacing = 3f;
+
     private Vector2 LastPaintPos;
     private bool HasLastPaintPos = false;
     private Vector2 LastRightPaintPos;
     private bool HasLastRightPaintPos = false;
-    private bool IsAnimating = true;
-    // Z constants for layering (MaxZLayers = 65536, no offset)
-    private const float RotatingLightZ = 65530f;  // Near top
-    private const float MouseLightZ = 65535f;     // Always on top
+    private const float MouseLightZ = 65535f;
 
     private HRCGI HRCGISystem;
     private RCGI RCGISystem;
@@ -42,18 +38,31 @@ public class MegaLightsScene : Scene
     private bool UseHRCGI = true;
     private int UDRMode = 3;  // 0 = Bilinear, 1 = UDR1, 2 = UDR2, 3 = UDR3
 
-    private const float RotationSpeed = 0.12f;
-    private const float OrbitRadius = 360f;
-    private const int LightCount = 14;
+    // Maze parameters
+    private const float CellSize = 150f;
+    private const float WallThickness = 20f;
+    private const int MazeCols = 22;
+    private const int MazeRows = 12;
+    private float MazeOffsetX, MazeOffsetY;
 
-    private const float BoxSize = 80f;
-    private const float ColumnSpacing = 120f;
-    private const int MaxBoxesPerColumn = 10;
+    // Maze connectivity (stored for ghost navigation)
+    private bool[,] MazeHWalls; // horizontal walls [cols, rows+1]
+    private bool[,] MazeVWalls; // vertical walls [cols+1, rows]
+
+    // Ghost wandering
+    private const int GhostCount = 4;
+    private const float GhostSpeed = 200f;
+    private const float GhostZ = 65530f;
+    private int[] GhostIds;
+    private (int x, int y)[] GhostCells;
+    private (int x, int y)[] GhostTargets;
+    private (int dx, int dy)[] GhostDirs;
 
     public override void SetupECS()
     {
         ECS.AddSystem<PerformanceMonitor>();
         ECS.AddSystem<Geometry>();
+        
         HRCGISystem = ECS.AddSystem<HRCGI>();
         RCGISystem = ECS.AddSystem<RCGI>(enabled: false);
 
@@ -69,113 +78,241 @@ public class MegaLightsScene : Scene
 
     public override void SetupScene()
     {
-        CreateRotatingLights();
-        CreateOccluders();
+        CreateMaze();
+        CreateGhosts();
         CreateMouseLight();
-        CreateCenterTriangles();
         UpdateUDRInput();
 
         base.SetupScene();
     }
 
-    private void CreateCenterTriangles()
+    private Vector2 CellCenter(int cx, int cy) => new(
+        MazeOffsetX + cx * (CellSize + WallThickness) + WallThickness + CellSize / 2f,
+        MazeOffsetY + cy * (CellSize + WallThickness) + WallThickness + CellSize / 2f);
+
+    private void CreateGhosts()
     {
-        var center = Renderer.VirtualSize / 2;
+        float radius = 40f;
+        int qx = MazeCols / 4;
+        int qy = MazeRows / 4;
 
-        // Large outer triangle - black border
-        float sizeOuter = 500f;
-        CreateBorderedTriangle(center, sizeOuter, Color.Black);
+        var ghostColors = new Color[]
+        {
+            new(255, 0, 0),     // Blinky (red)
+            new(255, 184, 255), // Pinky (pink)
+            new(0, 255, 255),   // Inky (cyan)
+            new(255, 184, 82),  // Clyde (orange)
+        };
 
-        // Smaller inner triangle - purple emissive
-        float sizeInner = 150f;
-        CreateBorderedTriangle(center, sizeInner, new Color(180, 0, 255));
+        (int x, int y)[] startCells =
+        {
+            (qx, qy),
+            (MazeCols - 1 - qx, qy),
+            (qx, MazeRows - 1 - qy),
+            (MazeCols - 1 - qx, MazeRows - 1 - qy),
+        };
+
+        GhostIds = new int[GhostCount];
+        GhostCells = new (int, int)[GhostCount];
+        GhostTargets = new (int, int)[GhostCount];
+        GhostDirs = new (int, int)[GhostCount];
+
+        for (int i = 0; i < GhostCount; i++)
+        {
+            var cell = startCells[i];
+            GhostIds[i] = CreateLight(CellCenter(cell.x, cell.y), radius, ghostColors[i], ghostColors[i], GhostZ);
+            ECS.AddComponent<MotionTrackable>(GhostIds[i]);
+            GhostCells[i] = cell;
+            GhostTargets[i] = cell;
+            GhostDirs[i] = (0, 0);
+        }
     }
 
-    private void CreateBorderedTriangle(Vector2 center, float size, Color emissive)
+    private bool CanMove(int cx, int cy, int dx, int dy)
+    {
+        int nx = cx + dx, ny = cy + dy;
+        if (nx < 0 || nx >= MazeCols || ny < 0 || ny >= MazeRows) return false;
+
+        // Check wall between (cx,cy) and (nx,ny)
+        if (dy == -1) return !MazeHWalls[cx, cy];       // up
+        if (dx == 1)  return !MazeVWalls[cx + 1, cy];   // right
+        if (dy == 1)  return !MazeHWalls[cx, cy + 1];   // down
+        if (dx == -1) return !MazeVWalls[cx, cy];        // left
+        return false;
+    }
+
+    private void PickGhostDirection(int i)
+    {
+        var (cx, cy) = GhostCells[i];
+        var (pdx, pdy) = GhostDirs[i];
+
+        // Collect open directions, prefer not reversing
+        Span<(int dx, int dy)> options = stackalloc (int, int)[4];
+        int count = 0;
+        int[] dxs = { 0, 1, 0, -1 };
+        int[] dys = { -1, 0, 1, 0 };
+
+        for (int d = 0; d < 4; d++)
+            if (CanMove(cx, cy, dxs[d], dys[d]) && !(dxs[d] == -pdx && dys[d] == -pdy))
+                options[count++] = (dxs[d], dys[d]);
+
+        // Dead end — reverse
+        if (count == 0)
+        {
+            GhostDirs[i] = (-pdx, -pdy);
+            GhostTargets[i] = (cx - pdx, cy - pdy);
+            return;
+        }
+
+        var pick = options[Rng.Next(count)];
+        GhostDirs[i] = pick;
+        GhostTargets[i] = (cx + pick.dx, cy + pick.dy);
+    }
+
+    private void UpdateGhosts()
+    {
+        float step = GhostSpeed * DeltaTime;
+
+        for (int i = 0; i < GhostCount; i++)
+        {
+            ref var transform = ref ECS.GetComponent<Transform>(GhostIds[i]);
+            var pos = new Vector2(transform.Position.X, transform.Position.Y);
+            var target = CellCenter(GhostTargets[i].x, GhostTargets[i].y);
+
+            var diff = target - pos;
+            float dist = diff.Length();
+
+            if (dist <= step)
+            {
+                // Arrived at target cell
+                GhostCells[i] = GhostTargets[i];
+                PickGhostDirection(i);
+
+                // Start moving toward new target
+                target = CellCenter(GhostTargets[i].x, GhostTargets[i].y);
+                diff = target - pos;
+                dist = diff.Length();
+            }
+
+            if (dist > 0.01f)
+            {
+                var move = (diff / dist) * MathF.Min(step, dist);
+                pos += move;
+            }
+
+            transform.Position = new Vector3(pos, GhostZ);
+        }
+    }
+
+    private void CreateMaze()
+    {
+        float mazeW = MazeCols * CellSize + (MazeCols + 1) * WallThickness;
+        float mazeH = MazeRows * CellSize + (MazeRows + 1) * WallThickness;
+        var virt = Renderer.VirtualSize;
+        MazeOffsetX = (virt.X - mazeW) / 2f;
+        MazeOffsetY = (virt.Y - mazeH) / 2f;
+        float ox = MazeOffsetX;
+        float oy = MazeOffsetY;
+
+        // Generate maze with DFS (recursive backtracker)
+        bool[,] visited = new bool[MazeCols, MazeRows];
+        MazeHWalls = new bool[MazeCols, MazeRows + 1];
+        MazeVWalls = new bool[MazeCols + 1, MazeRows];
+        var hWalls = MazeHWalls;
+        var vWalls = MazeVWalls;
+
+        // All walls start present
+        for (int x = 0; x < MazeCols; x++)
+            for (int y = 0; y <= MazeRows; y++)
+                hWalls[x, y] = true;
+        for (int x = 0; x <= MazeCols; x++)
+            for (int y = 0; y < MazeRows; y++)
+                vWalls[x, y] = true;
+
+        // DFS carve passages
+        var stack = new Stack<(int x, int y)>();
+        visited[0, 0] = true;
+        stack.Push((0, 0));
+
+        int[] dx = { 0, 1, 0, -1 };
+        int[] dy = { -1, 0, 1, 0 };
+
+        while (stack.Count > 0)
+        {
+            var (cx, cy) = stack.Peek();
+
+            // Find unvisited neighbors
+            int start = Rng.Next(4);
+            bool found = false;
+            for (int i = 0; i < 4; i++)
+            {
+                int d = (start + i) % 4;
+                int nx = cx + dx[d];
+                int ny = cy + dy[d];
+
+                if (nx >= 0 && nx < MazeCols && ny >= 0 && ny < MazeRows && !visited[nx, ny])
+                {
+                    visited[nx, ny] = true;
+
+                    // Remove wall between (cx,cy) and (nx,ny)
+                    switch (d)
+                    {
+                        case 0: hWalls[cx, cy] = false; break;     // top
+                        case 1: vWalls[cx + 1, cy] = false; break; // right
+                        case 2: hWalls[cx, cy + 1] = false; break; // bottom
+                        case 3: vWalls[cx, cy] = false; break;     // left
+                    }
+
+                    stack.Push((nx, ny));
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found) stack.Pop();
+        }
+
+        // Corner posts at every grid intersection (always present)
+        for (int gx = 0; gx <= MazeCols; gx++)
+            for (int gy = 0; gy <= MazeRows; gy++)
+                CreateWall(
+                    new Vector2(ox + gx * (CellSize + WallThickness), oy + gy * (CellSize + WallThickness)),
+                    new Vector2(WallThickness, WallThickness));
+
+        // Horizontal wall segments (between adjacent posts, CellSize wide)
+        for (int x = 0; x < MazeCols; x++)
+            for (int y = 0; y <= MazeRows; y++)
+                if (hWalls[x, y])
+                    CreateWall(
+                        new Vector2(ox + x * (CellSize + WallThickness) + WallThickness, oy + y * (CellSize + WallThickness)),
+                        new Vector2(CellSize, WallThickness));
+
+        // Vertical wall segments (between adjacent posts, CellSize tall)
+        for (int x = 0; x <= MazeCols; x++)
+            for (int y = 0; y < MazeRows; y++)
+                if (vWalls[x, y])
+                    CreateWall(
+                        new Vector2(ox + x * (CellSize + WallThickness), oy + y * (CellSize + WallThickness) + WallThickness),
+                        new Vector2(WallThickness, CellSize));
+    }
+
+    private void CreateWall(Vector2 position, Vector2 size)
     {
         int id = ECS.CreateEntity();
-
         ECS.AddComponent<Transform>(id);
-        ECS.AddComponent<Triangle2D>(id);
+        ECS.AddComponent<Rectangle2D>(id);
         ECS.AddComponent<Material>(id);
 
         ref var transform = ref ECS.GetComponent<Transform>(id);
-        ref var triangle = ref ECS.GetComponent<Triangle2D>(id);
+        ref var rect = ref ECS.GetComponent<Rectangle2D>(id);
         ref var material = ref ECS.GetComponent<Material>(id);
 
-        float centroidOffsetY = size * 0.117f;
-        transform.Position = new Vector3(center.X - size / 2, center.Y - size / 2 - centroidOffsetY, 1f);  // Layer 1
+        transform.Position = new Vector3(position, 0f);
         transform.Rotation = Vector3.UnitX;
+        rect.Size = size;
 
-        triangle.Size = new Vector2(size);
-        triangle.Bordered = true;
-
-        material.Albedo = new Color(0, 0, 0, 200);
-        material.Emissive = emissive;
-    }
-
-    private void CreateRotatingLights()
-    {
-        RotatingLightIds = new int[LightCount];
-        var center = Renderer.VirtualSize / 2;
-
-        for (int i = 0; i < LightCount; i++)
-        {
-            float angle = i / (float)LightCount * MathHelper.TwoPi;
-            float x = center.X + OrbitRadius * MathF.Cos(angle);
-            float y = center.Y + OrbitRadius * MathF.Sin(angle);
-
-            // Rainbow colors
-            float hue = i / (float)LightCount;
-            var color = HueToRGB(hue);
-
-            RotatingLightIds[i] = CreateLight(new Vector2(x, y), 25f, color, color);
-
-            // Add motion tracking for rotating lights (these move every frame)
-            ECS.AddComponent<MotionTrackable>(RotatingLightIds[i]);
-        }
-    }
-
-    private void CreateOccluders()
-    {
-        var screen = Renderer.VirtualSize;
-        var center = Renderer.VirtualSize / 2;
-
-        int columnsPerSide = (int)((screen.X / 2 - ColumnSpacing) / ColumnSpacing);
-        float maxDistance = screen.X / 2f;  // Scale alpha across full screen half-width
-
-        var occluderList = new List<int>();
-
-        for (int col = 1; col <= columnsPerSide; col++)
-        {
-            float distanceFromCenter = col * ColumnSpacing;
-
-            // Farther from center = more alpha, closer = less alpha
-            float alpha = (distanceFromCenter / maxDistance) * 1.0f;
-            alpha = Math.Clamp(alpha, 0f, 1.0f);
-            byte alphaByte = (byte)(alpha * 255);
-
-            // Each column farther gains +1 top and +1 bottom box
-            int extraBoxes = col - 1;
-            int boxesInColumn = MaxBoxesPerColumn + extraBoxes * 2;
-
-            // Left column
-            float leftX = center.X - distanceFromCenter;
-            for (int row = 0; row < boxesInColumn; row++)
-            {
-                float y = center.Y - (boxesInColumn * BoxSize / 2) + row * BoxSize + BoxSize / 2;
-                occluderList.Add(CreateOccluder(new Vector2(leftX, y), BoxSize, alphaByte));
-            }
-
-            // Right column
-            float rightX = center.X + distanceFromCenter;
-            for (int row = 0; row < boxesInColumn; row++)
-            {
-                float y = center.Y - (boxesInColumn * BoxSize / 2) + row * BoxSize + BoxSize / 2;
-                occluderList.Add(CreateOccluder(new Vector2(rightX, y), BoxSize, alphaByte));
-            }
-        }
-
+        material.Albedo = new Color((byte)0, (byte)0, (byte)0, (byte)255);
+        material.Emissive = Color.Transparent;
     }
 
     private void CreateMouseLight()
@@ -216,79 +353,16 @@ public class MegaLightsScene : Scene
         return id;
     }
 
-    private int CreateOccluder(Vector2 position, float size)
-    {
-        int id = ECS.CreateEntity();
-
-        ECS.AddComponent<Transform>(id);
-        ECS.AddComponent<Rectangle2D>(id);
-        ECS.AddComponent<Material>(id);
-
-        ref var transform = ref ECS.GetComponent<Transform>(id);
-        ref var rect = ref ECS.GetComponent<Rectangle2D>(id);
-        ref var material = ref ECS.GetComponent<Material>(id);
-
-        transform.Position = new Vector3(position, 0f);  // Layer 0 (back)
-        transform.Rotation = Vector3.UnitX;
-
-        rect.Size = new Vector2(size);
-
-        material.Albedo = new Color(30, 30, 0, 90);
-        material.Emissive = Color.Black;
-
-        return id;
-    }
-
-    private int CreateOccluder(Vector2 position, float size, byte alpha)
-    {
-        int id = ECS.CreateEntity();
-
-        ECS.AddComponent<Transform>(id);
-        ECS.AddComponent<Rectangle2D>(id);
-        ECS.AddComponent<Material>(id);
-
-        ref var transform = ref ECS.GetComponent<Transform>(id);
-        ref var rect = ref ECS.GetComponent<Rectangle2D>(id);
-        ref var material = ref ECS.GetComponent<Material>(id);
-
-        transform.Position = new Vector3(position, 0f);  // Layer 0 (back)
-        transform.Rotation = Vector3.UnitX;
-
-        rect.Size = new Vector2(size);
-
-        material.Albedo = new Color((byte)0, (byte)0, (byte)0, alpha);
-        material.Emissive = Color.Transparent;
-
-        return id;
-    }
-
     public override void Update()
     {
         var keyboard = Keyboard.GetState();
         var mouse = Mouse.GetState();
-        var center = Renderer.VirtualSize / 2;
-
-        // Space: toggle animation
-        if (keyboard.IsKeyDown(Keys.Space) && PrevKeyboard.IsKeyUp(Keys.Space))
-            IsAnimating = !IsAnimating;
 
         // Tab: toggle GI system
         if (keyboard.IsKeyDown(Keys.Tab) && PrevKeyboard.IsKeyUp(Keys.Tab))
             ToggleGISystem();
 
-        // Animate rotating lights
-        if (IsAnimating)
-            Rotation += RotationSpeed * DeltaTime;
-
-        for (int i = 0; i < RotatingLightIds.Length; i++)
-        {
-            float angle = i / (float)LightCount * MathHelper.TwoPi + Rotation;
-            float x = center.X + OrbitRadius * MathF.Cos(angle);
-            float y = center.Y + OrbitRadius * MathF.Sin(angle);
-
-            ref var transform = ref ECS.GetComponent<Transform>(RotatingLightIds[i]);
-            transform.Position = new Vector3(x, y, RotatingLightZ);
-        }
+        UpdateGhosts();
 
         // Update mouse light (always on top) - convert screen coords to virtual world coords
         var mouseWorld = Renderer.ScreenToWorld(new Vector2(mouse.X, mouse.Y));
@@ -379,7 +453,7 @@ public class MegaLightsScene : Scene
         PrevKeyboard = keyboard;
         PrevMouse = mouse;
 
-        Gizmos.Set("Scene", $"GI: {(UseHRCGI ? "HRCGI" : "RCGI")} [Tab] | Animation: {(IsAnimating ? "On" : "Off")} [Space]");
+        Gizmos.Set("Scene", $"GI: {(UseHRCGI ? "HRCGI" : "RCGI")} [Tab]");
         Gizmos.Set("Scene", $"Upscaler: {GetUDRName()} [F11]");
         Gizmos.Set("Scene", "Left: Rainbow | Right: Black");
     }
