@@ -12,7 +12,7 @@ public class GameClient
     {
         GameLoop = new GameLoop();
 
-        GameLoop.AddScene(new MegaLightsScene());
+        GameLoop.AddScene(new MazeScene());
 
         Window = new Window(GameLoop);
         Window.Run();

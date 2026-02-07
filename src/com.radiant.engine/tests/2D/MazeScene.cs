@@ -8,7 +8,7 @@ using System.Collections.Generic;
 
 namespace com.radiant.engine.core;
 
-public class MegaLightsScene : Scene
+public class MazeScene : Scene
 {
     private int MouseLightId;
 
@@ -26,6 +26,8 @@ public class MegaLightsScene : Scene
     private Vector2 LastRightPaintPos;
     private bool HasLastRightPaintPos = false;
     private const float MouseLightZ = 65535f;
+
+    private Texture2D GhostTexture;
 
     private HRCGI HRCGISystem;
     private RCGI RCGISystem;
@@ -78,6 +80,8 @@ public class MegaLightsScene : Scene
 
     public override void SetupScene()
     {
+        GhostTexture = Renderer.Window.Content.Load<Texture2D>("Ghost");
+
         CreateMaze();
         CreateGhosts();
         CreateMouseLight();
@@ -121,6 +125,8 @@ public class MegaLightsScene : Scene
         {
             var cell = startCells[i];
             GhostIds[i] = CreateLight(CellCenter(cell.x, cell.y), radius, ghostColors[i], ghostColors[i], GhostZ);
+            ref var mat = ref ECS.GetComponent<Material>(GhostIds[i]);
+            mat.Texture = GhostTexture;
             ECS.AddComponent<MotionTrackable>(GhostIds[i]);
             GhostCells[i] = cell;
             GhostTargets[i] = cell;

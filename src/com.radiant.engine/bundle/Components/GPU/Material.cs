@@ -1,5 +1,6 @@
 using com.radiant.engine.core;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 
 namespace com.radiant.engine.bundle;
 
@@ -7,6 +8,9 @@ public struct Material : Component
 {
     private Color _albedo;
     private Color _emissive;
+
+    /// <summary>Optional texture that modulates the emissive color. Null = solid color (default).</summary>
+    public Texture2D Texture;
 
     public Color Albedo
     {

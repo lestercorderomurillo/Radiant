@@ -75,3 +75,10 @@
 /processor:EffectProcessor
 /processorParam:DebugMode=Auto
 /build:shaders/UDR/UDR3.fx
+
+#begin Ghost.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:PremultiplyAlpha=True
+/processorParam:TextureFormat=Color
+/build:Ghost.png
