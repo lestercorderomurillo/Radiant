@@ -30,7 +30,7 @@ public class SimpleLightScene : Scene
 
     private void CreateCenterLight()
     {
-        var center = Renderer.Window.GetScreenCenter();
+        var center = Renderer.VirtualSize / 2;
         var warmColor = new Color(255, 180, 100); // Warm orange-ish color
 
         int id = ECS.CreateEntity();

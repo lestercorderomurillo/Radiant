@@ -5,12 +5,14 @@ namespace com.radiant.engine.bundle;
 
 public struct Camera2D : Component
 {
-    public Vector4 Bounds;
-    public Vector2 Rotation;
+    public Vector2 Position;
+    public float Zoom;
+    public float Rotation;
 
     public Camera2D()
     {
-        Bounds = new Vector4();
-        Rotation = new Vector2();
+        Position = Vector2.Zero;
+        Zoom = 1f;
+        Rotation = 0f;
     }
 }

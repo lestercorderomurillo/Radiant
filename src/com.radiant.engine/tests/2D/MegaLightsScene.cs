@@ -26,8 +26,6 @@ public class MegaLightsScene : Scene
     private bool HasLastPaintPos = false;
     private Vector2 LastRightPaintPos;
     private bool HasLastRightPaintPos = false;
-    private Vector2 LastMiddlePaintPos;
-    private bool HasLastMiddlePaintPos = false;
     private bool IsAnimating = true;
     // Z constants for layering (MaxZLayers = 65536, no offset)
     private const float RotatingLightZ = 65530f;  // Near top
@@ -82,7 +80,7 @@ public class MegaLightsScene : Scene
 
     private void CreateCenterTriangles()
     {
-        var center = Renderer.Window.GetScreenCenter();
+        var center = Renderer.VirtualSize / 2;
 
         // Large outer triangle - black border
         float sizeOuter = 500f;
@@ -119,7 +117,7 @@ public class MegaLightsScene : Scene
     private void CreateRotatingLights()
     {
         RotatingLightIds = new int[LightCount];
-        var center = Renderer.Window.GetScreenCenter();
+        var center = Renderer.VirtualSize / 2;
 
         for (int i = 0; i < LightCount; i++)
         {
@@ -140,8 +138,8 @@ public class MegaLightsScene : Scene
 
     private void CreateOccluders()
     {
-        var screen = Renderer.Window.GetScreenSize();
-        var center = Renderer.Window.GetScreenCenter();
+        var screen = Renderer.VirtualSize;
+        var center = Renderer.VirtualSize / 2;
 
         int columnsPerSide = (int)((screen.X / 2 - ColumnSpacing) / ColumnSpacing);
         float maxDistance = screen.X / 2f;  // Scale alpha across full screen half-width
@@ -183,7 +181,8 @@ public class MegaLightsScene : Scene
     private void CreateMouseLight()
     {
         var mouse = Mouse.GetState();
-        MouseLightId = CreateLight(new Vector2(mouse.X, mouse.Y), 100f, new Color(0, 0, 0, 128), new Color(0, 0, 0, 128));
+        var worldPos = Renderer.ScreenToWorld(new Vector2(mouse.X, mouse.Y));
+        MouseLightId = CreateLight(worldPos, 100f, new Color(0, 0, 0, 128), new Color(0, 0, 0, 128));
 
         // Add motion tracking for mouse-controlled light
         ECS.AddComponent<MotionTrackable>(MouseLightId);
@@ -267,7 +266,7 @@ public class MegaLightsScene : Scene
     {
         var keyboard = Keyboard.GetState();
         var mouse = Mouse.GetState();
-        var center = Renderer.Window.GetScreenCenter();
+        var center = Renderer.VirtualSize / 2;
 
         // Space: toggle animation
         if (keyboard.IsKeyDown(Keys.Space) && PrevKeyboard.IsKeyUp(Keys.Space))
@@ -291,28 +290,30 @@ public class MegaLightsScene : Scene
             transform.Position = new Vector3(x, y, RotatingLightZ);
         }
 
-        // Update mouse light (always on top)
+        // Update mouse light (always on top) - convert screen coords to virtual world coords
+        var mouseWorld = Renderer.ScreenToWorld(new Vector2(mouse.X, mouse.Y));
         ref var mouseTransform = ref ECS.GetComponent<Transform>(MouseLightId);
-        mouseTransform.Position = new Vector3(mouse.X, mouse.Y, MouseLightZ);
+        mouseTransform.Position = new Vector3(mouseWorld, MouseLightZ);
 
         // Only allow spawning when window is focused
         if (Renderer.Window.IsActive)
         {
-            var mousePos = new Vector2(mouse.X, mouse.Y);
+            var mousePos = mouseWorld;
 
-            // Left click + moving: spawn lights continuously with perfect rainbow gradient
-            if (mouse.LeftButton == ButtonState.Pressed)
+            bool leftDown = mouse.LeftButton == ButtonState.Pressed;
+            bool rightDown = mouse.RightButton == ButtonState.Pressed;
+
+            // Left click: rainbow lights (blocked if right is also held)
+            if (leftDown && !rightDown)
             {
                 if (!HasLastPaintPos)
                 {
-                    // First paint point
                     PaintLightAt(mousePos);
                     LastPaintPos = mousePos;
                     HasLastPaintPos = true;
                 }
                 else
                 {
-                    // Interpolate between last position and current to fill gaps
                     float distance = Vector2.Distance(LastPaintPos, mousePos);
                     if (distance >= PaintSpacing)
                     {
@@ -321,8 +322,7 @@ public class MegaLightsScene : Scene
 
                         while (traveled <= distance)
                         {
-                            Vector2 paintPos = LastPaintPos + direction * traveled;
-                            PaintLightAt(paintPos);
+                            PaintLightAt(LastPaintPos + direction * traveled);
                             traveled += PaintSpacing;
                         }
 
@@ -335,19 +335,17 @@ public class MegaLightsScene : Scene
                 HasLastPaintPos = false;
             }
 
-            // Right click + moving: spawn black dots continuously
-            if (mouse.RightButton == ButtonState.Pressed)
+            // Right click: black dots (blocked if left is also held)
+            if (rightDown && !leftDown)
             {
                 if (!HasLastRightPaintPos)
                 {
-                    // First paint point
                     PaintBlackDotAt(mousePos);
                     LastRightPaintPos = mousePos;
                     HasLastRightPaintPos = true;
                 }
                 else
                 {
-                    // Interpolate between last position and current to fill gaps
                     float distance = Vector2.Distance(LastRightPaintPos, mousePos);
                     if (distance >= PaintSpacing)
                     {
@@ -356,8 +354,7 @@ public class MegaLightsScene : Scene
 
                         while (traveled <= distance)
                         {
-                            Vector2 paintPos = LastRightPaintPos + direction * traveled;
-                            PaintBlackDotAt(paintPos);
+                            PaintBlackDotAt(LastRightPaintPos + direction * traveled);
                             traveled += PaintSpacing;
                         }
 
@@ -368,41 +365,6 @@ public class MegaLightsScene : Scene
             else
             {
                 HasLastRightPaintPos = false;
-            }
-
-            // Middle click + moving: spawn white half-opaque dots continuously
-            if (mouse.MiddleButton == ButtonState.Pressed)
-            {
-                if (!HasLastMiddlePaintPos)
-                {
-                    // First paint point
-                    PaintWhiteDotAt(mousePos);
-                    LastMiddlePaintPos = mousePos;
-                    HasLastMiddlePaintPos = true;
-                }
-                else
-                {
-                    // Interpolate between last position and current to fill gaps
-                    float distance = Vector2.Distance(LastMiddlePaintPos, mousePos);
-                    if (distance >= PaintSpacing)
-                    {
-                        Vector2 direction = Vector2.Normalize(mousePos - LastMiddlePaintPos);
-                        float traveled = PaintSpacing;
-
-                        while (traveled <= distance)
-                        {
-                            Vector2 paintPos = LastMiddlePaintPos + direction * traveled;
-                            PaintWhiteDotAt(paintPos);
-                            traveled += PaintSpacing;
-                        }
-
-                        LastMiddlePaintPos = mousePos;
-                    }
-                }
-            }
-            else
-            {
-                HasLastMiddlePaintPos = false;
             }
         }
 
@@ -419,7 +381,7 @@ public class MegaLightsScene : Scene
 
         Gizmos.Set("Scene", $"GI: {(UseHRCGI ? "HRCGI" : "RCGI")} [Tab] | Animation: {(IsAnimating ? "On" : "Off")} [Space]");
         Gizmos.Set("Scene", $"Upscaler: {GetUDRName()} [F11]");
-        Gizmos.Set("Scene", "Left: Rainbow | Right: Black | Middle: White (50%)");
+        Gizmos.Set("Scene", "Left: Rainbow | Right: Black");
     }
 
     private void ToggleGISystem()
@@ -555,25 +517,6 @@ public class MegaLightsScene : Scene
         CreateLight(position, PaintRadius, color, Color.Black);
     }
 
-    private void PaintWhiteDotAt(Vector2 position)
-    {
-        var color = new Color(255, 255, 255, 128);
-
-        var nearby = ECS.InRadius(new Vector3(position, 0), PaintRadius);
-        foreach (int entityId in nearby)
-        {
-            if (ECS.HasComponent<Circle2D>(entityId) && entityId != MouseLightId)
-            {
-                ref var material = ref ECS.GetComponent<Material>(entityId);
-                material.Albedo = color;
-                material.Emissive = new Color(255, 255, 255, 128);
-                return;
-            }
-        }
-
-        CreateLight(position, PaintRadius, color, new Color(255, 255, 255, 128));
-    }
-
     private static Color HueToRGB(float hue)
     {
         float r = MathF.Abs(hue * 6f - 3f) - 1f;
@@ -588,7 +531,7 @@ public class MegaLightsScene : Scene
 
     private void SpawnDebugEntities(int count)
     {
-        var screen = Renderer.Window.GetScreenSize();
+        var screen = Renderer.VirtualSize;
 
         for (int i = 0; i < count; i++)
         {

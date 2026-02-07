@@ -102,13 +102,13 @@ public class Geometry : core.System
 
     public override void Initialize()
     {
-        WorldBounds = Renderer.ScreenSize;
+        WorldBounds = Renderer.VirtualSize;
 
         SDFBounds = new Vector2(
             (int)(WorldBounds.X * SDFScale),
             (int)(WorldBounds.Y * SDFScale));
 
-        ScreenDiagonal = Renderer.ScreenDiagonal;
+        ScreenDiagonal = MathF.Sqrt(WorldBounds.X * WorldBounds.X + WorldBounds.Y * WorldBounds.Y);
 
         float sdfDiagonal = SDFBounds.Length();
         JFAPassCount = (int)Math.Ceiling(Math.Log(sdfDiagonal, 2));
@@ -189,20 +189,25 @@ public class Geometry : core.System
 
     private void InitializeGeometryBuffers()
     {
+        // Render targets use actual screen size for pixel quality matching the display.
+        // The orthographic projection (in Renderer) maps virtual coordinates to these targets.
+        int rtWidth = Renderer.ScreenWidth;
+        int rtHeight = Renderer.ScreenHeight;
+
         EmissiveTexture = new RenderTarget2D(
-            Renderer.Device, (int)WorldBounds.X, (int)WorldBounds.Y,
+            Renderer.Device, rtWidth, rtHeight,
             false, SurfaceFormat.Color, DepthFormat.None);
 
         AbsorptionTexture = new RenderTarget2D(
-            Renderer.Device, (int)WorldBounds.X, (int)WorldBounds.Y,
+            Renderer.Device, rtWidth, rtHeight,
             false, SurfaceFormat.Color, DepthFormat.None);
 
         SDFTexture = new RenderTarget2D(
-            Renderer.Device, (int)WorldBounds.X, (int)WorldBounds.Y,
+            Renderer.Device, rtWidth, rtHeight,
             false, SurfaceFormat.HalfVector2, DepthFormat.None);
 
         MotionVectorTexture = new RenderTarget2D(
-            Renderer.Device, (int)WorldBounds.X, (int)WorldBounds.Y,
+            Renderer.Device, rtWidth, rtHeight,
             false, SurfaceFormat.HalfVector2, DepthFormat.None);
 
         JFATexture1 = new RenderTarget2D(
@@ -732,8 +737,14 @@ public class Geometry : core.System
 
     public override void OnResize()
     {
+        // WorldBounds stays at VirtualSize (constant) — culling uses virtual coordinates.
+        // Render targets are recreated at screen size for pixel quality matching the display.
         Vector2 newSize = Renderer.ScreenSize;
-        if (WorldBounds == newSize)
+
+        // Skip if screen size hasn't actually changed
+        if (EmissiveTexture != null &&
+            EmissiveTexture.Width == (int)newSize.X &&
+            EmissiveTexture.Height == (int)newSize.Y)
             return;
 
         EmissiveTexture?.Dispose();
@@ -744,15 +755,6 @@ public class Geometry : core.System
         JFATexture2?.Dispose();
         JFATextureInterior1?.Dispose();
         JFATextureInterior2?.Dispose();
-
-        WorldBounds = newSize;
-        SDFBounds = new Vector2(
-            (int)(WorldBounds.X * SDFScale),
-            (int)(WorldBounds.Y * SDFScale));
-        ScreenDiagonal = Renderer.ScreenDiagonal;
-
-        float sdfDiagonal = SDFBounds.Length();
-        JFAPassCount = (int)Math.Ceiling(Math.Log(sdfDiagonal, 2));
 
         InitializeGeometryBuffers();
         JFAResult = JFATexture1;

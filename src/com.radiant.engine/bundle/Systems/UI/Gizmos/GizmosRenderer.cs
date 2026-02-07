@@ -20,7 +20,7 @@ public class GizmosRenderer : core.System
     private List<string> CategoryOrder = new();
     private new bool Enabled = true;
     private Vector2 StatsPosition = new(15, 15);
-    private const float LineSpacing = 34f;
+    private const float LineSpacing = 32f;
     private const float TextPadding = 4f;
     private Color TextBackgroundColor = new(0, 0, 0, 180);
 
@@ -109,7 +109,15 @@ public class GizmosRenderer : core.System
     {
         if (Enabled)
         {
-            Renderer.SpriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
+            // Scale from virtual coordinates to actual screen pixels so gizmos
+            // resize proportionally with the window (resolution-independent).
+            var scale = Matrix.CreateScale(
+                (float)Renderer.ScreenWidth / Renderer.VirtualWidth,
+                (float)Renderer.ScreenHeight / Renderer.VirtualHeight,
+                1f);
+
+            Renderer.SpriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend,
+                null, null, null, null, scale);
 
             RenderGizmos(Renderer.SpriteBatch);
             RenderStats(Renderer.SpriteBatch);

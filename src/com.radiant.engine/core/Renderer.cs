@@ -91,6 +91,15 @@ public class Renderer : IDisposable
     /// <summary>Height / Width ratio.</summary>
     public float InverseAspectRatio { get; private set; }
 
+    /// <summary>Virtual resolution width (fixed world coordinate space).</summary>
+    public float VirtualWidth { get; private set; }
+
+    /// <summary>Virtual resolution height (fixed world coordinate space).</summary>
+    public float VirtualHeight { get; private set; }
+
+    /// <summary>Virtual resolution as Vector2 (fixed world coordinate space).</summary>
+    public Vector2 VirtualSize { get; private set; }
+
     /// <summary>Diagonal length of the screen in pixels.</summary>
     public float ScreenDiagonal { get; private set; }
 
@@ -241,6 +250,12 @@ public class Renderer : IDisposable
         UpdateScreenInfo();
         UpdateScaledScreenInfo();
 
+        // Fixed virtual resolution — the world coordinate space.
+        // All entity positions, sizes, and scene layout use these units.
+        VirtualWidth = 3840;
+        VirtualHeight = 2160;
+        VirtualSize = new Vector2(VirtualWidth, VirtualHeight);
+
         NativeWindow.ClientSizeChanged += (_, _) =>
         {
             UpdateScreenInfo();
@@ -297,6 +312,26 @@ public class Renderer : IDisposable
         while (power < value)
             power *= 2;
         return power;
+    }
+
+    /// <summary>
+    /// Converts screen-space coordinates (e.g. mouse position) to virtual world coordinates.
+    /// </summary>
+    public Vector2 ScreenToWorld(Vector2 screenPos)
+    {
+        return new Vector2(
+            screenPos.X * (VirtualWidth / ScreenWidth),
+            screenPos.Y * (VirtualHeight / ScreenHeight));
+    }
+
+    /// <summary>
+    /// Converts virtual world coordinates to screen-space coordinates.
+    /// </summary>
+    public Vector2 WorldToScreen(Vector2 worldPos)
+    {
+        return new Vector2(
+            worldPos.X * ((float)ScreenWidth / VirtualWidth),
+            worldPos.Y * ((float)ScreenHeight / VirtualHeight));
     }
 
     #endregion
@@ -453,9 +488,7 @@ public class Renderer : IDisposable
             );
             Device.Indices = ShapeIndexBuffer;
 
-            float width = target?.Width ?? Device.Viewport.Width;
-            float height = target?.Height ?? Device.Viewport.Height;
-            var viewProjection = Matrix.CreateOrthographicOffCenter(0, width, height, 0, 0, 1);
+            var viewProjection = Matrix.CreateOrthographicOffCenter(0, VirtualWidth, VirtualHeight, 0, 0, 1);
 
             ShapeShader ??= GetShaderEffect("InstancedShapes");
             ShapeShader.CurrentTechnique = ShapeShader.Techniques[technique];
@@ -531,9 +564,7 @@ public class Renderer : IDisposable
             );
             Device.Indices = ShapeIndexBuffer;
 
-            float width = target?.Width ?? Device.Viewport.Width;
-            float height = target?.Height ?? Device.Viewport.Height;
-            var viewProjection = Matrix.CreateOrthographicOffCenter(0, width, height, 0, 0, 1);
+            var viewProjection = Matrix.CreateOrthographicOffCenter(0, VirtualWidth, VirtualHeight, 0, 0, 1);
 
             ShapeShader ??= GetShaderEffect("InstancedShapes");
             ShapeShader.CurrentTechnique = ShapeShader.Techniques[technique];
