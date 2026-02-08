@@ -88,7 +88,7 @@ public class MazeScene : Scene
     };
 
     // Ghost wandering
-    private const int GhostCount = 12;
+    private const int GhostCount = 8;
     private const float GhostSpeed = 200f;
     private const float GhostZ = 65530f;
     private int[] GhostIds;
@@ -382,7 +382,7 @@ public class MazeScene : Scene
     {
         var mouse = Mouse.GetState();
         var worldPos = Renderer.ScreenToWorld(new Vector2(mouse.X, mouse.Y));
-        MouseLightId = CreateLight(worldPos, 100f, new Color(0, 0, 0, 128), new Color(0, 0, 0, 128));
+        MouseLightId = CreateLight(worldPos, 100f, new Color(0, 0, 0, 128), new Color(0, 0, 0, 255));
 
         // Add motion tracking for mouse-controlled light
         ECS.AddComponent<MotionTrackable>(MouseLightId);
@@ -410,6 +410,7 @@ public class MazeScene : Scene
 
         material.Albedo = color;
         material.Emissive = emissive;
+        material.Texture = null;
 
         circle.Radius = radius;
 
