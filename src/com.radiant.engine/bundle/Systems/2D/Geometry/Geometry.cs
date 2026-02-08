@@ -204,7 +204,8 @@ public class Geometry : core.System
 
         AbsorptionTexture = new RenderTarget2D(
             Renderer.Device, rtWidth, rtHeight,
-            false, SurfaceFormat.Color, DepthFormat.None);
+            false, SurfaceFormat.Color, DepthFormat.None,
+            0, RenderTargetUsage.PreserveContents);
 
         SDFTexture = new RenderTarget2D(
             Renderer.Device, rtWidth, rtHeight,
