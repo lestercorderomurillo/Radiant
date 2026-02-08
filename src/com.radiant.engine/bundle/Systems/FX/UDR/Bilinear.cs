@@ -41,6 +41,8 @@ public class Bilinear : core.System
         if (input == null)
             return;
 
+        Renderer.SetTarget(null);
+
         Gizmos?.Set("Bilinear", $"Quality: {UDRQuality.Names[UDRQuality.Index]} ({UDRQuality.ScaleNormalized:P0}) [F4]");
         Gizmos?.Set("Bilinear", $"Input Size: {input.Width}x{input.Height}");
         Gizmos?.Set("Bilinear", $"Output Size: {Renderer.ScreenSize.X}x{Renderer.ScreenSize.Y}");
