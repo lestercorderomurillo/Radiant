@@ -6,11 +6,15 @@ using System;
 
 namespace com.radiant.engine.bundle;
 
+public enum GhostType : byte { Blinky, Pinky, Inky, Clyde }
+public enum GhostMode : byte { Scatter, Chase, Frightened }
+
 public class GhostAI : core.System
 {
     public float GhostSpeed { get; set; } = 200f;
     public float GhostZ { get; set; } = 65530f;
     public Texture2D EyesTexture { get; set; }
+    public float ReleaseInterval { get; set; } = 0.5f;
 
     private int[] GhostIds;
     private MazeBuilder Maze;
@@ -18,7 +22,52 @@ public class GhostAI : core.System
     private (int x, int y)[] GhostCells;
     private (int x, int y)[] GhostTargets;
     private (int dx, int dy)[] GhostDirs;
+    private GhostType[] GhostTypes;
+    private (int x, int y)[] ChaseTargets;
+    private bool[] ExitedHouse;
+    private float[] ReleaseTimes;
+    private float ElapsedTime;
     private Random Rng = new();
+
+    private GhostMode CurrentMode = GhostMode.Scatter;
+    private GhostMode PreFrightenedMode;
+    private float ModeTimer;
+    private int ModePhase;
+    private float FrightenedTimer;
+
+    // Classic Pac-Man Level 1 mode timing
+    private static readonly (GhostMode mode, float duration)[] ModeCycle =
+    {
+        (GhostMode.Scatter, 7f),
+        (GhostMode.Chase, 20f),
+        (GhostMode.Scatter, 7f),
+        (GhostMode.Chase, 20f),
+        (GhostMode.Scatter, 5f),
+        (GhostMode.Chase, 20f),
+        (GhostMode.Scatter, 5f),
+    };
+
+    // Pac-Man direction priority: Up, Left, Down, Right
+    private static readonly int[] DXs = { 0, -1, 0, 1 };
+    private static readonly int[] DYs = { -1, 0, 1, 0 };
+
+    public static Color PersonalityColor(GhostType type) => type switch
+    {
+        GhostType.Blinky => new Color(255, 0, 0),
+        GhostType.Pinky => new Color(255, 184, 255),
+        GhostType.Inky => new Color(0, 255, 255),
+        GhostType.Clyde => new Color(255, 184, 82),
+        _ => Color.White
+    };
+
+    private (int x, int y) ScatterTarget(GhostType type) => type switch
+    {
+        GhostType.Blinky => (Maze.Cols - 3, 0),
+        GhostType.Pinky => (2, 0),
+        GhostType.Inky => (Maze.Cols - 1, Maze.Rows - 1),
+        GhostType.Clyde => (0, Maze.Rows - 1),
+        _ => (Maze.Cols / 2, 0)
+    };
 
     public override void Initialize()
     {
@@ -33,13 +82,43 @@ public class GhostAI : core.System
         GhostCells = new (int, int)[count];
         GhostTargets = new (int, int)[count];
         GhostDirs = new (int, int)[count];
+        GhostTypes = new GhostType[count];
+        ChaseTargets = new (int, int)[count];
+        ExitedHouse = new bool[count];
+        ReleaseTimes = new float[count];
 
         for (int i = 0; i < count; i++)
         {
             GhostCells[i] = startCells[i];
             GhostTargets[i] = startCells[i];
             GhostDirs[i] = (0, 0);
+            GhostTypes[i] = (GhostType)(i % 4);
+            ChaseTargets[i] = PickRandomWalkable();
+            ExitedHouse[i] = false;
+            ReleaseTimes[i] = i * ReleaseInterval;
+
+            // Personality color
+            var color = PersonalityColor(GhostTypes[i]);
+            ref var mat = ref Scene.ECS.GetComponent<Material>(GhostIds[i]);
+            mat.Albedo = color;
+            mat.Emissive = color;
         }
+
+        ElapsedTime = 0f;
+        ModeTimer = 0f;
+        ModePhase = 0;
+        CurrentMode = GhostMode.Scatter;
+        FrightenedTimer = 0f;
+    }
+
+    /// <summary>Trigger frightened mode (all ghosts reverse and move randomly at half speed).</summary>
+    public void SetFrightened(float duration)
+    {
+        if (CurrentMode != GhostMode.Frightened)
+            PreFrightenedMode = CurrentMode;
+        CurrentMode = GhostMode.Frightened;
+        FrightenedTimer = duration;
+        ReverseAll();
     }
 
     public override void Update()
@@ -47,10 +126,19 @@ public class GhostAI : core.System
         if (GhostIds == null) return;
 
         float dt = (float)GameTime.ElapsedGameTime.TotalSeconds;
+        ElapsedTime += dt;
+        UpdateMode(dt);
+
         float step = GhostSpeed * dt;
+        float frightenedStep = step * 0.5f;
 
         for (int i = 0; i < GhostIds.Length; i++)
         {
+            if (ElapsedTime < ReleaseTimes[i]) continue;
+
+            float currentStep = (CurrentMode == GhostMode.Frightened && ExitedHouse[i])
+                ? frightenedStep : step;
+
             ref var transform = ref Scene.ECS.GetComponent<Transform>(GhostIds[i]);
             var pos = new Vector2(transform.Position.X, transform.Position.Y);
             var target = Maze.CellCenter(GhostTargets[i].x, GhostTargets[i].y);
@@ -58,9 +146,12 @@ public class GhostAI : core.System
             var diff = target - pos;
             float dist = diff.Length();
 
-            if (dist <= step)
+            if (dist <= currentStep)
             {
-                GhostCells[i] = GhostTargets[i];
+                // Wrap coordinates (tunnel teleport)
+                var raw = GhostTargets[i];
+                GhostCells[i] = (Maze.WrapX(raw.x), raw.y);
+                pos = Maze.CellCenter(GhostCells[i].x, GhostCells[i].y);
                 PickDirection(i);
 
                 target = Maze.CellCenter(GhostTargets[i].x, GhostTargets[i].y);
@@ -70,7 +161,7 @@ public class GhostAI : core.System
 
             if (dist > 0.01f)
             {
-                var move = (diff / dist) * MathF.Min(step, dist);
+                var move = (diff / dist) * MathF.Min(currentStep, dist);
                 pos += move;
             }
 
@@ -109,19 +200,214 @@ public class GhostAI : core.System
         Renderer.Commit();
     }
 
+    private void UpdateMode(float dt)
+    {
+        if (CurrentMode == GhostMode.Frightened)
+        {
+            FrightenedTimer -= dt;
+            if (FrightenedTimer <= 0f)
+            {
+                CurrentMode = PreFrightenedMode;
+                ReverseAll();
+            }
+            return;
+        }
+
+        if (ModePhase >= ModeCycle.Length)
+        {
+            CurrentMode = GhostMode.Chase;
+            return;
+        }
+
+        ModeTimer += dt;
+        if (ModeTimer >= ModeCycle[ModePhase].duration)
+        {
+            ModeTimer -= ModeCycle[ModePhase].duration;
+            ModePhase++;
+
+            var prevMode = CurrentMode;
+            CurrentMode = ModePhase < ModeCycle.Length
+                ? ModeCycle[ModePhase].mode
+                : GhostMode.Chase;
+
+            // Mode change takes effect at next intersection (no mid-corridor reversal)
+        }
+    }
+
+    private void ReverseAll()
+    {
+        for (int i = 0; i < GhostIds.Length; i++)
+        {
+            if (!ExitedHouse[i]) continue;
+
+            var (pdx, pdy) = GhostDirs[i];
+            if (pdx == 0 && pdy == 0) continue;
+
+            var (cx, cy) = GhostCells[i];
+            GhostDirs[i] = (-pdx, -pdy);
+
+            if (CanGhostMove(i, cx, cy, -pdx, -pdy))
+                GhostTargets[i] = (cx - pdx, cy - pdy);
+        }
+    }
+
+    private bool CanGhostMove(int gi, int cx, int cy, int dx, int dy)
+    {
+        if (!Maze.CanMove(cx, cy, dx, dy)) return false;
+        if (ExitedHouse[gi])
+        {
+            int nx = Maze.WrapX(cx + dx), ny = cy + dy;
+            if (Maze.IsGhostDoor(nx, ny)) return false;
+        }
+        return true;
+    }
+
+    private (int x, int y) GetTargetTile(int i)
+    {
+        if (CurrentMode == GhostMode.Scatter)
+            return ScatterTarget(GhostTypes[i]);
+
+        // Chase mode: Clyde retreats to scatter corner when close to target (< 8 tiles)
+        var (cx, cy) = GhostCells[i];
+        var (tx, ty) = ChaseTargets[i];
+
+        if (GhostTypes[i] == GhostType.Clyde)
+        {
+            float d = MathF.Sqrt((cx - tx) * (cx - tx) + (cy - ty) * (cy - ty));
+            if (d < 8f)
+                return ScatterTarget(GhostType.Clyde);
+        }
+
+        // Refresh chase target when close or invalid
+        float manhattan = MathF.Abs(cx - tx) + MathF.Abs(cy - ty);
+        if (manhattan <= 2 || Maze.IsWall(tx, ty))
+            ChaseTargets[i] = PickRandomWalkable();
+
+        return ChaseTargets[i];
+    }
+
     private void PickDirection(int i)
+    {
+        var (cx, cy) = GhostCells[i];
+        var (pdx, pdy) = GhostDirs[i];
+
+        // Ghost house exit: special movement (center horizontally, then straight up)
+        if (!ExitedHouse[i])
+        {
+            if (!Maze.InGhostHouse(cx, cy) && !Maze.IsGhostDoor(cx, cy))
+                ExitedHouse[i] = true;
+            else
+            {
+                PickHouseExit(i);
+                return;
+            }
+        }
+
+        // Frightened mode: random turns at intersections
+        if (CurrentMode == GhostMode.Frightened)
+        {
+            PickRandom(i);
+            return;
+        }
+
+        // Target-tile pathfinding (core Pac-Man ghost AI)
+        var targetTile = GetTargetTile(i);
+
+        Span<(int dx, int dy)> options = stackalloc (int, int)[4];
+        int count = 0;
+
+        for (int d = 0; d < 4; d++)
+        {
+            if (!CanGhostMove(i, cx, cy, DXs[d], DYs[d])) continue;
+            if (DXs[d] == -pdx && DYs[d] == -pdy) continue;
+            // No-up restriction at specific tiles (scatter/chase only)
+            if (DYs[d] == -1 && Maze.IsNoUpTile(cx, cy)) continue;
+            options[count++] = (DXs[d], DYs[d]);
+        }
+
+        if (count == 0)
+        {
+            GhostDirs[i] = (-pdx, -pdy);
+            GhostTargets[i] = (cx - pdx, cy - pdy);
+            return;
+        }
+
+        if (count == 1)
+        {
+            var only = options[0];
+            GhostDirs[i] = only;
+            GhostTargets[i] = (cx + only.dx, cy + only.dy);
+            return;
+        }
+
+        // Intersection: pick direction minimizing Euclidean distance to target tile
+        // Ties broken by priority order (Up > Left > Down > Right) since we iterate in that order
+        float bestDist = float.MaxValue;
+        (int dx, int dy) bestDir = options[0];
+
+        for (int j = 0; j < count; j++)
+        {
+            float dx2 = cx + options[j].dx - targetTile.x;
+            float dy2 = cy + options[j].dy - targetTile.y;
+            float dist = dx2 * dx2 + dy2 * dy2;
+
+            if (dist < bestDist)
+            {
+                bestDist = dist;
+                bestDir = options[j];
+            }
+        }
+
+        GhostDirs[i] = bestDir;
+        GhostTargets[i] = (cx + bestDir.dx, cy + bestDir.dy);
+    }
+
+    /// <summary>Ghost house exit: align to door column, then go straight up.</summary>
+    private void PickHouseExit(int i)
+    {
+        var (cx, cy) = GhostCells[i];
+        int doorL = Maze.HouseDoorLeft;
+        int doorR = Maze.HouseDoorRight;
+
+        if (cx < doorL && Maze.CanMove(cx, cy, 1, 0))
+        {
+            GhostDirs[i] = (1, 0);
+            GhostTargets[i] = (cx + 1, cy);
+        }
+        else if (cx > doorR && Maze.CanMove(cx, cy, -1, 0))
+        {
+            GhostDirs[i] = (-1, 0);
+            GhostTargets[i] = (cx - 1, cy);
+        }
+        else if (Maze.CanMove(cx, cy, 0, -1))
+        {
+            GhostDirs[i] = (0, -1);
+            GhostTargets[i] = (cx, cy - 1);
+        }
+        else
+        {
+            // Fallback: try any direction
+            for (int d = 0; d < 4; d++)
+                if (Maze.CanMove(cx, cy, DXs[d], DYs[d]))
+                {
+                    GhostDirs[i] = (DXs[d], DYs[d]);
+                    GhostTargets[i] = (cx + DXs[d], cy + DYs[d]);
+                    return;
+                }
+        }
+    }
+
+    private void PickRandom(int i)
     {
         var (cx, cy) = GhostCells[i];
         var (pdx, pdy) = GhostDirs[i];
 
         Span<(int dx, int dy)> options = stackalloc (int, int)[4];
         int count = 0;
-        int[] dxs = { 0, 1, 0, -1 };
-        int[] dys = { -1, 0, 1, 0 };
 
         for (int d = 0; d < 4; d++)
-            if (Maze.CanMove(cx, cy, dxs[d], dys[d]) && !(dxs[d] == -pdx && dys[d] == -pdy))
-                options[count++] = (dxs[d], dys[d]);
+            if (CanGhostMove(i, cx, cy, DXs[d], DYs[d]) && !(DXs[d] == -pdx && DYs[d] == -pdy))
+                options[count++] = (DXs[d], DYs[d]);
 
         if (count == 0)
         {
@@ -133,5 +419,17 @@ public class GhostAI : core.System
         var pick = options[Rng.Next(count)];
         GhostDirs[i] = pick;
         GhostTargets[i] = (cx + pick.dx, cy + pick.dy);
+    }
+
+    private (int x, int y) PickRandomWalkable()
+    {
+        for (int attempt = 0; attempt < 100; attempt++)
+        {
+            int x = Rng.Next(Maze.Cols);
+            int y = Rng.Next(Maze.Rows);
+            if (!Maze.IsWall(x, y) && !Maze.InGhostHouse(x, y) && !Maze.IsGhostDoor(x, y))
+                return (x, y);
+        }
+        return (Maze.Cols / 2, 0);
     }
 }

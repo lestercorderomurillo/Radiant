@@ -49,27 +49,7 @@ public class MazeScene : Scene
         "1111111111111111111111111111",
     };
 
-    private static readonly Color[] GhostColors =
-    {
-        new(255, 59, 48),   // Coral Red
-        new(255, 204, 0),   // Golden Yellow
-        new(124, 77, 255),  // Electric Indigo
-        new(52, 199, 89),   // Emerald
-        new(255, 45, 85),   // Hot Pink
-        new(48, 176, 199),  // Teal Blue
-        new(255, 159, 10),  // Tangerine
-        new(175, 82, 222),  // Amethyst
-        new(102, 212, 50),  // Lime
-        new(255, 69, 58),   // Vivid Red
-        new(0, 199, 190),   // Ocean Teal
-        new(236, 64, 122),  // Fuchsia
-        new(180, 220, 36),  // Chartreuse
-        new(88, 86, 214),   // Royal Purple
-        new(255, 105, 180), // Bubblegum
-        new(255, 94, 58),   // Flame Orange
-    };
-
-    private const int GhostCount = 32;
+    private const int GhostCount = 4;
 
     private static readonly (int x, int y)[] GhostHouseCells =
     {
@@ -97,8 +77,6 @@ public class MazeScene : Scene
 
         ECS.AddSystem<MazeBuilder>();
         ECS.AddSystem<GhostAI>();
-        ECS.AddSystem<MouseLight>();
-        ECS.AddSystem<PaintBrush>();
 
         Gizmos = ECS.AddSystem<GizmosRenderer>();
 
@@ -109,6 +87,13 @@ public class MazeScene : Scene
     {
         var maze = ECS.GetSystem<MazeBuilder>();
         maze.Layout = PacmanLayout;
+
+        maze.WallThickness = 2f;
+        maze.WallColor = new Color((byte)0, (byte)0, (byte)0, (byte)255);
+        maze.WallLight = new Color((byte)0, (byte)100, (byte)255, (byte)255);
+
+        maze.GhostHouse = (11, 13, 16, 15);
+        maze.NoUpTiles = new[] { (12, 11), (15, 11) };
         maze.BuildMaze();
 
         int count = Math.Clamp(GhostCount, 1, 255);
@@ -117,7 +102,7 @@ public class MazeScene : Scene
         for (int i = 0; i < count; i++)
         {
             startCells[i] = GhostHouseCells[i % GhostHouseCells.Length];
-            colors[i] = GhostColors[i % GhostColors.Length];
+            colors[i] = GhostAI.PersonalityColor((GhostType)(i % 4));
         }
 
         var ghostTexture = Renderer.Window.Content.Load<Texture2D>("Ghost");
@@ -126,10 +111,6 @@ public class MazeScene : Scene
         var ghosts = ECS.GetSystem<GhostAI>();
         ghosts.EyesTexture = Renderer.Window.Content.Load<Texture2D>("Eyes");
         ghosts.Track(ghostIds, startCells);
-
-        var mouseLight = ECS.GetSystem<MouseLight>();
-        var paintBrush = ECS.GetSystem<PaintBrush>();
-        paintBrush.ExcludeEntityId = mouseLight.EntityId;
 
         UpdateUDRInput();
 
