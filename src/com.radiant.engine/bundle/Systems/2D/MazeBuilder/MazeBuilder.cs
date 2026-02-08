@@ -199,7 +199,7 @@ public class MazeBuilder : core.System
                     }
                 }
 
-                if (!cL && !cR && !cU && !cD) continue;
+                if (!cL && !cR && !cU && !cD && !cutTL && !cutTR && !cutBL && !cutBR) continue;
                 Color color = GetWallColor(x, y);
 
                 if (cU)
@@ -217,6 +217,27 @@ public class MazeBuilder : core.System
                     float vt = cU ? t - WallThickness : t;
                     float vb = cD ? b + WallThickness : b;
                     CreateEmissiveBorder(new Vector2(r, vt), new Vector2(WallThickness, vb - vt), color);
+                }
+
+                if (cutTL)
+                {
+                    CreateEmissiveBorder(new Vector2(fx, fy + WallMargin - WallThickness), new Vector2(WallMargin, WallThickness), color);
+                    CreateEmissiveBorder(new Vector2(fx + WallMargin - WallThickness, fy), new Vector2(WallThickness, WallMargin - WallThickness), color);
+                }
+                if (cutTR)
+                {
+                    CreateEmissiveBorder(new Vector2(fx + CellSize - WallMargin, fy + WallMargin - WallThickness), new Vector2(WallMargin, WallThickness), color);
+                    CreateEmissiveBorder(new Vector2(fx + CellSize - WallMargin, fy), new Vector2(WallThickness, WallMargin - WallThickness), color);
+                }
+                if (cutBL)
+                {
+                    CreateEmissiveBorder(new Vector2(fx, fy + CellSize - WallMargin), new Vector2(WallMargin, WallThickness), color);
+                    CreateEmissiveBorder(new Vector2(fx + WallMargin - WallThickness, fy + CellSize - WallMargin + WallThickness), new Vector2(WallThickness, WallMargin - WallThickness), color);
+                }
+                if (cutBR)
+                {
+                    CreateEmissiveBorder(new Vector2(fx + CellSize - WallMargin, fy + CellSize - WallMargin), new Vector2(WallMargin, WallThickness), color);
+                    CreateEmissiveBorder(new Vector2(fx + CellSize - WallMargin, fy + CellSize - WallMargin + WallThickness), new Vector2(WallThickness, WallMargin - WallThickness), color);
                 }
             }
     }
