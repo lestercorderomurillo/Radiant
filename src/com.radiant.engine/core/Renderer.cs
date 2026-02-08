@@ -1096,7 +1096,7 @@ public class Renderer : IDisposable
     {
         CommitTextures();
         Device.SetRenderTarget(target);
-        CurrentTargets = target != null ? new[] { new RenderTargetBinding(target) } : null;
+        CurrentTargets = target != null ? [new RenderTargetBinding(target)] : null;
         return this;
     }
 

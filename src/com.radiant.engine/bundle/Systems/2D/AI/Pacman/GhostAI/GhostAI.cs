@@ -37,7 +37,7 @@ public class GhostAI : core.System
 
     // Classic Pac-Man Level 1 mode timing
     private static readonly (GhostMode mode, float duration)[] ModeCycle =
-    {
+    [
         (GhostMode.Scatter, 7f),
         (GhostMode.Chase, 20f),
         (GhostMode.Scatter, 7f),
@@ -45,11 +45,11 @@ public class GhostAI : core.System
         (GhostMode.Scatter, 5f),
         (GhostMode.Chase, 20f),
         (GhostMode.Scatter, 5f),
-    };
+    ];
 
     // Pac-Man direction priority: Up, Left, Down, Right
-    private static readonly int[] DXs = { 0, -1, 0, 1 };
-    private static readonly int[] DYs = { -1, 0, 1, 0 };
+    private static readonly int[] DXs = [0, -1, 0, 1];
+    private static readonly int[] DYs = [-1, 0, 1, 0];
 
     public static Color PersonalityColor(GhostType type) => type switch
     {

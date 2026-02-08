@@ -13,9 +13,12 @@ public class MazeScene : Scene
     private SystemGroup GI;
     private SystemGroup UDR;
     private GizmosRenderer Gizmos;
+    private MazeBuilder Maze;
+    private Color BaseWallLight;
+    private float PulseTime;
 
     private static readonly string[] PacmanLayout =
-    {
+    [
         "1111111111111111111111111111",
         "1000000000000110000000000001",
         "1011110111110110111110111101",
@@ -47,16 +50,16 @@ public class MazeScene : Scene
         "1011111111110110111111111101",
         "1000000000000000000000000001",
         "1111111111111111111111111111",
-    };
+    ];
 
     private const int GhostCount = 4;
 
     private static readonly (int x, int y)[] GhostHouseCells =
-    {
+    [
         (11, 13), (12, 13), (13, 13), (14, 13), (15, 13), (16, 13),
         (11, 14), (12, 14), (13, 14), (14, 14), (15, 14), (16, 14),
         (11, 15), (12, 15), (13, 15), (14, 15), (15, 15), (16, 15),
-    };
+    ];
 
     public override void SetupECS()
     {
@@ -85,18 +88,19 @@ public class MazeScene : Scene
 
     public override void SetupScene()
     {
-        var maze = ECS.GetSystem<MazeBuilder>();
-        maze.Layout = PacmanLayout;
+        Maze = ECS.GetSystem<MazeBuilder>();
+        Maze.Layout = PacmanLayout;
 
-        maze.WallThickness = 2f;
-        maze.WallColor = new Color((byte)0, (byte)0, (byte)0, (byte)255);
-        maze.WallLight = new Color((byte)0, (byte)100, (byte)255, (byte)255);
+        Maze.WallThickness = 4f;
+        Maze.WallColor = new Color((byte)0, (byte)0, (byte)40, (byte)255);
+        BaseWallLight = new Color((byte)120, (byte)80, (byte)255, (byte)255);
+        Maze.WallLight = BaseWallLight;
 
-        maze.GhostHouse = (11, 13, 16, 15);
-        maze.NoUpTiles = new[] { (12, 11), (15, 11) };
-        maze.BuildMaze();
+        Maze.GhostHouse = (11, 13, 16, 15);
+        Maze.NoUpTiles = [(12, 11), (15, 11)];
+        Maze.BuildMaze();
 
-        maze.SpawnCoins(6f, new Color(255, 200, 50), 1f);
+        Maze.SpawnCoins(6f, new Color(165, 130, 15), 1f);
 
         int count = Math.Clamp(GhostCount, 1, 255);
         var startCells = new (int x, int y)[count];
@@ -108,7 +112,7 @@ public class MazeScene : Scene
         }
 
         var ghostTexture = Renderer.Window.Content.Load<Texture2D>("Ghost");
-        var ghostIds = maze.SpawnAtCells(startCells, colors, 30f, 65530f, ghostTexture);
+        var ghostIds = Maze.SpawnAtCells(startCells, colors, 30f, 65530f, ghostTexture);
 
         var ghosts = ECS.GetSystem<GhostAI>();
         ghosts.EyesTexture = Renderer.Window.Content.Load<Texture2D>("Eyes");
@@ -139,6 +143,22 @@ public class MazeScene : Scene
             LightFactory.SpawnRandom(ECS, 100_000, Renderer.VirtualSize);
 
         PrevKeyboard = keyboard;
+
+        // Pulse wall borders
+        PulseTime += (float)GameTime.ElapsedGameTime.TotalSeconds;
+        float t = 0.5f + 0.5f * MathF.Sin(PulseTime * 0.6f);
+        t = t * t * (3f - 2f * t); // smoothstep
+        float pulse = 0.55f + 0.05f * t; // range [0.50 .. 0.60]
+        var ids = Maze.BorderIds;
+        for (int i = 0; i < ids.Count; i++)
+        {
+            ref var mat = ref ECS.GetComponent<Material>(ids[i]);
+            mat.Emissive = new Color(
+                (byte)(BaseWallLight.R * pulse),
+                (byte)(BaseWallLight.G * pulse),
+                (byte)(BaseWallLight.B * pulse),
+                BaseWallLight.A);
+        }
 
         Gizmos.Set("Scene", $"GI: {GI.ActiveName} [Tab]");
         Gizmos.Set("Scene", $"Upscaler: {UDR.ActiveName} [F11]");

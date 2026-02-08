@@ -17,8 +17,8 @@ public class HRCGI : core.System
 {
     private const int FrustumCount = 4;
     private const int MaxCascades = 11;
-    private static readonly int[] ProbeScales = { 4, 3, 2, 1 };
-    private static readonly string[] QualityNames = { "Performance", "Balanced", "Ultra", "Native" };
+    private static readonly int[] ProbeScales = [4, 3, 2, 1];
+    private static readonly string[] QualityNames = ["Performance", "Balanced", "Ultra", "Native"];
     private int ProbeScaleIndex = 3;
     private int ProbeScale => ProbeScales[ProbeScaleIndex];
     private int CascadeCount;
@@ -42,18 +42,18 @@ public class HRCGI : core.System
     private Vector2[] MergeSizes;
 
     // Precomputed frustum transforms
-    private static readonly Vector4[] FrustumMatrices = {
+    private static readonly Vector4[] FrustumMatrices = [
         new Vector4(1, 0, 0, 1),
         new Vector4(0, -1, -1, 0),
         new Vector4(-1, 0, 0, -1),
         new Vector4(0, 1, 1, 0)
-    };
-    private static readonly Vector2[] FrustumOffsets = {
+    ];
+    private static readonly Vector2[] FrustumOffsets = [
         new Vector2(0, 0),
         new Vector2(1, 1),
         new Vector2(1, 1),
         new Vector2(0, 0)
-    };
+    ];
 
     private KeyboardState PrevKeyState;
     private int DebugIndex = 0;

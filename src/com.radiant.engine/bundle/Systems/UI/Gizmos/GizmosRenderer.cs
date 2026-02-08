@@ -24,11 +24,11 @@ public class GizmosRenderer : core.System
     private const float TextPadding = 4f;
     private Color TextBackgroundColor = new(0, 0, 0, 180);
 
-    private static readonly Color[] CategoryColors = new[]
-    {
+    private static readonly Color[] CategoryColors =
+    [
         Color.Cyan, Color.LimeGreen, Color.Gold, Color.HotPink,
         Color.Orange, Color.LightBlue, Color.Violet, Color.Yellow
-    };
+    ];
     private Dictionary<string, Color> CategoryColorMap = new();
 
     private KeyboardState PrevKeyState;

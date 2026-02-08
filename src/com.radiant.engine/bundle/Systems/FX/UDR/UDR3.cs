@@ -189,7 +189,7 @@ public class UDR3 : core.System
         Gizmos?.Set("UDR3", $"Input Size: {input.Width}x{input.Height}");
         Gizmos?.Set("UDR3", $"Output Size: {OutputSize.X}x{OutputSize.Y}");
         Gizmos?.Set("UDR3", $"Frames to Accumulate: {FramesToAccumulate} (current: {effectiveFrames})");
-        string[] debugNames = { "OFF", "Edge Mask" };
+        string[] debugNames = ["OFF", "Edge Mask"];
         Gizmos?.Set("UDR3", $"Debug Edges: {debugNames[DebugEdges]} [K]");
     }
 

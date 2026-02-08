@@ -1,7 +1,7 @@
 using com.radiant.engine.core;
-using com.radiant.engine.runtime;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using System.Collections.Generic;
 
 namespace com.radiant.engine.bundle;
 
@@ -15,6 +15,8 @@ public class MazeBuilder : core.System
     public Color WallLight { get; set; } = new Color(100, 180, 255);
     public Color[] WallColors { get; set; }
     public string[] Sections { get; set; }
+
+    public List<int> BorderIds { get; private set; } = new();
 
     // Ghost house bounds (grid coordinates, inclusive). (-1,-1,-1,-1) = none.
     public (int left, int top, int right, int bottom) GhostHouse { get; set; } = (-1, -1, -1, -1);
@@ -280,5 +282,7 @@ public class MazeBuilder : core.System
 
         material.Albedo = Color.Black;
         material.Emissive = emissive;
+
+        BorderIds.Add(id);
     }
 }

@@ -7,8 +7,8 @@ namespace com.radiant.engine.bundle;
 /// </summary>
 public static class UDRQuality
 {
-    public static readonly int[] ScaleFactors = { 25, 50, 100 };
-    public static readonly string[] Names = { "Performance", "Balanced", "Native" };
+    public static readonly int[] ScaleFactors = [25, 50, 100];
+    public static readonly string[] Names = ["Performance", "Balanced", "Native"];
 
     public static int Index { get; private set; } = 1;
     public static int ScaleFactor => ScaleFactors[Index];
