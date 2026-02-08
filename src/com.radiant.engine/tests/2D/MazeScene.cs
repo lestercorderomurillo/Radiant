@@ -4,7 +4,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using System;
-using System.Collections.Generic;
+
 
 namespace com.radiant.engine.core;
 
@@ -28,6 +28,7 @@ public class MazeScene : Scene
     private const float MouseLightZ = 65535f;
 
     private Texture2D GhostTexture;
+    private Texture2D EyesTexture;
 
     private HRCGI HRCGISystem;
     private RCGI RCGISystem;
@@ -41,18 +42,52 @@ public class MazeScene : Scene
     private int UDRMode = 3;  // 0 = Bilinear, 1 = UDR1, 2 = UDR2, 3 = UDR3
 
     // Maze parameters
-    private const float CellSize = 150f;
-    private const float WallThickness = 20f;
-    private const int MazeCols = 22;
-    private const int MazeRows = 12;
+    private const float CellSize = 65f;
+    private const float WallThickness = 14f;
+    private const int MazeCols = 28;
+    private const int MazeRows = 31;
     private float MazeOffsetX, MazeOffsetY;
 
-    // Maze connectivity (stored for ghost navigation)
-    private bool[,] MazeHWalls; // horizontal walls [cols, rows+1]
-    private bool[,] MazeVWalls; // vertical walls [cols+1, rows]
+    // Pac-Man maze tile grid (true = wall)
+    private bool[,] MazeGrid;
+
+    private static readonly string[] PacmanLayout =
+    {
+        "1111111111111111111111111111", // 0
+        "1000000000000110000000000001", // 1
+        "1011110111110110111110111101", // 2
+        "1011110111110110111110111101", // 3
+        "1011110111110110111110111101", // 4
+        "1000000000000000000000000001", // 5
+        "1011110110111111110110111101", // 6
+        "1011110110111111110110111101", // 7
+        "1000000110000110000110000001", // 8
+        "1111110111110110111110111111", // 9
+        "1111110111110110111110111111", // 10
+        "1111110110000000000110111111", // 11
+        "1111110110111001110110111111", // 12
+        "1111110110100000010110111111", // 13
+        "0000000000100000010000000000", // 14
+        "1111110110100000010110111111", // 15
+        "1111110110111111110110111111", // 16
+        "1111110110000000000110111111", // 17
+        "1111110110111111110110111111", // 18
+        "1111110110111111110110111111", // 19
+        "1000000000000110000000000001", // 20
+        "1011110111110110111110111101", // 21
+        "1011110111110110111110111101", // 22
+        "1000110000000000000000110001", // 23
+        "1110110110111111110110110111", // 24
+        "1110110110111111110110110111", // 25
+        "1000000110000110000110000001", // 26
+        "1011111111110110111111111101", // 27
+        "1011111111110110111111111101", // 28
+        "1000000000000000000000000001", // 29
+        "1111111111111111111111111111", // 30
+    };
 
     // Ghost wandering
-    private const int GhostCount = 4;
+    private const int GhostCount = 12;
     private const float GhostSpeed = 200f;
     private const float GhostZ = 65530f;
     private int[] GhostIds;
@@ -81,6 +116,7 @@ public class MazeScene : Scene
     public override void SetupScene()
     {
         GhostTexture = Renderer.Window.Content.Load<Texture2D>("Ghost");
+        EyesTexture = Renderer.Window.Content.Load<Texture2D>("Eyes");
 
         CreateMaze();
         CreateGhosts();
@@ -91,14 +127,12 @@ public class MazeScene : Scene
     }
 
     private Vector2 CellCenter(int cx, int cy) => new(
-        MazeOffsetX + cx * (CellSize + WallThickness) + WallThickness + CellSize / 2f,
-        MazeOffsetY + cy * (CellSize + WallThickness) + WallThickness + CellSize / 2f);
+        MazeOffsetX + cx * CellSize + CellSize / 2f,
+        MazeOffsetY + cy * CellSize + CellSize / 2f);
 
     private void CreateGhosts()
     {
-        float radius = 40f;
-        int qx = MazeCols / 4;
-        int qy = MazeRows / 4;
+        float radius = 25f;
 
         var ghostColors = new Color[]
         {
@@ -106,14 +140,30 @@ public class MazeScene : Scene
             new(255, 184, 255), // Pinky (pink)
             new(0, 255, 255),   // Inky (cyan)
             new(255, 184, 82),  // Clyde (orange)
+            new(255, 255, 0),   // yellow
+            new(0, 255, 0),     // green
+            new(128, 0, 255),   // purple
+            new(255, 100, 100), // light red
+            new(100, 200, 255), // light blue
+            new(255, 150, 0),   // dark orange
+            new(200, 255, 200), // light green
+            new(255, 100, 200), // hot pink
         };
 
         (int x, int y)[] startCells =
         {
-            (qx, qy),
-            (MazeCols - 1 - qx, qy),
-            (qx, MazeRows - 1 - qy),
-            (MazeCols - 1 - qx, MazeRows - 1 - qy),
+            (13, 11),  // above ghost house
+            (13, 14),  // center of ghost house
+            (11, 14),  // left of ghost house
+            (16, 14),  // right of ghost house
+            (1, 1),    // top-left corner
+            (26, 1),   // top-right corner
+            (1, 29),   // bottom-left corner
+            (26, 29),  // bottom-right corner
+            (6, 5),    // upper-left corridor
+            (21, 5),   // upper-right corridor
+            (6, 23),   // lower-left corridor
+            (21, 23),  // lower-right corridor
         };
 
         GhostIds = new int[GhostCount];
@@ -138,13 +188,7 @@ public class MazeScene : Scene
     {
         int nx = cx + dx, ny = cy + dy;
         if (nx < 0 || nx >= MazeCols || ny < 0 || ny >= MazeRows) return false;
-
-        // Check wall between (cx,cy) and (nx,ny)
-        if (dy == -1) return !MazeHWalls[cx, cy];       // up
-        if (dx == 1)  return !MazeVWalls[cx + 1, cy];   // right
-        if (dy == 1)  return !MazeHWalls[cx, cy + 1];   // down
-        if (dx == -1) return !MazeVWalls[cx, cy];        // left
-        return false;
+        return !MazeGrid[nx, ny];
     }
 
     private void PickGhostDirection(int i)
@@ -212,94 +256,56 @@ public class MazeScene : Scene
 
     private void CreateMaze()
     {
-        float mazeW = MazeCols * CellSize + (MazeCols + 1) * WallThickness;
-        float mazeH = MazeRows * CellSize + (MazeRows + 1) * WallThickness;
+        float mazeW = MazeCols * CellSize;
+        float mazeH = MazeRows * CellSize;
         var virt = Renderer.VirtualSize;
         MazeOffsetX = (virt.X - mazeW) / 2f;
         MazeOffsetY = (virt.Y - mazeH) / 2f;
+
+        // Parse Pac-Man layout into tile grid
+        MazeGrid = new bool[MazeCols, MazeRows];
+        for (int y = 0; y < MazeRows; y++)
+            for (int x = 0; x < MazeCols; x++)
+                MazeGrid[x, y] = PacmanLayout[y][x] == '1';
+
+        // Render walls as outline segments at wall-passage boundaries
+        float hw = WallThickness / 2f;
         float ox = MazeOffsetX;
         float oy = MazeOffsetY;
 
-        // Generate maze with DFS (recursive backtracker)
-        bool[,] visited = new bool[MazeCols, MazeRows];
-        MazeHWalls = new bool[MazeCols, MazeRows + 1];
-        MazeVWalls = new bool[MazeCols + 1, MazeRows];
-        var hWalls = MazeHWalls;
-        var vWalls = MazeVWalls;
-
-        // All walls start present
-        for (int x = 0; x < MazeCols; x++)
-            for (int y = 0; y <= MazeRows; y++)
-                hWalls[x, y] = true;
-        for (int x = 0; x <= MazeCols; x++)
-            for (int y = 0; y < MazeRows; y++)
-                vWalls[x, y] = true;
-
-        // DFS carve passages
-        var stack = new Stack<(int x, int y)>();
-        visited[0, 0] = true;
-        stack.Push((0, 0));
-
-        int[] dx = { 0, 1, 0, -1 };
-        int[] dy = { -1, 0, 1, 0 };
-
-        while (stack.Count > 0)
-        {
-            var (cx, cy) = stack.Peek();
-
-            // Find unvisited neighbors
-            int start = Rng.Next(4);
-            bool found = false;
-            for (int i = 0; i < 4; i++)
+        // Corner posts at grid intersections on the boundary
+        for (int gy = 0; gy <= MazeRows; gy++)
+            for (int gx = 0; gx <= MazeCols; gx++)
             {
-                int d = (start + i) % 4;
-                int nx = cx + dx[d];
-                int ny = cy + dy[d];
-
-                if (nx >= 0 && nx < MazeCols && ny >= 0 && ny < MazeRows && !visited[nx, ny])
-                {
-                    visited[nx, ny] = true;
-
-                    // Remove wall between (cx,cy) and (nx,ny)
-                    switch (d)
-                    {
-                        case 0: hWalls[cx, cy] = false; break;     // top
-                        case 1: vWalls[cx + 1, cy] = false; break; // right
-                        case 2: hWalls[cx, cy + 1] = false; break; // bottom
-                        case 3: vWalls[cx, cy] = false; break;     // left
-                    }
-
-                    stack.Push((nx, ny));
-                    found = true;
-                    break;
-                }
+                int w = (IsWall(gx - 1, gy - 1) ? 1 : 0) + (IsWall(gx, gy - 1) ? 1 : 0)
+                      + (IsWall(gx - 1, gy) ? 1 : 0) + (IsWall(gx, gy) ? 1 : 0);
+                if (w > 0 && w < 4)
+                    CreateWall(
+                        new Vector2(ox + gx * CellSize - hw, oy + gy * CellSize - hw),
+                        new Vector2(WallThickness, WallThickness));
             }
 
-            if (!found) stack.Pop();
-        }
-
-        // Corner posts at every grid intersection (always present)
-        for (int gx = 0; gx <= MazeCols; gx++)
-            for (int gy = 0; gy <= MazeRows; gy++)
-                CreateWall(
-                    new Vector2(ox + gx * (CellSize + WallThickness), oy + gy * (CellSize + WallThickness)),
-                    new Vector2(WallThickness, WallThickness));
-
-        // Horizontal wall segments (between adjacent posts, CellSize wide)
-        for (int x = 0; x < MazeCols; x++)
-            for (int y = 0; y <= MazeRows; y++)
-                if (hWalls[x, y])
+        // Horizontal segments (between rows)
+        for (int gy = 0; gy <= MazeRows; gy++)
+            for (int gx = 0; gx < MazeCols; gx++)
+                if (IsWall(gx, gy - 1) != IsWall(gx, gy))
                     CreateWall(
-                        new Vector2(ox + x * (CellSize + WallThickness) + WallThickness, oy + y * (CellSize + WallThickness)),
+                        new Vector2(ox + gx * CellSize, oy + gy * CellSize - hw),
                         new Vector2(CellSize, WallThickness));
 
-        // Vertical wall segments (between adjacent posts, CellSize tall)
-        for (int x = 0; x <= MazeCols; x++)
-            for (int y = 0; y < MazeRows; y++)
-                if (vWalls[x, y])
+        // Vertical segments (between columns)
+        for (int gx = 0; gx <= MazeCols; gx++)
+            for (int gy = 0; gy < MazeRows; gy++)
+                if (IsWall(gx - 1, gy) != IsWall(gx, gy))
                     CreateWall(
-                        new Vector2(ox + x * (CellSize + WallThickness), oy + y * (CellSize + WallThickness) + WallThickness),
+                        new Vector2(ox + gx * CellSize - hw, oy + gy * CellSize),
                         new Vector2(WallThickness, CellSize));
+    }
+
+    private bool IsWall(int x, int y)
+    {
+        if (x < 0 || x >= MazeCols || y < 0 || y >= MazeRows) return true;
+        return MazeGrid[x, y];
     }
 
     private void CreateWall(Vector2 position, Vector2 size)
@@ -627,5 +633,34 @@ public class MazeScene : Scene
     public override void Render()
     {
         base.Render();
+    }
+
+    public override void LateRender()
+    {
+        float sx = Renderer.ScreenWidth / Renderer.VirtualSize.X;
+        float sy = Renderer.ScreenHeight / Renderer.VirtualSize.Y;
+        float radius = 20f;
+        float diameter = radius * 2f;
+
+        Renderer.Reset()
+            .Configure(BlendState.AlphaBlend)
+            .SetTarget(null);
+
+        for (int i = 0; i < GhostCount; i++)
+        {
+            ref var transform = ref ECS.GetComponent<Transform>(GhostIds[i]);
+            float cx = transform.Position.X;
+            float cy = transform.Position.Y;
+
+            Renderer.DrawTexture(EyesTexture,
+                new Rectangle(
+                    (int)((cx - radius) * sx),
+                    (int)((cy - radius) * sy),
+                    (int)(diameter * sx),
+                    (int)(diameter * sy)),
+                Color.White);
+        }
+
+        Renderer.Commit();
     }
 }
