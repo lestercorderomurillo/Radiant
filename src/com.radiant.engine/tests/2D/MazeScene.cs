@@ -106,14 +106,12 @@ public class MazeScene : Scene
         maze.Layout = PacmanLayout;
         maze.BuildMaze();
 
-        var ghosts = ECS.GetSystem<GhostAI>();
-        
-        ghosts.GhostTexture = Renderer.Window.Content.Load<Texture2D>("Ghost");
-        ghosts.EyesTexture = Renderer.Window.Content.Load<Texture2D>("Eyes");
+        var ghostTexture = Renderer.Window.Content.Load<Texture2D>("Ghost");
+        var ghostIds = SpawnGhosts(maze, ghostTexture);
 
-        ghosts.GhostColors = GhostColors;
-        ghosts.StartCells = GhostStartCells;
-        ghosts.SpawnGhosts();
+        var ghosts = ECS.GetSystem<GhostAI>();
+        ghosts.EyesTexture = Renderer.Window.Content.Load<Texture2D>("Eyes");
+        ghosts.Track(ghostIds, GhostStartCells);
 
         var mouseLight = ECS.GetSystem<MouseLight>();
         var paintBrush = ECS.GetSystem<PaintBrush>();
@@ -122,6 +120,23 @@ public class MazeScene : Scene
         UpdateUDRInput();
 
         base.SetupScene();
+    }
+
+    private int[] SpawnGhosts(MazeBuilder maze, Texture2D ghostTexture)
+    {
+        const float radius = 25f;
+        const float ghostZ = 65530f;
+        var ids = new int[GhostStartCells.Length];
+
+        for (int i = 0; i < ids.Length; i++)
+        {
+            var cell = GhostStartCells[i];
+            var center = maze.CellCenter(cell.x, cell.y);
+            ids[i] = LightFactory.CreateLight(ECS, center, radius, GhostColors[i], GhostColors[i], ghostZ, ghostTexture);
+            ECS.AddComponent<MotionTrackable>(ids[i]);
+        }
+
+        return ids;
     }
 
     public override void Update()

@@ -788,7 +788,7 @@ public class Geometry : core.System
                     .SetTechnique("DebugMotionVectors")
                     .SetTarget(null)
                     .SetParameter("MotionVectorTexture", MotionVectorTexture)
-                    .SetParameter("WorldsBounds", WorldBounds)
+                    .SetParameter("WorldsBounds", Renderer.ScreenSize)
                     .Draw()
                     .Commit();
                 break;

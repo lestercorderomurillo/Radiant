@@ -8,16 +8,11 @@ namespace com.radiant.engine.bundle;
 
 public class GhostAI : core.System
 {
-    public int GhostCount { get; set; } = 8;
     public float GhostSpeed { get; set; } = 200f;
     public float GhostZ { get; set; } = 65530f;
-    public (int x, int y)[] StartCells { get; set; }
-    public Color[] GhostColors { get; set; }
-    public Texture2D GhostTexture { get; set; }
     public Texture2D EyesTexture { get; set; }
 
-    public int[] GhostIds { get; private set; }
-
+    private int[] GhostIds;
     private MazeBuilder Maze;
     private (int x, int y)[] GhostCells;
     private (int x, int y)[] GhostTargets;
@@ -29,26 +24,18 @@ public class GhostAI : core.System
         Maze = Scene.ECS.GetSystem<MazeBuilder>();
     }
 
-    public void SpawnGhosts()
+    public void Track(int[] entityIds, (int x, int y)[] startCells)
     {
-        float radius = 25f;
+        int count = entityIds.Length;
+        GhostIds = entityIds;
+        GhostCells = new (int, int)[count];
+        GhostTargets = new (int, int)[count];
+        GhostDirs = new (int, int)[count];
 
-        GhostIds = new int[GhostCount];
-        GhostCells = new (int, int)[GhostCount];
-        GhostTargets = new (int, int)[GhostCount];
-        GhostDirs = new (int, int)[GhostCount];
-
-        for (int i = 0; i < GhostCount; i++)
+        for (int i = 0; i < count; i++)
         {
-            var cell = StartCells[i];
-            var center = Maze.CellCenter(cell.x, cell.y);
-
-            GhostIds[i] = LightFactory.CreateLight(
-                Scene.ECS, center, radius, GhostColors[i], GhostColors[i], GhostZ, GhostTexture);
-            Scene.ECS.AddComponent<MotionTrackable>(GhostIds[i]);
-
-            GhostCells[i] = cell;
-            GhostTargets[i] = cell;
+            GhostCells[i] = startCells[i];
+            GhostTargets[i] = startCells[i];
             GhostDirs[i] = (0, 0);
         }
     }
@@ -60,7 +47,7 @@ public class GhostAI : core.System
         float dt = (float)GameTime.ElapsedGameTime.TotalSeconds;
         float step = GhostSpeed * dt;
 
-        for (int i = 0; i < GhostCount; i++)
+        for (int i = 0; i < GhostIds.Length; i++)
         {
             ref var transform = ref Scene.ECS.GetComponent<Transform>(GhostIds[i]);
             var pos = new Vector2(transform.Position.X, transform.Position.Y);
@@ -102,7 +89,7 @@ public class GhostAI : core.System
             .Configure(BlendState.AlphaBlend)
             .SetTarget(null);
 
-        for (int i = 0; i < GhostCount; i++)
+        for (int i = 0; i < GhostIds.Length; i++)
         {
             ref var transform = ref Scene.ECS.GetComponent<Transform>(GhostIds[i]);
             float cx = transform.Position.X;
