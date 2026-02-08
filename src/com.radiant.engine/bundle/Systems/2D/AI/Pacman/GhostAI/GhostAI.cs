@@ -207,8 +207,9 @@ public class GhostAI : core.System
 
         for (int i = 0; i < GhostIds.Length; i++)
         {
-            float cx = EyePositions[i].X;
-            float cy = EyePositions[i].Y;
+            var (dx, dy) = GhostDirs[i];
+            float cx = EyePositions[i].X + dx * 4f;
+            float cy = EyePositions[i].Y + dy * 4f;
 
             if (EyesTexture != null)
             {
