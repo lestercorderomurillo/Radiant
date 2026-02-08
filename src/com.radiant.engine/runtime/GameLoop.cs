@@ -201,7 +201,7 @@ public class GameLoop : IGameObject
         // Actual rendering
         if (SceneId != NO_SCENE)
         {
-            Scenes[SceneId].Renderer.Window.GraphicsDevice.Clear(Color.Black);
+            Scenes[SceneId].Renderer.ClearBackBuffer(Color.Black);
             Scenes[SceneId].GameTime = GameTime;
             Scenes[SceneId].InternalRender();
             Scenes[SceneId].InternalLateRender();

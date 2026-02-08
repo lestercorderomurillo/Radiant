@@ -204,7 +204,7 @@ public class PerformanceMonitor : core.System
 
     private void UpdateDisplay()
     {
-        var gameLoop = Renderer.Window.GameLoop;
+        var gameLoop = Renderer.GameLoop;
         int TargetFps = gameLoop?.TargetFramesPerSecond ?? 144;
         float ActualFps = gameLoop?.FramesPerSecond ?? 1f;
         float TargetMs = 1000f / TargetFps;

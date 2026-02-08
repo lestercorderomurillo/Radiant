@@ -20,7 +20,7 @@ public class PaintBrush : core.System
 
     public override void Update()
     {
-        if (!Renderer.Window.IsActive) return;
+        if (!Renderer.IsActive) return;
 
         var mouse = Mouse.GetState();
         var mousePos = Renderer.ScreenToWorld(new Vector2(mouse.X, mouse.Y));

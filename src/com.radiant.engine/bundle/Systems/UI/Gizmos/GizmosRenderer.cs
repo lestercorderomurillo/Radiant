@@ -35,7 +35,7 @@ public class GizmosRenderer : core.System
 
     public override void Initialize()
     {
-        BaseFont = Renderer.Window.Content.Load<SpriteFont>("fonts/BaseFont");
+        BaseFont = Renderer.GetFont("fonts/BaseFont");
 
         PrevKeyState = Keyboard.GetState();
     }
@@ -116,13 +116,12 @@ public class GizmosRenderer : core.System
                 (float)Renderer.ScreenHeight / Renderer.VirtualHeight,
                 1f);
 
-            Renderer.SpriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend,
-                null, null, null, null, scale);
+            Renderer.BeginDraw(SpriteSortMode.Deferred, BlendState.AlphaBlend, transform: scale);
 
-            RenderGizmos(Renderer.SpriteBatch);
-            RenderStats(Renderer.SpriteBatch);
+            RenderGizmos();
+            RenderStats();
 
-            Renderer.SpriteBatch.End();
+            Renderer.EndDraw();
         }
 
         // Clear stats after render (ready for next frame)
@@ -130,25 +129,25 @@ public class GizmosRenderer : core.System
             list.Clear();
     }
 
-    private void RenderGizmos(SpriteBatch batch)
+    private void RenderGizmos()
     {
         foreach (var line in LineQueue)
-            RenderLine(batch, line);
+            RenderLine(line);
 
         foreach (var circle in CircleQueue)
-            RenderCircle(batch, circle);
+            RenderCircle(circle);
 
         foreach (var arc in ArcQueue)
-            RenderArc(batch, arc);
+            RenderArc(arc);
 
         foreach (var rect in RectQueue)
-            RenderRect(batch, rect);
+            RenderRect(rect);
 
         foreach (var text in TextQueue)
-            RenderTextWithBackground(batch, text);
+            RenderTextWithBackground(text);
     }
 
-    private void RenderTextWithBackground(SpriteBatch batch, TextGizmo text)
+    private void RenderTextWithBackground(TextGizmo text)
     {
         if (string.IsNullOrEmpty(text.Text)) return;
 
@@ -161,11 +160,11 @@ public class GizmosRenderer : core.System
             (int)(textSize.Y + TextPadding * 2)
         );
 
-        batch.Draw(Renderer.GetSolidTexture(Color.White), backgroundRect, TextBackgroundColor);
-        batch.DrawString(BaseFont, text.Text, text.Position, text.Color);
+        Renderer.DrawSprite(Renderer.GetSolidTexture(Color.White), backgroundRect, TextBackgroundColor);
+        Renderer.DrawString(BaseFont, text.Text, text.Position, text.Color);
     }
 
-    private void RenderLine(SpriteBatch batch, LineGizmo line)
+    private void RenderLine(LineGizmo line)
     {
         Vector2 delta = line.End - line.Start;
         float length = delta.Length();
@@ -174,14 +173,14 @@ public class GizmosRenderer : core.System
 
         float rotation = (float)Math.Atan2(delta.Y, delta.X);
 
-        batch.Draw(Renderer.GetSolidTexture(Color.White), new Rectangle(
+        Renderer.DrawSprite(Renderer.GetSolidTexture(Color.White), new Rectangle(
             (int)line.Start.X, (int)line.Start.Y,
             (int)length, (int)line.Thickness),
             null, line.Color, rotation,
-            new Vector2(0, 0.5f), SpriteEffects.None, 0);
+            new Vector2(0, 0.5f));
     }
 
-    private void RenderCircle(SpriteBatch batch, CircleGizmo circle)
+    private void RenderCircle(CircleGizmo circle)
     {
         const int segments = 32;
         Vector2 prev = circle.Center + new Vector2(circle.Radius, 0);
@@ -194,12 +193,12 @@ public class GizmosRenderer : core.System
                 (float)Math.Sin(angle) * circle.Radius
             );
 
-            RenderLine(batch, new LineGizmo(prev, next, circle.Color, 1f));
+            RenderLine(new LineGizmo(prev, next, circle.Color, 1f));
             prev = next;
         }
     }
 
-    private void RenderArc(SpriteBatch batch, ArcGizmo arc)
+    private void RenderArc(ArcGizmo arc)
     {
         const int segments = 32;
         float angleRange = arc.EndAngle - arc.StartAngle;
@@ -218,16 +217,16 @@ public class GizmosRenderer : core.System
                 (float)Math.Sin(angle) * arc.Radius
             );
 
-            RenderLine(batch, new LineGizmo(prev, next, arc.Color, 1f));
+            RenderLine(new LineGizmo(prev, next, arc.Color, 1f));
             prev = next;
         }
     }
 
-    private void RenderRect(SpriteBatch batch, RectGizmo rect)
+    private void RenderRect(RectGizmo rect)
     {
         if (rect.Filled)
         {
-            batch.Draw(Renderer.GetSolidTexture(Color.White), rect.Rect, rect.Color);
+            Renderer.DrawSprite(Renderer.GetSolidTexture(Color.White), rect.Rect, rect.Color);
         }
         else
         {
@@ -236,21 +235,21 @@ public class GizmosRenderer : core.System
             Vector2 bottomLeft = new(rect.Rect.X, rect.Rect.Bottom);
             Vector2 bottomRight = new(rect.Rect.Right, rect.Rect.Bottom);
 
-            RenderLine(batch, new LineGizmo(topLeft, topRight, rect.Color, 1f));
-            RenderLine(batch, new LineGizmo(topRight, bottomRight, rect.Color, 1f));
-            RenderLine(batch, new LineGizmo(bottomRight, bottomLeft, rect.Color, 1f));
-            RenderLine(batch, new LineGizmo(bottomLeft, topLeft, rect.Color, 1f));
+            RenderLine(new LineGizmo(topLeft, topRight, rect.Color, 1f));
+            RenderLine(new LineGizmo(topRight, bottomRight, rect.Color, 1f));
+            RenderLine(new LineGizmo(bottomRight, bottomLeft, rect.Color, 1f));
+            RenderLine(new LineGizmo(bottomLeft, topLeft, rect.Color, 1f));
         }
     }
 
-    private void RenderStats(SpriteBatch batch)
+    private void RenderStats()
     {
         if (BaseFont == null) return;
 
         float y = StatsPosition.Y;
 
         // Show controls hint
-        RenderTextWithBackground(batch, new TextGizmo(
+        RenderTextWithBackground(new TextGizmo(
             new Vector2(StatsPosition.X, y), "Hide [F1]", Color.Gray));
         y += LineSpacing + 12;
 
@@ -260,13 +259,13 @@ public class GizmosRenderer : core.System
                 continue;
 
             var titleColor = GetCategoryColor(category);
-            RenderTextWithBackground(batch, new TextGizmo(
+            RenderTextWithBackground(new TextGizmo(
                 new Vector2(StatsPosition.X, y), category, titleColor));
             y += LineSpacing;
 
             foreach (var line in lines)
             {
-                RenderTextWithBackground(batch, new TextGizmo(
+                RenderTextWithBackground(new TextGizmo(
                     new Vector2(StatsPosition.X, y), line, Color.White));
                 y += LineSpacing;
             }

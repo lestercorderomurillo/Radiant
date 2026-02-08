@@ -14,6 +14,8 @@ public class GhostAI : core.System
     public float GhostSpeed { get; set; } = 200f;
     public float GhostZ { get; set; } = 65530f;
     public Texture2D EyesTexture { get; set; }
+    public Texture2D BodyTexture { get; set; }
+    public float BodyRadius { get; set; } = 30f;
     public float ReleaseInterval { get; set; } = 0.5f;
 
     private int[] GhostIds;
@@ -26,6 +28,9 @@ public class GhostAI : core.System
     private (int x, int y)[] ChaseTargets;
     private bool[] ExitedHouse;
     private float[] ReleaseTimes;
+    private Color[] GhostColors;
+    private Vector2[] EyePositions;      // 2-frame delayed positions (matches Geometry's rendered body)
+    private Vector2[] PrevPositions;     // 1-frame delayed (intermediate)
     private float ElapsedTime;
     private Random Rng = new();
 
@@ -86,6 +91,9 @@ public class GhostAI : core.System
         ChaseTargets = new (int, int)[count];
         ExitedHouse = new bool[count];
         ReleaseTimes = new float[count];
+        GhostColors = new Color[count];
+        EyePositions = new Vector2[count];
+        PrevPositions = new Vector2[count];
 
         for (int i = 0; i < count; i++)
         {
@@ -97,11 +105,17 @@ public class GhostAI : core.System
             ExitedHouse[i] = false;
             ReleaseTimes[i] = i * ReleaseInterval;
 
-            // Personality color
-            var color = PersonalityColor(GhostTypes[i]);
+            // GI emission via Geometry texture draw, eyes overlay via LateRender
+            GhostColors[i] = PersonalityColor(GhostTypes[i]);
             ref var mat = ref Scene.ECS.GetComponent<Material>(GhostIds[i]);
-            mat.Albedo = color;
-            mat.Emissive = color;
+            mat.Albedo = Color.Transparent;
+            mat.Emissive = GhostColors[i];
+
+            // Initialize position history for eye sync
+            ref var t = ref Scene.ECS.GetComponent<Transform>(GhostIds[i]);
+            var pos = new Vector2(t.Position.X, t.Position.Y);
+            EyePositions[i] = pos;
+            PrevPositions[i] = pos;
         }
 
         ElapsedTime = 0f;
@@ -124,6 +138,15 @@ public class GhostAI : core.System
     public override void Update()
     {
         if (GhostIds == null) return;
+
+        // Shift position history: Geometry renders ReadBuffer (2 frames behind current)
+        // so eyes must use 2-frame-delayed positions to match the body in EmissiveTexture
+        for (int i = 0; i < GhostIds.Length; i++)
+        {
+            EyePositions[i] = PrevPositions[i];
+            ref var t = ref Scene.ECS.GetComponent<Transform>(GhostIds[i]);
+            PrevPositions[i] = new Vector2(t.Position.X, t.Position.Y);
+        }
 
         float dt = (float)GameTime.ElapsedGameTime.TotalSeconds;
         ElapsedTime += dt;
@@ -171,12 +194,12 @@ public class GhostAI : core.System
 
     public override void LateRender()
     {
-        if (GhostIds == null || EyesTexture == null || Geometry.IsDebugging) return;
+        if (GhostIds == null || Geometry.IsDebugging) return;
 
         float sx = Renderer.ScreenWidth / Renderer.VirtualSize.X;
         float sy = Renderer.ScreenHeight / Renderer.VirtualSize.Y;
-        float radius = 20f;
-        float diameter = radius * 2f;
+        float eyeR = 20f;
+        float eyeD = eyeR * 2f;
 
         Renderer.Reset()
             .Configure(BlendState.AlphaBlend)
@@ -184,17 +207,19 @@ public class GhostAI : core.System
 
         for (int i = 0; i < GhostIds.Length; i++)
         {
-            ref var transform = ref Scene.ECS.GetComponent<Transform>(GhostIds[i]);
-            float cx = transform.Position.X;
-            float cy = transform.Position.Y;
+            float cx = EyePositions[i].X;
+            float cy = EyePositions[i].Y;
 
-            Renderer.DrawTexture(EyesTexture,
-                new Rectangle(
-                    (int)((cx - radius) * sx),
-                    (int)((cy - radius) * sy),
-                    (int)(diameter * sx),
-                    (int)(diameter * sy)),
-                Color.White);
+            if (EyesTexture != null)
+            {
+                Renderer.DrawTexture(EyesTexture,
+                    new Rectangle(
+                        (int)((cx - eyeR) * sx),
+                        (int)((cy - eyeR) * sy),
+                        (int)(eyeD * sx),
+                        (int)(eyeD * sy)),
+                    Color.White);
+            }
         }
 
         Renderer.Commit();

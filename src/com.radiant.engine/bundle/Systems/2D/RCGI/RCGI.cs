@@ -173,24 +173,17 @@ public class RCGI : core.System
 
     private void InitializeRenderTargets()
     {
-        var device = Renderer.Device;
         var format = SurfaceFormat.HalfVector4;
 
         CascadeLayers = new RenderTarget2D[MaxCascades];
         for (int i = 0; i < MaxCascades; i++)
         {
-            CascadeLayers[i] = new RenderTarget2D(
-                device,
-                (int)CascadeSize.X, (int)CascadeSize.Y,
-                false, format, DepthFormat.None
-            );
+            CascadeLayers[i] = Renderer.CreateRenderTarget(
+                (int)CascadeSize.X, (int)CascadeSize.Y, format);
         }
 
-        FinalTexture = new RenderTarget2D(
-            device,
-            (int)ScreenSize.X, (int)ScreenSize.Y,
-            false, format, DepthFormat.None
-        );
+        FinalTexture = Renderer.CreateRenderTarget(
+            (int)ScreenSize.X, (int)ScreenSize.Y, format);
     }
 
     public override void Update()
@@ -258,18 +251,13 @@ public class RCGI : core.System
 
     private void RenderFinal()
     {
-        Renderer.Device.SetRenderTarget(FinalTexture);
-        Renderer.Device.Clear(Color.Black);
-        Renderer.SpriteBatch.Begin(SpriteSortMode.Immediate, BlendState.Opaque, SamplerState.LinearClamp);
-        Renderer.SpriteBatch.Draw(CascadeLayers[0], Renderer.Device.Viewport.Bounds, Color.White);
-        Renderer.SpriteBatch.End();
+        Renderer.SetTarget(FinalTexture).Clear(Color.Black);
+        Renderer.Blit(CascadeLayers[0], BlendState.Opaque, SamplerState.LinearClamp);
     }
 
     public override void Render()
     {
-        Renderer.SpriteBatch.Begin(SpriteSortMode.Immediate, BlendState.AlphaBlend, SamplerState.LinearClamp);
-        Renderer.SpriteBatch.Draw(FinalTexture, Renderer.Device.Viewport.Bounds, Color.White);
-        Renderer.SpriteBatch.End();
+        Renderer.Blit(FinalTexture, BlendState.AlphaBlend, SamplerState.LinearClamp);
     }
 
     public RenderTarget2D GetOutput() => FinalTexture;

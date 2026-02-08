@@ -47,37 +47,17 @@ public class UDR3 : core.System
 
     private void CreateRenderTargets()
     {
-        SpatialTexture = new RenderTarget2D(
-            Renderer.Device,
-            (int)OutputSize.X,
-            (int)OutputSize.Y,
-            false,
-            SurfaceFormat.HalfVector4,
-            DepthFormat.None);
+        SpatialTexture = Renderer.CreateRenderTarget(
+            (int)OutputSize.X, (int)OutputSize.Y, SurfaceFormat.HalfVector4);
 
-        EdgeTexture = new RenderTarget2D(
-            Renderer.Device,
-            (int)OutputSize.X,
-            (int)OutputSize.Y,
-            false,
-            SurfaceFormat.HalfVector4,
-            DepthFormat.None);
+        EdgeTexture = Renderer.CreateRenderTarget(
+            (int)OutputSize.X, (int)OutputSize.Y, SurfaceFormat.HalfVector4);
 
-        TemporalTexture = new RenderTarget2D(
-            Renderer.Device,
-            (int)OutputSize.X,
-            (int)OutputSize.Y,
-            false,
-            SurfaceFormat.HalfVector4,
-            DepthFormat.None);
+        TemporalTexture = Renderer.CreateRenderTarget(
+            (int)OutputSize.X, (int)OutputSize.Y, SurfaceFormat.HalfVector4);
 
-        LastFrameTexture = new RenderTarget2D(
-            Renderer.Device,
-            (int)OutputSize.X,
-            (int)OutputSize.Y,
-            false,
-            SurfaceFormat.HalfVector4,
-            DepthFormat.None);
+        LastFrameTexture = Renderer.CreateRenderTarget(
+            (int)OutputSize.X, (int)OutputSize.Y, SurfaceFormat.HalfVector4);
     }
 
     private void ApplyRenderScale()
@@ -215,9 +195,7 @@ public class UDR3 : core.System
         if (InputSource == null || UDRQuality.ScaleFactor == 100)
             return;
 
-        Renderer.SpriteBatch.Begin(SpriteSortMode.Immediate, BlendState.AlphaBlend, SamplerState.LinearClamp);
-        Renderer.SpriteBatch.Draw(EdgeTexture, Renderer.Device.Viewport.Bounds, Color.White);
-        Renderer.SpriteBatch.End();
+        Renderer.Blit(EdgeTexture, BlendState.AlphaBlend, SamplerState.LinearClamp);
     }
 
     public RenderTarget2D GetOutput() => EdgeTexture;

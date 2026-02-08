@@ -54,7 +54,7 @@ public class Scene : IGameObject
 
     internal void InternalRender()
     {
-        if (!Renderer.Window.IsActive)
+        if (!Renderer.IsActive)
             return;
 
         Render();
@@ -63,7 +63,7 @@ public class Scene : IGameObject
 
     internal void InternalLateRender()
     {
-        if (!Renderer.Window.IsActive)
+        if (!Renderer.IsActive)
             return;
 
         LateRender();

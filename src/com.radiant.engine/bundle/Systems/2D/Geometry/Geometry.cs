@@ -198,38 +198,26 @@ public class Geometry : core.System
         int rtWidth = Renderer.ScreenWidth;
         int rtHeight = Renderer.ScreenHeight;
 
-        EmissiveTexture = new RenderTarget2D(
-            Renderer.Device, rtWidth, rtHeight,
-            false, SurfaceFormat.Color, DepthFormat.None);
+        EmissiveTexture = Renderer.CreateRenderTarget(rtWidth, rtHeight);
 
-        AbsorptionTexture = new RenderTarget2D(
-            Renderer.Device, rtWidth, rtHeight,
-            false, SurfaceFormat.Color, DepthFormat.None,
-            0, RenderTargetUsage.PreserveContents);
+        AbsorptionTexture = Renderer.CreateRenderTarget(rtWidth, rtHeight,
+            usage: RenderTargetUsage.PreserveContents);
 
-        SDFTexture = new RenderTarget2D(
-            Renderer.Device, rtWidth, rtHeight,
-            false, SurfaceFormat.HalfVector2, DepthFormat.None);
+        SDFTexture = Renderer.CreateRenderTarget(rtWidth, rtHeight, SurfaceFormat.HalfVector2);
 
-        MotionVectorTexture = new RenderTarget2D(
-            Renderer.Device, rtWidth, rtHeight,
-            false, SurfaceFormat.HalfVector2, DepthFormat.None);
+        MotionVectorTexture = Renderer.CreateRenderTarget(rtWidth, rtHeight, SurfaceFormat.HalfVector2);
 
-        JFATexture1 = new RenderTarget2D(
-            Renderer.Device, (int)SDFBounds.X, (int)SDFBounds.Y,
-            false, SurfaceFormat.Vector4, DepthFormat.None);
+        JFATexture1 = Renderer.CreateRenderTarget(
+            (int)SDFBounds.X, (int)SDFBounds.Y, SurfaceFormat.Vector4);
 
-        JFATexture2 = new RenderTarget2D(
-            Renderer.Device, (int)SDFBounds.X, (int)SDFBounds.Y,
-            false, SurfaceFormat.Vector4, DepthFormat.None);
+        JFATexture2 = Renderer.CreateRenderTarget(
+            (int)SDFBounds.X, (int)SDFBounds.Y, SurfaceFormat.Vector4);
 
-        JFATextureInterior1 = new RenderTarget2D(
-            Renderer.Device, (int)SDFBounds.X, (int)SDFBounds.Y,
-            false, SurfaceFormat.Vector4, DepthFormat.None);
+        JFATextureInterior1 = Renderer.CreateRenderTarget(
+            (int)SDFBounds.X, (int)SDFBounds.Y, SurfaceFormat.Vector4);
 
-        JFATextureInterior2 = new RenderTarget2D(
-            Renderer.Device, (int)SDFBounds.X, (int)SDFBounds.Y,
-            false, SurfaceFormat.Vector4, DepthFormat.None);
+        JFATextureInterior2 = Renderer.CreateRenderTarget(
+            (int)SDFBounds.X, (int)SDFBounds.Y, SurfaceFormat.Vector4);
     }
 
     public override void Update()

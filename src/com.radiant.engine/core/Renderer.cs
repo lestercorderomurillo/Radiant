@@ -5,6 +5,7 @@ using com.radiant.engine.runtime;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
+#pragma warning disable CS0618 // Renderer uses its own deprecated members internally
 namespace com.radiant.engine.core;
 
 /// <summary>
@@ -61,9 +62,11 @@ public class Renderer : IDisposable
     public Window Window { get; }
 
     /// <summary>The underlying MonoGame graphics device.</summary>
+    [Obsolete("Use Renderer API (CreateRenderTarget, CreateTexture, SetTarget, Clear, ViewportBounds, etc.) instead of accessing Device directly.")]
     public GraphicsDevice Device { get; }
 
     /// <summary>Shared SpriteBatch for texture drawing operations.</summary>
+    [Obsolete("Use Renderer API (Blit, BeginDraw/EndDraw, DrawSprite, DrawString, etc.) instead of accessing SpriteBatch directly.")]
     public SpriteBatch SpriteBatch { get; }
 
     /// <summary>True if currently between Begin/Draw and Commit calls.</summary>
@@ -163,6 +166,8 @@ public class Renderer : IDisposable
 
     private GameWindow NativeWindow => Window.Window;
     private Dictionary<string, Effect> ShaderCache = new();
+    private Dictionary<string, Texture2D> TextureCache = new();
+    private Dictionary<string, SpriteFont> FontCache = new();
     private Dictionary<(Color, int, int), Texture2D> SolidTextureCache = new();
     private Dictionary<int, Texture2D> CircleTextureCache = new();
     private VertexBuffer QuadVertexBuffer;
@@ -1330,6 +1335,21 @@ public class Renderer : IDisposable
     #region Texture Utilities
 
     /// <summary>
+    /// Loads and caches a content texture by name. Returns the same instance for repeated calls.
+    /// </summary>
+    /// <param name="name">Asset name relative to Content root (e.g., "Ghost", "sprites/Player").</param>
+    /// <returns>The cached Texture2D.</returns>
+    public Texture2D GetTexture(string name)
+    {
+        if (!TextureCache.TryGetValue(name, out var texture))
+        {
+            texture = Window.Content.Load<Texture2D>(name);
+            TextureCache[name] = texture;
+        }
+        return texture;
+    }
+
+    /// <summary>
     /// Gets or creates a cached solid color texture.
     /// </summary>
     /// <param name="color">Fill color for the texture.</param>
@@ -1678,6 +1698,129 @@ public class Renderer : IDisposable
 
     #endregion
 
+    #region High-Level API (prefer these over raw Device/SpriteBatch/Window access)
+
+    /// <summary>Whether the game window is active and focused.</summary>
+    public bool IsActive => Window.IsActive;
+
+    /// <summary>The game loop for timing info (FPS, etc.).</summary>
+    public runtime.GameLoop GameLoop => Window.GameLoop;
+
+    /// <summary>Current viewport bounds rectangle.</summary>
+    public Rectangle ViewportBounds => Device.Viewport.Bounds;
+
+    /// <summary>Whether the window has a pending resize that needs handling.</summary>
+    public bool HasPendingResize => Window.ResizePending;
+
+    /// <summary>Handles a pending window resize: clears the flag and updates screen info.</summary>
+    public void HandleResize()
+    {
+        Window.ClearResizePending();
+        UpdateScreenInfo();
+    }
+
+    /// <summary>Clears the backbuffer with the specified color.</summary>
+    public void ClearBackBuffer(Color color)
+    {
+        Device.Clear(color);
+    }
+
+    /// <summary>
+    /// Loads and caches a SpriteFont by name. Returns the same instance for repeated calls.
+    /// </summary>
+    /// <param name="name">Asset name relative to Content root (e.g., "fonts/BaseFont").</param>
+    public SpriteFont GetFont(string name)
+    {
+        if (!FontCache.TryGetValue(name, out var font))
+        {
+            font = Window.Content.Load<SpriteFont>(name);
+            FontCache[name] = font;
+        }
+        return font;
+    }
+
+    /// <summary>
+    /// Creates a new RenderTarget2D. Systems should use this instead of new RenderTarget2D(Device, ...).
+    /// </summary>
+    public RenderTarget2D CreateRenderTarget(int width, int height,
+        SurfaceFormat format = SurfaceFormat.Color, DepthFormat depth = DepthFormat.None,
+        RenderTargetUsage usage = RenderTargetUsage.DiscardContents)
+    {
+        return new RenderTarget2D(Device, width, height, false, format, depth, 0, usage);
+    }
+
+    /// <summary>
+    /// Creates a new Texture2D. Systems should use this instead of new Texture2D(Device, ...).
+    /// </summary>
+    public Texture2D CreateTexture(int width, int height, SurfaceFormat format = SurfaceFormat.Color)
+    {
+        return new Texture2D(Device, width, height, false, format);
+    }
+
+    /// <summary>
+    /// Blits a texture fullscreen to the current render target using SpriteBatch.
+    /// Covers the common Begin/Draw(viewport)/End pattern.
+    /// </summary>
+    public void Blit(Texture2D source, BlendState blend = null, SamplerState sampler = null)
+    {
+        CommitTextures();
+        SpriteBatch.Begin(SpriteSortMode.Immediate, blend ?? BlendState.Opaque, sampler ?? SamplerState.PointClamp);
+        SpriteBatch.Draw(source, Device.Viewport.Bounds, Color.White);
+        SpriteBatch.End();
+    }
+
+    /// <summary>
+    /// Copies a texture to a render target at origin (native size, no stretching).
+    /// </summary>
+    public void Blit(Texture2D source, RenderTarget2D target, Color? clearColor = null,
+        BlendState blend = null, SamplerState sampler = null)
+    {
+        CommitTextures();
+        Device.SetRenderTarget(target);
+        if (clearColor.HasValue)
+            Device.Clear(clearColor.Value);
+        SpriteBatch.Begin(SpriteSortMode.Immediate, blend ?? BlendState.Opaque, sampler ?? SamplerState.PointClamp);
+        SpriteBatch.Draw(source, Vector2.Zero, Color.White);
+        SpriteBatch.End();
+    }
+
+    /// <summary>
+    /// Begins a SpriteBatch drawing session. Use with DrawSprite/DrawString/EndDraw.
+    /// </summary>
+    public void BeginDraw(SpriteSortMode sort = SpriteSortMode.Deferred,
+        BlendState blend = null, SamplerState sampler = null, Matrix? transform = null)
+    {
+        CommitTextures();
+        SpriteBatch.Begin(sort, blend ?? BlendState.AlphaBlend, sampler, null, null, null, transform);
+    }
+
+    /// <summary>Draws a texture to a destination rectangle during a BeginDraw/EndDraw session.</summary>
+    public void DrawSprite(Texture2D texture, Rectangle destination, Color color)
+    {
+        SpriteBatch.Draw(texture, destination, color);
+    }
+
+    /// <summary>Draws a texture region to a destination rectangle during a BeginDraw/EndDraw session.</summary>
+    public void DrawSprite(Texture2D texture, Rectangle destination, Rectangle? source,
+        Color color, float rotation = 0f, Vector2 origin = default, SpriteEffects effects = SpriteEffects.None)
+    {
+        SpriteBatch.Draw(texture, destination, source, color, rotation, origin, effects, 0);
+    }
+
+    /// <summary>Draws text during a BeginDraw/EndDraw session.</summary>
+    public void DrawString(SpriteFont font, string text, Vector2 position, Color color)
+    {
+        SpriteBatch.DrawString(font, text, position, color);
+    }
+
+    /// <summary>Ends a SpriteBatch drawing session started by BeginDraw.</summary>
+    public void EndDraw()
+    {
+        SpriteBatch.End();
+    }
+
+    #endregion
+
     #region IDisposable
 
     /// <summary>Disposes all cached resources (shaders, textures, buffers).</summary>
@@ -1690,6 +1833,12 @@ public class Renderer : IDisposable
         ShapeQuadBuffer?.Dispose();
         ShapeIndexBuffer?.Dispose();
         ShapeInstanceBuffer?.Dispose();
+
+        foreach (var texture in TextureCache.Values)
+            texture?.Dispose();
+        TextureCache.Clear();
+
+        FontCache.Clear();
 
         foreach (var texture in SolidTextureCache.Values)
             texture?.Dispose();

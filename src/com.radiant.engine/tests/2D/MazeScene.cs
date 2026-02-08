@@ -111,11 +111,12 @@ public class MazeScene : Scene
             colors[i] = GhostAI.PersonalityColor((GhostType)(i % 4));
         }
 
-        var ghostTexture = Renderer.Window.Content.Load<Texture2D>("Ghost");
+        var ghostTexture = Renderer.GetTexture("Ghost");
         var ghostIds = Maze.SpawnAtCells(startCells, colors, 30f, 65530f, ghostTexture);
 
         var ghosts = ECS.GetSystem<GhostAI>();
-        ghosts.EyesTexture = Renderer.Window.Content.Load<Texture2D>("Eyes");
+        ghosts.BodyTexture = ghostTexture;
+        ghosts.EyesTexture = Renderer.GetTexture("Eyes");
         ghosts.Track(ghostIds, startCells);
 
         UpdateUDRInput();

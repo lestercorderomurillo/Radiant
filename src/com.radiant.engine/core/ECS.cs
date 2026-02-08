@@ -561,10 +561,9 @@ public class ECS : IGameObject
 
     public void Update()
     {
-        if (Renderer.Window.ResizePending)
+        if (Renderer.HasPendingResize)
         {
-            Renderer.Window.ClearResizePending();
-            Renderer.UpdateScreenInfo();
+            Renderer.HandleResize();
             for (int i = 0; i < Systems.Count; i++)
                 if (Systems[i].Enabled)
                     Systems[i].OnResize();

@@ -125,21 +125,21 @@ public class HRCGI : core.System
 
         for (int cascade = 0; cascade < CascadeCount; cascade++)
         {
-            VraysRadiance[cascade] = new RenderTarget2D(Renderer.Device, (int)CascadeSizes[cascade].X, (int)CascadeSizes[cascade].Y, false, cascadeFormat, DepthFormat.None);
-            VraysTransmittance[cascade] = new RenderTarget2D(Renderer.Device, (int)CascadeSizes[cascade].X, (int)CascadeSizes[cascade].Y, false, cascadeFormat, DepthFormat.None);
-            MergeRadiance[cascade] = new RenderTarget2D(Renderer.Device, (int)MergeSizes[cascade].X, (int)MergeSizes[cascade].Y, false, cascadeFormat, DepthFormat.None);
-            MergeTransmittance[cascade] = new RenderTarget2D(Renderer.Device, (int)MergeSizes[cascade].X, (int)MergeSizes[cascade].Y, false, cascadeFormat, DepthFormat.None);
+            VraysRadiance[cascade] = Renderer.CreateRenderTarget((int)CascadeSizes[cascade].X, (int)CascadeSizes[cascade].Y, cascadeFormat);
+            VraysTransmittance[cascade] = Renderer.CreateRenderTarget((int)CascadeSizes[cascade].X, (int)CascadeSizes[cascade].Y, cascadeFormat);
+            MergeRadiance[cascade] = Renderer.CreateRenderTarget((int)MergeSizes[cascade].X, (int)MergeSizes[cascade].Y, cascadeFormat);
+            MergeTransmittance[cascade] = Renderer.CreateRenderTarget((int)MergeSizes[cascade].X, (int)MergeSizes[cascade].Y, cascadeFormat);
         }
 
         FrustumRadiance = new RenderTarget2D[FrustumCount];
         FrustumTransmittance = new RenderTarget2D[FrustumCount];
         for (int frustum = 0; frustum < FrustumCount; frustum++)
         {
-            FrustumRadiance[frustum] = new RenderTarget2D(Renderer.Device, (int)WorldSize.X, (int)(WorldSize.Y / ProbeScale), false, cascadeFormat, DepthFormat.None);
-            FrustumTransmittance[frustum] = new RenderTarget2D(Renderer.Device, (int)WorldSize.X, (int)(WorldSize.Y / ProbeScale), false, cascadeFormat, DepthFormat.None);
+            FrustumRadiance[frustum] = Renderer.CreateRenderTarget((int)WorldSize.X, (int)(WorldSize.Y / ProbeScale), cascadeFormat);
+            FrustumTransmittance[frustum] = Renderer.CreateRenderTarget((int)WorldSize.X, (int)(WorldSize.Y / ProbeScale), cascadeFormat);
         }
 
-        FinalTexture = new RenderTarget2D(Renderer.Device, (int)WorldSize.X, (int)WorldSize.Y, false, finalFormat, DepthFormat.None);
+        FinalTexture = Renderer.CreateRenderTarget((int)WorldSize.X, (int)WorldSize.Y, finalFormat);
     }
 
     public override void Update()
@@ -175,10 +175,9 @@ public class HRCGI : core.System
     private void RenderFrustumSeed(int frustum, Texture2D emissive, Texture2D absorption)
     {
         // MRT: output to both radiance and transmittance targets
-        Renderer.Device.SetRenderTargets(VraysRadiance[0], VraysTransmittance[0]);
-        Renderer.Device.Clear(Color.Transparent);
-
         Renderer
+            .SetTargets(VraysRadiance[0], VraysTransmittance[0])
+            .Clear(Color.Transparent)
             .Reset()
             .SetShader("HRC/HRC_FrustumSeed")
             .Configure(SamplerState.PointClamp)
@@ -196,10 +195,9 @@ public class HRCGI : core.System
     private void RenderExtensions(int cascade)
     {
         // MRT: output to both radiance and transmittance targets
-        Renderer.Device.SetRenderTargets(VraysRadiance[cascade], VraysTransmittance[cascade]);
-        Renderer.Device.Clear(Color.Transparent);
-
         Renderer
+            .SetTargets(VraysRadiance[cascade], VraysTransmittance[cascade])
+            .Clear(Color.Transparent)
             .Reset()
             .SetShader("HRC/HRC_Extensions")
             .Configure(SamplerState.LinearClamp)
@@ -219,10 +217,9 @@ public class HRCGI : core.System
         bool hasNext = cascade + 1 < CascadeCount;
 
         // MRT: output to both radiance and transmittance targets
-        Renderer.Device.SetRenderTargets(MergeRadiance[cascade], MergeTransmittance[cascade]);
-        Renderer.Device.Clear(Color.Transparent);
-
         Renderer
+            .SetTargets(MergeRadiance[cascade], MergeTransmittance[cascade])
+            .Clear(Color.Transparent)
             .Reset()
             .SetShader("HRC/HRC_MergingCones")
             .Configure(SamplerState.LinearClamp)
@@ -241,17 +238,8 @@ public class HRCGI : core.System
 
     private void CopyToFrustumOutput(int frustum)
     {
-        // Copy radiance
-        Renderer.Device.SetRenderTarget(FrustumRadiance[frustum]);
-        Renderer.SpriteBatch.Begin(SpriteSortMode.Immediate, BlendState.Opaque, SamplerState.PointClamp);
-        Renderer.SpriteBatch.Draw(MergeRadiance[0], Vector2.Zero, Color.White);
-        Renderer.SpriteBatch.End();
-
-        // Copy transmittance
-        Renderer.Device.SetRenderTarget(FrustumTransmittance[frustum]);
-        Renderer.SpriteBatch.Begin(SpriteSortMode.Immediate, BlendState.Opaque, SamplerState.PointClamp);
-        Renderer.SpriteBatch.Draw(MergeTransmittance[0], Vector2.Zero, Color.White);
-        Renderer.SpriteBatch.End();
+        Renderer.Blit(MergeRadiance[0], FrustumRadiance[frustum]);
+        Renderer.Blit(MergeTransmittance[0], FrustumTransmittance[frustum]);
     }
 
     private void Compose()
@@ -288,24 +276,25 @@ public class HRCGI : core.System
     public override void Render()
     {
         Texture2D texture = GetDebugTexture();
-        Renderer.SpriteBatch.Begin(SpriteSortMode.Immediate, BlendState.AlphaBlend, SamplerState.PointClamp);
 
         if (DebugIndex == 0)
         {
-            Renderer.SpriteBatch.Draw(texture, Renderer.Device.Viewport.Bounds, Color.White);
+            Renderer.Blit(texture, BlendState.AlphaBlend, SamplerState.PointClamp);
         }
         else
         {
+            var vb = Renderer.ViewportBounds;
             float scale = MathF.Min(
-                (float)Renderer.Device.Viewport.Width / texture.Width,
-                (float)Renderer.Device.Viewport.Height / texture.Height
+                (float)vb.Width / texture.Width,
+                (float)vb.Height / texture.Height
             );
             int drawWidth = (int)(texture.Width * scale);
             int drawHeight = (int)(texture.Height * scale);
-            Renderer.SpriteBatch.Draw(texture, new Rectangle(0, 0, drawWidth, drawHeight), Color.White);
-        }
 
-        Renderer.SpriteBatch.End();
+            Renderer.BeginDraw(SpriteSortMode.Immediate, BlendState.AlphaBlend, SamplerState.PointClamp);
+            Renderer.DrawSprite(texture, new Rectangle(0, 0, drawWidth, drawHeight), Color.White);
+            Renderer.EndDraw();
+        }
     }
 
     private Texture2D GetDebugTexture()

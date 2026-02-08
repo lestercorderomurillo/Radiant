@@ -69,9 +69,7 @@ public class Bilinear : core.System
         if (input == null)
             return;
 
-        Renderer.SpriteBatch.Begin(SpriteSortMode.Immediate, BlendState.AlphaBlend, SamplerState.LinearClamp);
-        Renderer.SpriteBatch.Draw(input, Renderer.Device.Viewport.Bounds, Color.White);
-        Renderer.SpriteBatch.End();
+        Renderer.Blit(input, BlendState.AlphaBlend, SamplerState.LinearClamp);
     }
 
     public override void Dispose()

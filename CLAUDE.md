@@ -174,10 +174,47 @@ Pooled binding arrays (16 pre-alloc per MRT size) to avoid GC.
 - `ScreenToWorld(screenPos)` / `WorldToScreen(worldPos)`
 - Orthographic projection: `CreateOrthographicOffCenter(0, VirtualW, VirtualH, 0, 0, 1)`
 
-### Texture Helpers
+### Asset Loading (cached)
 ```csharp
+Renderer.GetTexture("Ghost");              // cached content texture (share across systems)
+Renderer.GetFont("fonts/BaseFont");        // cached SpriteFont
 Renderer.GetSolidTexture(Color.White);      // cached 1x1
 Renderer.GetCircleTexture(diameter);        // cached AA circle
+```
+
+### Resource Creation
+```csharp
+Renderer.CreateRenderTarget(w, h, format, depth, usage);  // factory for RenderTarget2D
+Renderer.CreateTexture(w, h, format);                      // factory for Texture2D
+```
+
+### Blitting (SpriteBatch convenience)
+```csharp
+Renderer.Blit(texture, blend, sampler);                    // stretch to current target's viewport
+Renderer.Blit(source, target, clearColor, blend, sampler); // copy at native size to RT (no stretch)
+```
+
+### SpriteBatch Drawing (for complex cases like Gizmos, Tileset)
+```csharp
+Renderer.BeginDraw(sort, blend, sampler, transform);
+Renderer.DrawSprite(texture, destRect, color);
+Renderer.DrawSprite(texture, destRect, sourceRect, color, rotation, origin);
+Renderer.DrawString(font, text, position, color);
+Renderer.EndDraw();
+```
+
+### Window/Device Wrappers
+```csharp
+Renderer.IsActive              // window focused?
+Renderer.GameLoop              // timing info (FPS, etc.)
+Renderer.ViewportBounds        // current viewport Rectangle
+Renderer.HasPendingResize      // resize flag
+Renderer.HandleResize()        // clear flag + update screen info
+Renderer.ClearBackBuffer(color)
+```
+
+### Low-Level Texture Slots
+```csharp
 Renderer.SetTexture(slot, texture);         // direct register bind
 Renderer.UploadToTexture(target, data[], count);
 ```
@@ -186,6 +223,9 @@ Renderer.UploadToTexture(target, data[], count);
 ```csharp
 Renderer.PingPong(rtA, rtB, passes, beforePass, afterPass, clearColor);
 ```
+
+### Deprecated (do NOT use)
+`Renderer.Device`, `Renderer.SpriteBatch` are marked `[Obsolete]`. All systems must use the Renderer API above instead. `Renderer.Window` is still accessible for cases not covered by the high-level API.
 
 ## Rendering Pipeline
 
@@ -277,6 +317,8 @@ public class MyScene : Scene {
 - **Object pooling** — RT binding arrays, entity IDs, result arrays, StringBuilders
 - **Zero-allocation** — PagedBitSet (1 bit/entity), span-based spatial queries, cycle sort
 - **GPU instancing** — Single draw call for up to 65k shapes via DynamicVertexBuffer
+- **Centralized asset loading** — All textures via `Renderer.GetTexture()`, fonts via `Renderer.GetFont()`, shaders via `Renderer.SetShader()`/`GetShaderEffect()`. Never access `Window.Content` directly.
+- **Renderer as sole MonoGame API** — `Window`, `Device`, `SpriteBatch` are `[Obsolete]`. Systems use Renderer wrappers: `Blit()`, `BeginDraw()`/`EndDraw()`, `CreateRenderTarget()`, `CreateTexture()`, `IsActive`, `ViewportBounds`, etc.
 
 ## Networking (mplay/)
 TCP client/server with HTTP lobby (NetworkManager). JSON serialization. Not heavily used — infrastructure exists but no active gameplay networking.

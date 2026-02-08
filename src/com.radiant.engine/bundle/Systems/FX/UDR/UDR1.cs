@@ -40,21 +40,11 @@ public class UDR1 : core.System
 
     private void CreateRenderTargets()
     {
-        OutputTexture = new RenderTarget2D(
-            Renderer.Device,
-            (int)OutputSize.X,
-            (int)OutputSize.Y,
-            false,
-            SurfaceFormat.HalfVector4,
-            DepthFormat.None);
+        OutputTexture = Renderer.CreateRenderTarget(
+            (int)OutputSize.X, (int)OutputSize.Y, SurfaceFormat.HalfVector4);
 
-        SmoothTexture = new RenderTarget2D(
-            Renderer.Device,
-            (int)OutputSize.X,
-            (int)OutputSize.Y,
-            false,
-            SurfaceFormat.HalfVector4,
-            DepthFormat.None);
+        SmoothTexture = Renderer.CreateRenderTarget(
+            (int)OutputSize.X, (int)OutputSize.Y, SurfaceFormat.HalfVector4);
     }
 
     private void ApplyRenderScale()
@@ -165,9 +155,7 @@ public class UDR1 : core.System
         if (InputSource == null || UDRQuality.ScaleFactor == 100)
             return;
 
-        Renderer.SpriteBatch.Begin(SpriteSortMode.Immediate, BlendState.AlphaBlend, SamplerState.LinearClamp);
-        Renderer.SpriteBatch.Draw(SmoothTexture, Renderer.Device.Viewport.Bounds, Color.White);
-        Renderer.SpriteBatch.End();
+        Renderer.Blit(SmoothTexture, BlendState.AlphaBlend, SamplerState.LinearClamp);
     }
 
     public RenderTarget2D GetOutput() => SmoothTexture;
