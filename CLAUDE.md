@@ -5,7 +5,6 @@
 
 ## Code Style
 - **PascalCase everything**: fields, locals, parameters, properties, constants — all PascalCase. No `_prefix`, no `camelCase`, no `m_` hungarian.
-- **`private` is implicit**: omit `private` on fields/methods (C# default). Write `public`, `protected`, `internal` explicitly.
 - **Constants**: `private const int MaxZLayers = 65536;` — PascalCase, no screaming `SNAKE_CASE` (exception: GPU shape constants like `SHAPE_RECT` matching shader naming).
 - **`static readonly` over `const`** for arrays/complex values: `private static readonly int[] ProbeScales = [4, 3, 2, 1];`
 - **Collection expressions**: use `[]` syntax — `new[] {}` only when type inference needs help.
