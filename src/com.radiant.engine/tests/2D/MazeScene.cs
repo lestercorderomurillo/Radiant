@@ -42,8 +42,9 @@ public class MazeScene : Scene
     private int UDRMode = 3;  // 0 = Bilinear, 1 = UDR1, 2 = UDR2, 3 = UDR3
 
     // Maze parameters
-    private const float CellSize = 65f;
+    private const float CellSize = 70f;
     private const float WallThickness = 14f;
+    private const float WallMargin = 20f;
     private const int MazeCols = 28;
     private const int MazeRows = 31;
     private float MazeOffsetX, MazeOffsetY;
@@ -268,7 +269,7 @@ public class MazeScene : Scene
             for (int x = 0; x < MazeCols; x++)
                 MazeGrid[x, y] = PacmanLayout[y][x] == '1';
 
-        // Render walls as outline segments at wall-passage boundaries
+        // Render walls as outline segments shifted into wall tiles by WallMargin
         float hw = WallThickness / 2f;
         float ox = MazeOffsetX;
         float oy = MazeOffsetY;
@@ -277,35 +278,85 @@ public class MazeScene : Scene
         for (int gy = 0; gy <= MazeRows; gy++)
             for (int gx = 0; gx <= MazeCols; gx++)
             {
-                int w = (IsWall(gx - 1, gy - 1) ? 1 : 0) + (IsWall(gx, gy - 1) ? 1 : 0)
-                      + (IsWall(gx - 1, gy) ? 1 : 0) + (IsWall(gx, gy) ? 1 : 0);
-                if (w > 0 && w < 4)
-                    CreateWall(
-                        new Vector2(ox + gx * CellSize - hw, oy + gy * CellSize - hw),
-                        new Vector2(WallThickness, WallThickness));
+                bool tl = IsWall(gx - 1, gy - 1), tr = IsWall(gx, gy - 1);
+                bool bl = IsWall(gx - 1, gy), br = IsWall(gx, gy);
+                int w = (tl ? 1 : 0) + (tr ? 1 : 0) + (bl ? 1 : 0) + (br ? 1 : 0);
+                if (w == 0 || w == 4) continue;
+
+                int lw = (tl ? 1 : 0) + (bl ? 1 : 0);
+                int rw = (tr ? 1 : 0) + (br ? 1 : 0);
+                int tw = (tl ? 1 : 0) + (tr ? 1 : 0);
+                int bw = (bl ? 1 : 0) + (br ? 1 : 0);
+
+                float px = ox + gx * CellSize;
+                if (lw > rw) px -= WallMargin;
+                else if (rw > lw) px += WallMargin;
+
+                float py = oy + gy * CellSize;
+                if (tw > bw) py -= WallMargin;
+                else if (bw > tw) py += WallMargin;
+
+                CreateWall(new Vector2(px - hw, py - hw), new Vector2(WallThickness, WallThickness));
             }
 
-        // Horizontal segments (between rows)
+        // Horizontal segments (between rows) — endpoints from corner posts
         for (int gy = 0; gy <= MazeRows; gy++)
             for (int gx = 0; gx < MazeCols; gx++)
-                if (IsWall(gx, gy - 1) != IsWall(gx, gy))
-                    CreateWall(
-                        new Vector2(ox + gx * CellSize, oy + gy * CellSize - hw),
-                        new Vector2(CellSize, WallThickness));
+            {
+                bool above = IsWall(gx, gy - 1);
+                bool below = IsWall(gx, gy);
+                if (above == below) continue;
 
-        // Vertical segments (between columns)
+                float sy = oy + gy * CellSize + (above ? -WallMargin : WallMargin);
+                var lp = PostPosition(gx, gy);
+                var rp = PostPosition(gx + 1, gy);
+                CreateWall(
+                    new Vector2(lp.X - hw, sy - hw),
+                    new Vector2(rp.X - lp.X + WallThickness, WallThickness));
+            }
+
+        // Vertical segments (between columns) — endpoints from corner posts
         for (int gx = 0; gx <= MazeCols; gx++)
             for (int gy = 0; gy < MazeRows; gy++)
-                if (IsWall(gx - 1, gy) != IsWall(gx, gy))
-                    CreateWall(
-                        new Vector2(ox + gx * CellSize - hw, oy + gy * CellSize),
-                        new Vector2(WallThickness, CellSize));
+            {
+                bool left = IsWall(gx - 1, gy);
+                bool right = IsWall(gx, gy);
+                if (left == right) continue;
+
+                float sx = ox + gx * CellSize + (left ? -WallMargin : WallMargin);
+                var tp = PostPosition(gx, gy);
+                var bp = PostPosition(gx, gy + 1);
+                CreateWall(
+                    new Vector2(sx - hw, tp.Y - hw),
+                    new Vector2(WallThickness, bp.Y - tp.Y + WallThickness));
+            }
     }
 
     private bool IsWall(int x, int y)
     {
         if (x < 0 || x >= MazeCols || y < 0 || y >= MazeRows) return true;
         return MazeGrid[x, y];
+    }
+
+    private Vector2 PostPosition(int gx, int gy)
+    {
+        bool tl = IsWall(gx - 1, gy - 1), tr = IsWall(gx, gy - 1);
+        bool bl = IsWall(gx - 1, gy), br = IsWall(gx, gy);
+
+        int lw = (tl ? 1 : 0) + (bl ? 1 : 0);
+        int rw = (tr ? 1 : 0) + (br ? 1 : 0);
+        int tw = (tl ? 1 : 0) + (tr ? 1 : 0);
+        int bw = (bl ? 1 : 0) + (br ? 1 : 0);
+
+        float px = MazeOffsetX + gx * CellSize;
+        if (lw > rw) px -= WallMargin;
+        else if (rw > lw) px += WallMargin;
+
+        float py = MazeOffsetY + gy * CellSize;
+        if (tw > bw) py -= WallMargin;
+        else if (bw > tw) py += WallMargin;
+
+        return new Vector2(px, py);
     }
 
     private void CreateWall(Vector2 position, Vector2 size)
