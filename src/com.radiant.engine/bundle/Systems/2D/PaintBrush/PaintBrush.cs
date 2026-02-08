@@ -2,7 +2,6 @@ using com.radiant.engine.core;
 using com.radiant.engine.runtime;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
-using System;
 
 namespace com.radiant.engine.bundle;
 
@@ -67,7 +66,7 @@ public class PaintBrush : core.System
 
     private void PaintAt(Vector2 position, bool rainbow)
     {
-        var color = rainbow ? HueToRGB(RainbowHue) : Color.Black;
+        var color = rainbow ? LightFactory.HueToRGB(RainbowHue) : Color.Black;
         if (rainbow) RainbowHue = (RainbowHue + HueSpeed) % 1f;
 
         var nearby = Scene.ECS.InRadius(new Vector3(position, 0), PaintRadius);
@@ -83,16 +82,5 @@ public class PaintBrush : core.System
         }
 
         LightFactory.CreateLight(Scene.ECS, position, PaintRadius, color, color);
-    }
-
-    private static Color HueToRGB(float hue)
-    {
-        float r = MathF.Abs(hue * 6f - 3f) - 1f;
-        float g = 2f - MathF.Abs(hue * 6f - 2f);
-        float b = 2f - MathF.Abs(hue * 6f - 4f);
-        return new Color(
-            (byte)(Math.Clamp(r, 0f, 1f) * 255),
-            (byte)(Math.Clamp(g, 0f, 1f) * 255),
-            (byte)(Math.Clamp(b, 0f, 1f) * 255));
     }
 }

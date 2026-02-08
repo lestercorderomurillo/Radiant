@@ -40,6 +40,7 @@ public class Geometry : core.System
 
     private enum DebugMode { None, Emissive, Absorption, SDF, JFADirection, JFARaw, MotionVectors }
     private DebugMode CurrentDebug = DebugMode.None;
+    public bool IsDebugging => CurrentDebug != DebugMode.None;
     private KeyboardState PrevKeyState;
     private GizmosRenderer Gizmos;
 

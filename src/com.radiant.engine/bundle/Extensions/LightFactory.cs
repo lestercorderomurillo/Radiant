@@ -2,6 +2,7 @@ using com.radiant.engine.core;
 using com.radiant.engine.runtime;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using System;
 
 namespace com.radiant.engine.bundle;
 
@@ -27,5 +28,28 @@ public static class LightFactory
         material.Texture = texture;
 
         return id;
+    }
+
+    public static void SpawnRandom(ECS ecs, int count, Vector2 screenSize, float radius = 3f)
+    {
+        var rng = new Random();
+        for (int i = 0; i < count; i++)
+        {
+            float x = (float)rng.NextDouble() * screenSize.X;
+            float y = (float)rng.NextDouble() * screenSize.Y;
+            var color = HueToRGB((float)rng.NextDouble());
+            CreateLight(ecs, new Vector2(x, y), radius, color, color);
+        }
+    }
+
+    public static Color HueToRGB(float hue)
+    {
+        float r = MathF.Abs(hue * 6f - 3f) - 1f;
+        float g = 2f - MathF.Abs(hue * 6f - 2f);
+        float b = 2f - MathF.Abs(hue * 6f - 4f);
+        return new Color(
+            (byte)(Math.Clamp(r, 0f, 1f) * 255),
+            (byte)(Math.Clamp(g, 0f, 1f) * 255),
+            (byte)(Math.Clamp(b, 0f, 1f) * 255));
     }
 }

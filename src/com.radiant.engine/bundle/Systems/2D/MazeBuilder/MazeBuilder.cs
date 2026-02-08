@@ -1,6 +1,7 @@
 using com.radiant.engine.core;
 using com.radiant.engine.runtime;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 
 namespace com.radiant.engine.bundle;
 
@@ -34,6 +35,22 @@ public class MazeBuilder : core.System
     public Vector2 CellCenter(int cx, int cy) => new(
         OffsetX + cx * CellSize + CellSize / 2f,
         OffsetY + cy * CellSize + CellSize / 2f);
+
+    public int[] SpawnAtCells((int x, int y)[] cells, Color[] colors, float radius, float z,
+        Texture2D texture = null)
+    {
+        var ecs = Scene.ECS;
+        var ids = new int[cells.Length];
+
+        for (int i = 0; i < cells.Length; i++)
+        {
+            var center = CellCenter(cells[i].x, cells[i].y);
+            ids[i] = LightFactory.CreateLight(ecs, center, radius, colors[i], colors[i], z, texture);
+            ecs.AddComponent<MotionTrackable>(ids[i]);
+        }
+
+        return ids;
+    }
 
     public void BuildMaze()
     {

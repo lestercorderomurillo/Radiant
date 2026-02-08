@@ -14,6 +14,7 @@ public class GhostAI : core.System
 
     private int[] GhostIds;
     private MazeBuilder Maze;
+    private Geometry Geometry;
     private (int x, int y)[] GhostCells;
     private (int x, int y)[] GhostTargets;
     private (int dx, int dy)[] GhostDirs;
@@ -22,6 +23,7 @@ public class GhostAI : core.System
     public override void Initialize()
     {
         Maze = Scene.ECS.GetSystem<MazeBuilder>();
+        Geometry = Scene.ECS.GetSystem<Geometry>();
     }
 
     public void Track(int[] entityIds, (int x, int y)[] startCells)
@@ -78,7 +80,7 @@ public class GhostAI : core.System
 
     public override void LateRender()
     {
-        if (GhostIds == null || EyesTexture == null) return;
+        if (GhostIds == null || EyesTexture == null || Geometry.IsDebugging) return;
 
         float sx = Renderer.ScreenWidth / Renderer.VirtualSize.X;
         float sy = Renderer.ScreenHeight / Renderer.VirtualSize.Y;
