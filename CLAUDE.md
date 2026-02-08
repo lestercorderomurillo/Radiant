@@ -1,5 +1,22 @@
 # Radiant Engine — Codebase Reference
 
+## Rules
+- **After modifying the codebase** (renaming types, adding/removing files, changing directory structure, updating APIs, reordering systems, adding debug controls, etc.), **always update this CLAUDE.md** to reflect those changes — directory tree, type names, system init order, debug controls table, code examples, and any other references that become stale.
+
+## Code Style
+- **PascalCase everything**: fields, locals, parameters, properties, constants — all PascalCase. No `_prefix`, no `camelCase`, no `m_` hungarian.
+- **`private` is implicit**: omit `private` on fields/methods (C# default). Write `public`, `protected`, `internal` explicitly.
+- **Constants**: `private const int MaxZLayers = 65536;` — PascalCase, no screaming `SNAKE_CASE` (exception: GPU shape constants like `SHAPE_RECT` matching shader naming).
+- **`static readonly` over `const`** for arrays/complex values: `private static readonly int[] ProbeScales = [4, 3, 2, 1];`
+- **Collection expressions**: use `[]` syntax — `new[] {}` only when type inference needs help.
+- **Properties**: `public int Cols { get; private set; }` for read-only-outside. `{ get; set; }` with defaults inline: `public float CellSize { get; set; } = 70f;`
+- **Expression-bodied members**: use `=>` for simple one-liners — `public bool IsDebugging => CurrentDebug != DebugMode.None;`
+- **File-scoped namespaces**: `namespace com.radiant.engine.bundle;` (no braces).
+- **No blank lines** between consecutive field declarations of the same kind. Use a comment line or blank line only to separate logical groups.
+- **Usings order**: `System.*` and `com.radiant.*` first, then `Microsoft.Xna.*` — no `global using`.
+- **`var`**: use freely when type is obvious from RHS. Use explicit type for clarity when needed.
+- **`ref` returns**: `ref var t = ref ECS.GetComponent<Transform>(id);` — always capture by ref when mutating components.
+
 ## Overview
 MonoGame C# 2D game engine with ECS architecture, GPU-instanced shape rendering, and advanced global illumination (HRC). Target: .NET 8.0 Windows DirectX. Uses MonoGame.Framework.WindowsDX 3.8.5-preview.1. Unsafe code enabled. Also depends on System.Data.SQLite.Core 1.0.118.
 
@@ -53,8 +70,10 @@ radiant/
 │   │       │   ├── PerlinNoise2D/PerlinNoise.cs
 │   │       │   ├── MouseLight/MouseLight.cs    # Mouse-following light
 │   │       │   ├── PaintBrush/PaintBrush.cs    # Brush-based entity painting
-│   │       │   ├── MazeBuilder/MazeBuilder.cs  # Pac-Man maze layout
-│   │       │   └── AI/Pacman/GhostAI/GhostAI.cs # Ghost AI (scatter/chase/frightened)
+│   │       │   ├── MazeBuilder/PacmanMazeBuilder.cs    # Pac-Man maze layout
+│   │       │   └── AI/Pacman/
+│   │       │       ├── GhostAI/PacmanGhostAI.cs       # Ghost AI (scatter/chase/frightened)
+│   │       │       └── Player/PacmanPlayer.cs          # Arrow-key player (tile-based movement)
 │   │       ├── 3D/Tileset3D/Tileset3D.cs       # 3D tilemap (placeholder)
 │   │       ├── FX/UDR/                         # Bilinear.cs, UDR1-3.cs, UDRQuality.cs
 │   │       └── UI/
@@ -70,7 +89,7 @@ radiant/
 │   │   ├── NetworkManager.cs
 │   │   └── NetworkMessage.cs
 │   └── tests/2D/                     # Test scenes
-│       ├── MazeScene.cs              # Pac-Man demo (Tab=GI, F11=upscaler, X=lights)
+│       ├── PacmanMazeLevelScene.cs    # Pac-Man demo (Tab=GI, F11=upscaler, X=lights)
 │       ├── SimpleLightScene.cs       # Single warm light
 │       └── TilesetScene.cs           # Tile world demo
 └── Program.cs                        # Entry point
@@ -307,7 +326,8 @@ public class MyScene : Scene {
 | F5 | Cycle HRC quality preset |
 | F11 | Toggle upscaler (Bilinear ↔ UDR variants) |
 | Tab | Toggle GI system (HRCGI ↔ RCGI) |
-| X | Spawn random lights (MazeScene) |
+| Arrow keys | Move player (PacmanMazeLevelScene) |
+| X | Spawn random lights (PacmanMazeLevelScene) |
 | ESC | Exit |
 
 ## Key Patterns
@@ -327,6 +347,6 @@ TCP client/server with HTTP lobby (NetworkManager). JSON serialization. Not heav
 Audio, physics engine, particles, skeletal animation, save/load, logging, asset hot-reload.
 
 ## Typical System Init Order
-1. PerformanceMonitor → 2. Geometry → 3. HRCGI/RCGI → 4. Bilinear/UDR → 5. MazeBuilder → 6. GhostAI → 7. GizmosRenderer
+1. PerformanceMonitor → 2. Geometry → 3. HRCGI/RCGI → 4. Bilinear/UDR → 5. PacmanMazeBuilder → 6. PacmanPlayer → 7. PacmanGhostAI → 8. GizmosRenderer
 
 (Actual order determined by `[RunAfter]`/`[RunBefore]` topological sort)

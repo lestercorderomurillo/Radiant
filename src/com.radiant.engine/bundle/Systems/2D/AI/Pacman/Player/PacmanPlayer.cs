@@ -12,14 +12,14 @@ public class PacmanPlayer : core.System
     public (int x, int y) Cell { get; private set; }
     public Vector2 WorldPosition { get; private set; }
 
-    private PacmanMazeBuilder Maze;
-    private int EntityId;
-    private float Speed = 200f;
-    private float Z;
+    PacmanMazeBuilder Maze;
+    int EntityId;
+    float Speed = 200f;
+    float Z;
 
-    private (int x, int y) TargetCell;
-    private (int dx, int dy) CurrentDir;
-    private (int dx, int dy) BufferedDir;
+    (int x, int y) TargetCell;
+    (int dx, int dy) CurrentDir;
+    (int dx, int dy) BufferedDir;
 
     public void Track(int entityId, (int x, int y) startCell, float z)
     {
@@ -92,7 +92,7 @@ public class PacmanPlayer : core.System
         WorldPosition = pos;
     }
 
-    private void ReadInput(KeyboardState kb)
+    void ReadInput(KeyboardState kb)
     {
         (int dx, int dy) desired = (0, 0);
 
