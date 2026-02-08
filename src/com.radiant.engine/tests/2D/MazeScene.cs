@@ -51,20 +51,31 @@ public class MazeScene : Scene
 
     private static readonly Color[] GhostColors =
     {
-        new(255, 0, 0),
-        new(255, 184, 255),
-        new(0, 255, 255),
-        new(255, 184, 82),
-        new(255, 255, 0),
-        new(0, 255, 0),
-        new(128, 0, 255),
-        new(255, 100, 100),
+        new(255, 59, 48),   // Coral Red
+        new(255, 204, 0),   // Golden Yellow
+        new(124, 77, 255),  // Electric Indigo
+        new(52, 199, 89),   // Emerald
+        new(255, 45, 85),   // Hot Pink
+        new(48, 176, 199),  // Teal Blue
+        new(255, 159, 10),  // Tangerine
+        new(175, 82, 222),  // Amethyst
+        new(102, 212, 50),  // Lime
+        new(255, 69, 58),   // Vivid Red
+        new(0, 199, 190),   // Ocean Teal
+        new(236, 64, 122),  // Fuchsia
+        new(180, 220, 36),  // Chartreuse
+        new(88, 86, 214),   // Royal Purple
+        new(255, 105, 180), // Bubblegum
+        new(255, 94, 58),   // Flame Orange
     };
 
-    private static readonly (int x, int y)[] GhostStartCells =
+    private const int GhostCount = 32;
+
+    private static readonly (int x, int y)[] GhostHouseCells =
     {
-        (13, 11), (13, 14), (11, 14), (16, 14),
-        (1, 1),   (26, 1),  (1, 29),  (26, 29),
+        (11, 13), (12, 13), (13, 13), (14, 13), (15, 13), (16, 13),
+        (11, 14), (12, 14), (13, 14), (14, 14), (15, 14), (16, 14),
+        (11, 15), (12, 15), (13, 15), (14, 15), (15, 15), (16, 15),
     };
 
     public override void SetupECS()
@@ -100,12 +111,21 @@ public class MazeScene : Scene
         maze.Layout = PacmanLayout;
         maze.BuildMaze();
 
+        int count = Math.Clamp(GhostCount, 1, 255);
+        var startCells = new (int x, int y)[count];
+        var colors = new Color[count];
+        for (int i = 0; i < count; i++)
+        {
+            startCells[i] = GhostHouseCells[i % GhostHouseCells.Length];
+            colors[i] = GhostColors[i % GhostColors.Length];
+        }
+
         var ghostTexture = Renderer.Window.Content.Load<Texture2D>("Ghost");
-        var ghostIds = maze.SpawnAtCells(GhostStartCells, GhostColors, 25f, 65530f, ghostTexture);
+        var ghostIds = maze.SpawnAtCells(startCells, colors, 30f, 65530f, ghostTexture);
 
         var ghosts = ECS.GetSystem<GhostAI>();
         ghosts.EyesTexture = Renderer.Window.Content.Load<Texture2D>("Eyes");
-        ghosts.Track(ghostIds, GhostStartCells);
+        ghosts.Track(ghostIds, startCells);
 
         var mouseLight = ECS.GetSystem<MouseLight>();
         var paintBrush = ECS.GetSystem<PaintBrush>();

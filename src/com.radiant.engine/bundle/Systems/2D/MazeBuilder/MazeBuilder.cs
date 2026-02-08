@@ -11,13 +11,32 @@ public class MazeBuilder : core.System
     public float CellSize { get; set; } = 70f;
     public float WallThickness { get; set; } = 14f;
     public float WallMargin { get; set; } = 20f;
+    public Color[] WallColors { get; set; }
+    public string[] Sections { get; set; }
 
     public int Cols { get; private set; }
     public int Rows { get; private set; }
     public float OffsetX { get; private set; }
     public float OffsetY { get; private set; }
 
+    private static readonly Color DefaultWallColor = new(100, 180, 255);
     private bool[,] Grid;
+
+    private int GetSection(int x, int y)
+    {
+        if (Sections == null || y < 0 || y >= Rows || x < 0 || x >= Cols) return 0;
+        char c = Sections[y][x];
+        if (c >= '0' && c <= '9') return c - '0';
+        if (c >= 'a' && c <= 'z') return c - 'a' + 10;
+        return 0;
+    }
+
+    private Color GetWallColor(int x, int y)
+    {
+        if (WallColors == null || WallColors.Length == 0) return DefaultWallColor;
+        int section = GetSection(x, y);
+        return WallColors[section % WallColors.Length];
+    }
 
     public bool IsWall(int x, int y)
     {
