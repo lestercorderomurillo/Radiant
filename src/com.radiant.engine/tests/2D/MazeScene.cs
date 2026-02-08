@@ -96,6 +96,8 @@ public class MazeScene : Scene
         maze.NoUpTiles = new[] { (12, 11), (15, 11) };
         maze.BuildMaze();
 
+        maze.SpawnCoins(6f, new Color(255, 200, 50), 1f);
+
         int count = Math.Clamp(GhostCount, 1, 255);
         var startCells = new (int x, int y)[count];
         var colors = new Color[count];

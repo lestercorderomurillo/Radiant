@@ -94,6 +94,29 @@ public class MazeBuilder : core.System
         OffsetX + cx * CellSize + CellSize / 2f,
         OffsetY + cy * CellSize + CellSize / 2f);
 
+    public int[] SpawnCoins(float radius, Color emissive, float z)
+    {
+        var ecs = Scene.ECS;
+
+        int count = 0;
+        for (int y = 0; y < Rows; y++)
+            for (int x = 0; x < Cols; x++)
+                if (!Grid[x, y] && !InGhostHouse(x, y) && !IsGhostDoor(x, y))
+                    count++;
+
+        var ids = new int[count];
+        int idx = 0;
+        for (int y = 0; y < Rows; y++)
+            for (int x = 0; x < Cols; x++)
+            {
+                if (Grid[x, y] || InGhostHouse(x, y) || IsGhostDoor(x, y)) continue;
+                ids[idx++] = LightFactory.CreateLight(ecs, CellCenter(x, y), radius,
+                    emissive, emissive, z);
+            }
+
+        return ids;
+    }
+
     public int[] SpawnAtCells((int x, int y)[] cells, Color[] colors, float radius, float z,
         Texture2D texture = null)
     {
@@ -126,88 +149,75 @@ public class MazeBuilder : core.System
             for (int x = 0; x < Cols; x++)
                 Grid[x, y] = Layout[y][x] == '1';
 
-        float hw = WallThickness / 2f;
         float ox = OffsetX;
         float oy = OffsetY;
 
-        FillWallCells(ox, oy);
-        CreateEmissiveBorders(hw, ox, oy);
-    }
-
-    private void FillWallCells(float ox, float oy)
-    {
         for (int y = 0; y < Rows; y++)
             for (int x = 0; x < Cols; x++)
-                if (Grid[x, y])
-                    CreateWall(
-                        new Vector2(ox + x * CellSize, oy + y * CellSize),
-                        new Vector2(CellSize, CellSize));
-    }
-
-    private void CreateEmissiveBorders(float hw, float ox, float oy)
-    {
-        // Horizontal edges — own the corners, no overlap
-        for (int gy = 0; gy <= Rows; gy++)
-            for (int gx = 0; gx < Cols; gx++)
             {
-                bool above = IsWall(gx, gy - 1);
-                bool below = IsWall(gx, gy);
-                if (above == below) continue;
-                int wx = gx, wy = above ? gy - 1 : gy;
-                float sy = above
-                    ? oy + gy * CellSize
-                    : oy + gy * CellSize - WallThickness;
-                CreateEmissiveBorder(
-                    new Vector2(ox + gx * CellSize, sy),
-                    new Vector2(CellSize, WallThickness),
-                    GetWallColor(wx, wy));
-            }
+                if (!Grid[x, y]) continue;
 
-        // Vertical edges — trimmed at ends where horizontal borders exist
-        for (int gx = 0; gx <= Cols; gx++)
-            for (int gy = 0; gy < Rows; gy++)
-            {
-                bool left = IsWall(gx - 1, gy);
-                bool right = IsWall(gx, gy);
-                if (left == right) continue;
-                int wx = left ? gx - 1 : gx, wy = gy;
-                int cx = left ? gx : gx - 1;
-                float sx = left
-                    ? ox + gx * CellSize
-                    : ox + gx * CellSize - WallThickness;
+                float fx = ox + x * CellSize;
+                float fy = oy + y * CellSize;
 
-                float top = oy + gy * CellSize;
-                float bot = oy + (gy + 1) * CellSize;
-                if (IsWall(cx, gy - 1)) top += WallThickness;
-                if (IsWall(cx, gy + 1)) bot -= WallThickness;
-                if (bot <= top) continue;
+                bool cL = !IsWall(x - 1, y);
+                bool cR = !IsWall(x + 1, y);
+                bool cU = !IsWall(x, y - 1);
+                bool cD = !IsWall(x, y + 1);
 
-                CreateEmissiveBorder(
-                    new Vector2(sx, top),
-                    new Vector2(WallThickness, bot - top),
-                    GetWallColor(wx, wy));
-            }
+                float l = fx + (cL ? WallMargin : 0);
+                float t = fy + (cU ? WallMargin : 0);
+                float r = fx + CellSize - (cR ? WallMargin : 0);
+                float b = fy + CellSize - (cD ? WallMargin : 0);
 
-        // Outer corner posts — only where exactly 1 cell is wall (no overlap)
-        for (int gy = 0; gy <= Rows; gy++)
-            for (int gx = 0; gx <= Cols; gx++)
-            {
-                bool tl = IsWall(gx - 1, gy - 1), tr = IsWall(gx, gy - 1);
-                bool bl = IsWall(gx - 1, gy), br = IsWall(gx, gy);
-                int w = (tl ? 1 : 0) + (tr ? 1 : 0) + (bl ? 1 : 0) + (br ? 1 : 0);
-                if (w != 1) continue;
+                bool cutTL = !cL && !cU && !IsWall(x - 1, y - 1);
+                bool cutTR = !cR && !cU && !IsWall(x + 1, y - 1);
+                bool cutBL = !cL && !cD && !IsWall(x - 1, y + 1);
+                bool cutBR = !cR && !cD && !IsWall(x + 1, y + 1);
 
-                float px, py;
-                int wx, wy;
-                if (tl)      { px = ox + gx * CellSize;                py = oy + gy * CellSize;                wx = gx - 1; wy = gy - 1; }
-                else if (tr) { px = ox + gx * CellSize - WallThickness; py = oy + gy * CellSize;                wx = gx;     wy = gy - 1; }
-                else if (bl) { px = ox + gx * CellSize;                py = oy + gy * CellSize - WallThickness; wx = gx - 1; wy = gy;     }
-                else         { px = ox + gx * CellSize - WallThickness; py = oy + gy * CellSize - WallThickness; wx = gx;     wy = gy;     }
+                if (!cutTL && !cutTR && !cutBL && !cutBR)
+                {
+                    CreateWall(new Vector2(l, t), new Vector2(r - l, b - t));
+                }
+                else
+                {
+                    float cy1 = fy + WallMargin;
+                    float cy2 = fy + CellSize - WallMargin;
+                    if (t < cy1)
+                    {
+                        float sl = cutTL ? fx + WallMargin : l;
+                        float sr = cutTR ? fx + CellSize - WallMargin : r;
+                        CreateWall(new Vector2(sl, t), new Vector2(sr - sl, cy1 - t));
+                    }
+                    if (cy1 < cy2)
+                        CreateWall(new Vector2(l, cy1), new Vector2(r - l, cy2 - cy1));
+                    if (cy2 < b)
+                    {
+                        float sl = cutBL ? fx + WallMargin : l;
+                        float sr = cutBR ? fx + CellSize - WallMargin : r;
+                        CreateWall(new Vector2(sl, cy2), new Vector2(sr - sl, b - cy2));
+                    }
+                }
 
-                CreateEmissiveBorder(
-                    new Vector2(px, py),
-                    new Vector2(WallThickness, WallThickness),
-                    GetWallColor(wx, wy));
+                if (!cL && !cR && !cU && !cD) continue;
+                Color color = GetWallColor(x, y);
+
+                if (cU)
+                    CreateEmissiveBorder(new Vector2(l, t - WallThickness), new Vector2(r - l, WallThickness), color);
+                if (cD)
+                    CreateEmissiveBorder(new Vector2(l, b), new Vector2(r - l, WallThickness), color);
+                if (cL)
+                {
+                    float vt = cU ? t - WallThickness : t;
+                    float vb = cD ? b + WallThickness : b;
+                    CreateEmissiveBorder(new Vector2(l - WallThickness, vt), new Vector2(WallThickness, vb - vt), color);
+                }
+                if (cR)
+                {
+                    float vt = cU ? t - WallThickness : t;
+                    float vb = cD ? b + WallThickness : b;
+                    CreateEmissiveBorder(new Vector2(r, vt), new Vector2(WallThickness, vb - vt), color);
+                }
             }
     }
 
@@ -247,7 +257,7 @@ public class MazeBuilder : core.System
         transform.Rotation = Vector3.UnitX;
         rect.Size = size;
 
-        material.Albedo = Color.Transparent;
+        material.Albedo = Color.Black;
         material.Emissive = emissive;
     }
 }
