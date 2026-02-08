@@ -6,7 +6,7 @@ using System;
 
 namespace com.radiant.engine.bundle;
 
-public enum GhostType : byte { Blinky, Pinky, Inky, Clyde }
+public enum GhostType : byte { Blinky, Pinky, Inky, Clyde, Dinky, Shadow }
 public enum GhostMode : byte { Scatter, Chase, Frightened }
 
 public class GhostAI : core.System
@@ -62,7 +62,18 @@ public class GhostAI : core.System
         GhostType.Pinky => new Color(255, 184, 255),
         GhostType.Inky => new Color(0, 255, 255),
         GhostType.Clyde => new Color(255, 184, 82),
+        GhostType.Dinky => new Color(0, 220, 80),
+        GhostType.Shadow => new Color(100, 0, 160),
         _ => Color.White
+    };
+
+    // Dinky picks a random corner each time — never knows where it's going
+    private (int x, int y) RandomScatterCorner() => Rng.Next(4) switch
+    {
+        0 => (Maze.Cols - 3, 0),
+        1 => (2, 0),
+        2 => (Maze.Cols - 1, Maze.Rows - 1),
+        _ => (0, Maze.Rows - 1)
     };
 
     private (int x, int y) ScatterTarget(GhostType type) => type switch
@@ -71,6 +82,8 @@ public class GhostAI : core.System
         GhostType.Pinky => (2, 0),
         GhostType.Inky => (Maze.Cols - 1, Maze.Rows - 1),
         GhostType.Clyde => (0, Maze.Rows - 1),
+        GhostType.Dinky => RandomScatterCorner(),
+        GhostType.Shadow => (Maze.Cols / 2, Maze.Rows / 2),
         _ => (Maze.Cols / 2, 0)
     };
 
@@ -100,7 +113,7 @@ public class GhostAI : core.System
             GhostCells[i] = startCells[i];
             GhostTargets[i] = startCells[i];
             GhostDirs[i] = (0, 0);
-            GhostTypes[i] = (GhostType)(i % 4);
+            GhostTypes[i] = (GhostType)(i % 6);
             ChaseTargets[i] = PickRandomWalkable();
             ExitedHouse[i] = false;
             ReleaseTimes[i] = i * ReleaseInterval;
@@ -108,8 +121,16 @@ public class GhostAI : core.System
             // GI emission via Geometry texture draw, eyes overlay via LateRender
             GhostColors[i] = PersonalityColor(GhostTypes[i]);
             ref var mat = ref Scene.ECS.GetComponent<Material>(GhostIds[i]);
-            mat.Albedo = Color.Transparent;
-            mat.Emissive = GhostColors[i];
+            if (GhostTypes[i] == GhostType.Shadow)
+            {
+                mat.Albedo = GhostColors[i];
+                mat.Emissive = Color.Black;
+            }
+            else
+            {
+                mat.Albedo = Color.Transparent;
+                mat.Emissive = GhostColors[i];
+            }
 
             // Initialize position history for eye sync
             ref var t = ref Scene.ECS.GetComponent<Transform>(GhostIds[i]);
@@ -162,6 +183,15 @@ public class GhostAI : core.System
             float currentStep = (CurrentMode == GhostMode.Frightened && ExitedHouse[i])
                 ? frightenedStep : step;
 
+            // Shadow: always 1.3x speed, rage burst to 1.6x when closing in
+            if (GhostTypes[i] == GhostType.Shadow && CurrentMode != GhostMode.Frightened)
+            {
+                var (scx, scy) = GhostCells[i];
+                var (stx, sty) = ChaseTargets[i];
+                float sd = MathF.Sqrt((scx - stx) * (scx - stx) + (scy - sty) * (scy - sty));
+                currentStep = step * (sd < 6f ? 1.6f : 1.3f);
+            }
+
             ref var transform = ref Scene.ECS.GetComponent<Transform>(GhostIds[i]);
             var pos = new Vector2(transform.Position.X, transform.Position.Y);
             var target = Maze.CellCenter(GhostTargets[i].x, GhostTargets[i].y);
@@ -213,13 +243,14 @@ public class GhostAI : core.System
 
             if (EyesTexture != null)
             {
+                var eyeColor = GhostTypes[i] == GhostType.Shadow ? Color.Black : Color.White;
                 Renderer.DrawTexture(EyesTexture,
                     new Rectangle(
                         (int)((cx - eyeR) * sx),
                         (int)((cy - eyeR) * sy),
                         (int)(eyeD * sx),
                         (int)(eyeD * sy)),
-                    Color.White);
+                    eyeColor);
             }
         }
 
@@ -304,9 +335,26 @@ public class GhostAI : core.System
                 return ScatterTarget(GhostType.Clyde);
         }
 
+        // Dinky: charges at target but chickens out within 10 tiles — flees to a random corner
+        if (GhostTypes[i] == GhostType.Dinky)
+        {
+            float d = MathF.Sqrt((cx - tx) * (cx - tx) + (cy - ty) * (cy - ty));
+            if (d < 10f)
+                return RandomScatterCorner();
+        }
+
+        // Shadow: relentlessly refreshes target — hunts down the next one immediately
+        if (GhostTypes[i] == GhostType.Shadow)
+        {
+            float manhattan = MathF.Abs(cx - tx) + MathF.Abs(cy - ty);
+            if (manhattan <= 1 || Maze.IsWall(tx, ty))
+                ChaseTargets[i] = PickRandomWalkable();
+            return ChaseTargets[i];
+        }
+
         // Refresh chase target when close or invalid
-        float manhattan = MathF.Abs(cx - tx) + MathF.Abs(cy - ty);
-        if (manhattan <= 2 || Maze.IsWall(tx, ty))
+        float manhattan2 = MathF.Abs(cx - tx) + MathF.Abs(cy - ty);
+        if (manhattan2 <= 2 || Maze.IsWall(tx, ty))
             ChaseTargets[i] = PickRandomWalkable();
 
         return ChaseTargets[i];

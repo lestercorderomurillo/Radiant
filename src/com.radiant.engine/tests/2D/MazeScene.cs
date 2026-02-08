@@ -52,7 +52,7 @@ public class MazeScene : Scene
         "1111111111111111111111111111",
     ];
 
-    private const int GhostCount = 4;
+    private const int GhostCount = 6;
 
     private static readonly (int x, int y)[] GhostHouseCells =
     [
@@ -108,7 +108,7 @@ public class MazeScene : Scene
         for (int i = 0; i < count; i++)
         {
             startCells[i] = GhostHouseCells[i % GhostHouseCells.Length];
-            colors[i] = GhostAI.PersonalityColor((GhostType)(i % 4));
+            colors[i] = GhostAI.PersonalityColor((GhostType)(i % 6));
         }
 
         var ghostTexture = Renderer.GetTexture("Ghost");
