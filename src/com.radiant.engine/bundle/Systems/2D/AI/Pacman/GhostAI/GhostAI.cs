@@ -243,7 +243,7 @@ public class GhostAI : core.System
 
             if (EyesTexture != null)
             {
-                var eyeColor = GhostTypes[i] == GhostType.Shadow ? Color.Black : Color.White;
+                var eyeColor = GhostTypes[i] == GhostType.Shadow ? Color.White : Color.Black;
                 Renderer.DrawTexture(EyesTexture,
                     new Rectangle(
                         (int)((cx - eyeR) * sx),
