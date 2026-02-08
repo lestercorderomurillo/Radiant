@@ -135,11 +135,7 @@ public class Geometry : core.System
             Buffers[b].AbsorptionBuffers = new RendererShape[BucketCount][];
             Buffers[b].AbsorptionCounts = new int[BucketCount];
 
-            for (int bucketIndex = 0; bucketIndex < BucketCount; bucketIndex++)
-            {
-                Buffers[b].EmissiveBuffers[bucketIndex] = new RendererShape[InitialBucketCapacity];
-                Buffers[b].AbsorptionBuffers[bucketIndex] = new RendererShape[InitialBucketCapacity];
-            }
+            // Buckets are lazily allocated on first use (most layers are empty)
 
             Buffers[b].MotionShapesByThread = new List<(Vector2, Vector2, Vector2, bool, float)>[ThreadCount];
             Buffers[b].TextureDrawsByThread = new List<(Vector2, Vector2, Texture2D, Color, Color)>[ThreadCount];
@@ -327,8 +323,8 @@ public class Geometry : core.System
             }
 
             int emissiveIndex = emissiveCounts[bucketIndex];
-            if (emissiveIndex >= emissiveBuffers[bucketIndex].Length)
-                GrowBuffer(ref emissiveBuffers[bucketIndex], emissiveIndex);
+            if (emissiveBuffers[bucketIndex] == null || emissiveIndex >= emissiveBuffers[bucketIndex].Length)
+                EnsureBuffer(ref emissiveBuffers[bucketIndex], emissiveIndex);
 
             ref var emissiveShape = ref emissiveBuffers[bucketIndex][emissiveIndex];
             emissiveShape.Position = position;
@@ -338,8 +334,8 @@ public class Geometry : core.System
             emissiveCounts[bucketIndex] = emissiveIndex + 1;
 
             int absorptionIndex = absorptionCounts[bucketIndex];
-            if (absorptionIndex >= absorptionBuffers[bucketIndex].Length)
-                GrowBuffer(ref absorptionBuffers[bucketIndex], absorptionIndex);
+            if (absorptionBuffers[bucketIndex] == null || absorptionIndex >= absorptionBuffers[bucketIndex].Length)
+                EnsureBuffer(ref absorptionBuffers[bucketIndex], absorptionIndex);
 
             ref var absorptionShape = ref absorptionBuffers[bucketIndex][absorptionIndex];
             absorptionShape.Position = position;
@@ -374,8 +370,8 @@ public class Geometry : core.System
             }
 
             int emissiveIndex = emissiveCounts[bucketIndex];
-            if (emissiveIndex >= emissiveBuffers[bucketIndex].Length)
-                GrowBuffer(ref emissiveBuffers[bucketIndex], emissiveIndex);
+            if (emissiveBuffers[bucketIndex] == null || emissiveIndex >= emissiveBuffers[bucketIndex].Length)
+                EnsureBuffer(ref emissiveBuffers[bucketIndex], emissiveIndex);
             ref var emissiveShape = ref emissiveBuffers[bucketIndex][emissiveIndex];
             emissiveShape.Position = cornerPos;
             emissiveShape.Size = diameter;
@@ -384,8 +380,8 @@ public class Geometry : core.System
             emissiveCounts[bucketIndex] = emissiveIndex + 1;
 
             int absorptionIndex = absorptionCounts[bucketIndex];
-            if (absorptionIndex >= absorptionBuffers[bucketIndex].Length)
-                GrowBuffer(ref absorptionBuffers[bucketIndex], absorptionIndex);
+            if (absorptionBuffers[bucketIndex] == null || absorptionIndex >= absorptionBuffers[bucketIndex].Length)
+                EnsureBuffer(ref absorptionBuffers[bucketIndex], absorptionIndex);
             ref var absorptionShape = ref absorptionBuffers[bucketIndex][absorptionIndex];
             absorptionShape.Position = cornerPos;
             absorptionShape.Size = diameter;
@@ -416,8 +412,8 @@ public class Geometry : core.System
             }
 
             int emissiveIndex = emissiveCounts[bucketIndex];
-            if (emissiveIndex >= emissiveBuffers[bucketIndex].Length)
-                GrowBuffer(ref emissiveBuffers[bucketIndex], emissiveIndex);
+            if (emissiveBuffers[bucketIndex] == null || emissiveIndex >= emissiveBuffers[bucketIndex].Length)
+                EnsureBuffer(ref emissiveBuffers[bucketIndex], emissiveIndex);
             ref var emissiveShape = ref emissiveBuffers[bucketIndex][emissiveIndex];
             emissiveShape.Position = position;
             emissiveShape.Size = triangle.Size;
@@ -426,8 +422,8 @@ public class Geometry : core.System
             emissiveCounts[bucketIndex] = emissiveIndex + 1;
 
             int absorptionIndex = absorptionCounts[bucketIndex];
-            if (absorptionIndex >= absorptionBuffers[bucketIndex].Length)
-                GrowBuffer(ref absorptionBuffers[bucketIndex], absorptionIndex);
+            if (absorptionBuffers[bucketIndex] == null || absorptionIndex >= absorptionBuffers[bucketIndex].Length)
+                EnsureBuffer(ref absorptionBuffers[bucketIndex], absorptionIndex);
             ref var absorptionShape = ref absorptionBuffers[bucketIndex][absorptionIndex];
             absorptionShape.Position = position;
             absorptionShape.Size = triangle.Size;
@@ -586,8 +582,13 @@ public class Geometry : core.System
         RenderMs = (float)sw.Elapsed.TotalMilliseconds;
     }
 
-    private static void GrowBuffer(ref RendererShape[] buffer, int currentCount)
+    private static void EnsureBuffer(ref RendererShape[] buffer, int currentCount)
     {
+        if (buffer == null)
+        {
+            buffer = new RendererShape[InitialBucketCapacity];
+            return;
+        }
         var newBuffer = new RendererShape[buffer.Length * 2];
         Array.Copy(buffer, newBuffer, currentCount);
         buffer = newBuffer;
