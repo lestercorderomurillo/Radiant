@@ -6,10 +6,10 @@ using System;
 
 namespace com.radiant.engine.bundle;
 
-public enum GhostType : byte { Blinky, Pinky, Inky, Clyde, Dinky, Shadow }
-public enum GhostMode : byte { Scatter, Chase, Frightened }
+public enum PacmanGhostType : byte { Blinky, Pinky, Inky, Clyde, Dinky, Shadow }
+public enum PacmanGhostMode : byte { Scatter, Chase, Frightened }
 
-public class GhostAI : core.System
+public class PacmanGhostAI : core.System
 {
     public float GhostSpeed { get; set; } = 200f;
     public float GhostZ { get; set; } = 65530f;
@@ -17,14 +17,15 @@ public class GhostAI : core.System
     public Texture2D BodyTexture { get; set; }
     public float BodyRadius { get; set; } = 30f;
     public float ReleaseInterval { get; set; } = 0.5f;
+    public PacmanPlayer Player { get; set; }
 
     private int[] GhostIds;
-    private MazeBuilder Maze;
+    private PacmanMazeBuilder Maze;
     private Geometry Geometry;
     private (int x, int y)[] GhostCells;
     private (int x, int y)[] GhostTargets;
     private (int dx, int dy)[] GhostDirs;
-    private GhostType[] GhostTypes;
+    private PacmanGhostType[] PacmanGhostTypes;
     private (int x, int y)[] ChaseTargets;
     private bool[] ExitedHouse;
     private float[] ReleaseTimes;
@@ -34,36 +35,36 @@ public class GhostAI : core.System
     private float ElapsedTime;
     private Random Rng = new();
 
-    private GhostMode CurrentMode = GhostMode.Scatter;
-    private GhostMode PreFrightenedMode;
+    private PacmanGhostMode CurrentMode = PacmanGhostMode.Scatter;
+    private PacmanGhostMode PreFrightenedMode;
     private float ModeTimer;
     private int ModePhase;
     private float FrightenedTimer;
 
     // Classic Pac-Man Level 1 mode timing
-    private static readonly (GhostMode mode, float duration)[] ModeCycle =
+    private static readonly (PacmanGhostMode mode, float duration)[] ModeCycle =
     [
-        (GhostMode.Scatter, 7f),
-        (GhostMode.Chase, 20f),
-        (GhostMode.Scatter, 7f),
-        (GhostMode.Chase, 20f),
-        (GhostMode.Scatter, 5f),
-        (GhostMode.Chase, 20f),
-        (GhostMode.Scatter, 5f),
+        (PacmanGhostMode.Scatter, 7f),
+        (PacmanGhostMode.Chase, 20f),
+        (PacmanGhostMode.Scatter, 7f),
+        (PacmanGhostMode.Chase, 20f),
+        (PacmanGhostMode.Scatter, 5f),
+        (PacmanGhostMode.Chase, 20f),
+        (PacmanGhostMode.Scatter, 5f),
     ];
 
     // Pac-Man direction priority: Up, Left, Down, Right
     private static readonly int[] DXs = [0, -1, 0, 1];
     private static readonly int[] DYs = [-1, 0, 1, 0];
 
-    public static Color PersonalityColor(GhostType type) => type switch
+    public static Color PersonalityColor(PacmanGhostType type) => type switch
     {
-        GhostType.Blinky => new Color(255, 0, 0),
-        GhostType.Pinky => new Color(255, 184, 255),
-        GhostType.Inky => new Color(0, 255, 255),
-        GhostType.Clyde => new Color(255, 184, 82),
-        GhostType.Dinky => new Color(0, 220, 80),
-        GhostType.Shadow => new Color(100, 0, 160),
+        PacmanGhostType.Blinky => new Color(255, 0, 20),
+        PacmanGhostType.Pinky => new Color(255, 184, 255),
+        PacmanGhostType.Inky => new Color(0, 255, 255),
+        PacmanGhostType.Clyde => new Color(255, 184, 82),
+        PacmanGhostType.Dinky => new Color(0, 220, 80),
+        PacmanGhostType.Shadow => new Color(100, 0, 160),
         _ => Color.White
     };
 
@@ -76,20 +77,20 @@ public class GhostAI : core.System
         _ => (0, Maze.Rows - 1)
     };
 
-    private (int x, int y) ScatterTarget(GhostType type) => type switch
+    private (int x, int y) ScatterTarget(PacmanGhostType type) => type switch
     {
-        GhostType.Blinky => (Maze.Cols - 3, 0),
-        GhostType.Pinky => (2, 0),
-        GhostType.Inky => (Maze.Cols - 1, Maze.Rows - 1),
-        GhostType.Clyde => (0, Maze.Rows - 1),
-        GhostType.Dinky => RandomScatterCorner(),
-        GhostType.Shadow => (Maze.Cols / 2, Maze.Rows / 2),
+        PacmanGhostType.Blinky => (Maze.Cols - 3, 0),
+        PacmanGhostType.Pinky => (2, 0),
+        PacmanGhostType.Inky => (Maze.Cols - 1, Maze.Rows - 1),
+        PacmanGhostType.Clyde => (0, Maze.Rows - 1),
+        PacmanGhostType.Dinky => RandomScatterCorner(),
+        PacmanGhostType.Shadow => (Maze.Cols / 2, Maze.Rows / 2),
         _ => (Maze.Cols / 2, 0)
     };
 
     public override void Initialize()
     {
-        Maze = Scene.ECS.GetSystem<MazeBuilder>();
+        Maze = Scene.ECS.GetSystem<PacmanMazeBuilder>();
         Geometry = Scene.ECS.GetSystem<Geometry>();
     }
 
@@ -100,7 +101,7 @@ public class GhostAI : core.System
         GhostCells = new (int, int)[count];
         GhostTargets = new (int, int)[count];
         GhostDirs = new (int, int)[count];
-        GhostTypes = new GhostType[count];
+        PacmanGhostTypes = new PacmanGhostType[count];
         ChaseTargets = new (int, int)[count];
         ExitedHouse = new bool[count];
         ReleaseTimes = new float[count];
@@ -113,15 +114,15 @@ public class GhostAI : core.System
             GhostCells[i] = startCells[i];
             GhostTargets[i] = startCells[i];
             GhostDirs[i] = (0, 0);
-            GhostTypes[i] = (GhostType)(i % 6);
+            PacmanGhostTypes[i] = (PacmanGhostType)(i % 6);
             ChaseTargets[i] = PickRandomWalkable();
             ExitedHouse[i] = false;
             ReleaseTimes[i] = i * ReleaseInterval;
 
             // GI emission via Geometry texture draw, eyes overlay via LateRender
-            GhostColors[i] = PersonalityColor(GhostTypes[i]);
+            GhostColors[i] = PersonalityColor(PacmanGhostTypes[i]);
             ref var mat = ref Scene.ECS.GetComponent<Material>(GhostIds[i]);
-            if (GhostTypes[i] == GhostType.Shadow)
+            if (PacmanGhostTypes[i] == PacmanGhostType.Shadow)
             {
                 mat.Albedo = GhostColors[i];
                 mat.Emissive = Color.Black;
@@ -142,16 +143,16 @@ public class GhostAI : core.System
         ElapsedTime = 0f;
         ModeTimer = 0f;
         ModePhase = 0;
-        CurrentMode = GhostMode.Scatter;
+        CurrentMode = PacmanGhostMode.Scatter;
         FrightenedTimer = 0f;
     }
 
     /// <summary>Trigger frightened mode (all ghosts reverse and move randomly at half speed).</summary>
     public void SetFrightened(float duration)
     {
-        if (CurrentMode != GhostMode.Frightened)
+        if (CurrentMode != PacmanGhostMode.Frightened)
             PreFrightenedMode = CurrentMode;
-        CurrentMode = GhostMode.Frightened;
+        CurrentMode = PacmanGhostMode.Frightened;
         FrightenedTimer = duration;
         ReverseAll();
     }
@@ -180,16 +181,17 @@ public class GhostAI : core.System
         {
             if (ElapsedTime < ReleaseTimes[i]) continue;
 
-            float currentStep = (CurrentMode == GhostMode.Frightened && ExitedHouse[i])
+            float currentStep = (CurrentMode == PacmanGhostMode.Frightened && ExitedHouse[i])
                 ? frightenedStep : step;
 
-            // Shadow: always 1.3x speed, rage burst to 1.6x when closing in
-            if (GhostTypes[i] == GhostType.Shadow && CurrentMode != GhostMode.Frightened)
+            // Shadow: 1.25x base, ramps to 1.5x when approaching, normal speed when very close
+            if (PacmanGhostTypes[i] == PacmanGhostType.Shadow && CurrentMode != PacmanGhostMode.Frightened)
             {
                 var (scx, scy) = GhostCells[i];
-                var (stx, sty) = ChaseTargets[i];
+                var (stx, sty) = Player != null ? Player.Cell : ChaseTargets[i];
                 float sd = MathF.Sqrt((scx - stx) * (scx - stx) + (scy - sty) * (scy - sty));
-                currentStep = step * (sd < 6f ? 1.6f : 1.3f);
+                float mult = sd < 4f ? 1.0f : sd < 12f ? 1.5f : 1.25f;
+                currentStep = step * mult;
             }
 
             ref var transform = ref Scene.ECS.GetComponent<Transform>(GhostIds[i]);
@@ -243,7 +245,7 @@ public class GhostAI : core.System
 
             if (EyesTexture != null)
             {
-                var eyeColor = GhostTypes[i] == GhostType.Shadow ? Color.White : Color.Black;
+                var eyeColor = PacmanGhostTypes[i] == PacmanGhostType.Shadow ? Color.White : Color.Black;
                 Renderer.DrawTexture(EyesTexture,
                     new Rectangle(
                         (int)((cx - eyeR) * sx),
@@ -259,7 +261,7 @@ public class GhostAI : core.System
 
     private void UpdateMode(float dt)
     {
-        if (CurrentMode == GhostMode.Frightened)
+        if (CurrentMode == PacmanGhostMode.Frightened)
         {
             FrightenedTimer -= dt;
             if (FrightenedTimer <= 0f)
@@ -272,7 +274,7 @@ public class GhostAI : core.System
 
         if (ModePhase >= ModeCycle.Length)
         {
-            CurrentMode = GhostMode.Chase;
+            CurrentMode = PacmanGhostMode.Chase;
             return;
         }
 
@@ -285,7 +287,7 @@ public class GhostAI : core.System
             var prevMode = CurrentMode;
             CurrentMode = ModePhase < ModeCycle.Length
                 ? ModeCycle[ModePhase].mode
-                : GhostMode.Chase;
+                : PacmanGhostMode.Chase;
 
             // Mode change takes effect at next intersection (no mid-corridor reversal)
         }
@@ -315,36 +317,61 @@ public class GhostAI : core.System
         {
             int nx = Maze.WrapX(cx + dx), ny = cy + dy;
             if (Maze.IsGhostDoor(nx, ny)) return false;
+            // Shadow: won't use teleport tunnels
+            if (PacmanGhostTypes[gi] == PacmanGhostType.Shadow && nx != cx + dx) return false;
         }
         return true;
     }
 
     private (int x, int y) GetTargetTile(int i)
     {
-        if (CurrentMode == GhostMode.Scatter)
-            return ScatterTarget(GhostTypes[i]);
+        if (CurrentMode == PacmanGhostMode.Scatter)
+            return ScatterTarget(PacmanGhostTypes[i]);
 
-        // Chase mode: Clyde retreats to scatter corner when close to target (< 8 tiles)
         var (cx, cy) = GhostCells[i];
+
+        // If player exists, all ghosts chase the player
+        if (Player != null)
+        {
+            var (px, py) = Player.Cell;
+
+            // Clyde: retreats to scatter corner when close to player (< 8 tiles)
+            if (PacmanGhostTypes[i] == PacmanGhostType.Clyde)
+            {
+                float d = MathF.Sqrt((cx - px) * (cx - px) + (cy - py) * (cy - py));
+                if (d < 8f)
+                    return ScatterTarget(PacmanGhostType.Clyde);
+            }
+
+            // Dinky: charges at player but chickens out within 10 tiles — flees to a random corner
+            if (PacmanGhostTypes[i] == PacmanGhostType.Dinky)
+            {
+                float d = MathF.Sqrt((cx - px) * (cx - px) + (cy - py) * (cy - py));
+                if (d < 10f)
+                    return RandomScatterCorner();
+            }
+
+            return (px, py);
+        }
+
+        // Fallback: random walkable targets when no player
         var (tx, ty) = ChaseTargets[i];
 
-        if (GhostTypes[i] == GhostType.Clyde)
+        if (PacmanGhostTypes[i] == PacmanGhostType.Clyde)
         {
             float d = MathF.Sqrt((cx - tx) * (cx - tx) + (cy - ty) * (cy - ty));
             if (d < 8f)
-                return ScatterTarget(GhostType.Clyde);
+                return ScatterTarget(PacmanGhostType.Clyde);
         }
 
-        // Dinky: charges at target but chickens out within 10 tiles — flees to a random corner
-        if (GhostTypes[i] == GhostType.Dinky)
+        if (PacmanGhostTypes[i] == PacmanGhostType.Dinky)
         {
             float d = MathF.Sqrt((cx - tx) * (cx - tx) + (cy - ty) * (cy - ty));
             if (d < 10f)
                 return RandomScatterCorner();
         }
 
-        // Shadow: relentlessly refreshes target — hunts down the next one immediately
-        if (GhostTypes[i] == GhostType.Shadow)
+        if (PacmanGhostTypes[i] == PacmanGhostType.Shadow)
         {
             float manhattan = MathF.Abs(cx - tx) + MathF.Abs(cy - ty);
             if (manhattan <= 1 || Maze.IsWall(tx, ty))
@@ -352,7 +379,6 @@ public class GhostAI : core.System
             return ChaseTargets[i];
         }
 
-        // Refresh chase target when close or invalid
         float manhattan2 = MathF.Abs(cx - tx) + MathF.Abs(cy - ty);
         if (manhattan2 <= 2 || Maze.IsWall(tx, ty))
             ChaseTargets[i] = PickRandomWalkable();
@@ -378,7 +404,7 @@ public class GhostAI : core.System
         }
 
         // Frightened mode: random turns at intersections
-        if (CurrentMode == GhostMode.Frightened)
+        if (CurrentMode == PacmanGhostMode.Frightened)
         {
             PickRandom(i);
             return;

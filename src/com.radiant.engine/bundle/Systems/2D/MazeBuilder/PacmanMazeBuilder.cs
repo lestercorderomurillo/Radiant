@@ -5,7 +5,7 @@ using System.Collections.Generic;
 
 namespace com.radiant.engine.bundle;
 
-public class MazeBuilder : core.System
+public class PacmanMazeBuilder : core.System
 {
     public string[] Layout { get; set; }
     public float CellSize { get; set; } = 70f;

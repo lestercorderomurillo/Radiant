@@ -7,13 +7,13 @@ using System;
 
 namespace com.radiant.engine.core;
 
-public class MazeScene : Scene
+public class PacmanMazeLevelScene : Scene
 {
     private KeyboardState PrevKeyboard;
     private SystemGroup GI;
     private SystemGroup UDR;
     private GizmosRenderer Gizmos;
-    private MazeBuilder Maze;
+    private PacmanMazeBuilder Maze;
     private Color BaseWallLight;
     private float PulseTime;
 
@@ -78,8 +78,9 @@ public class MazeScene : Scene
             ("UDR3.0", ECS.AddSystem<UDR3>())
         );
 
-        ECS.AddSystem<MazeBuilder>();
-        ECS.AddSystem<GhostAI>();
+        ECS.AddSystem<PacmanMazeBuilder>();
+        ECS.AddSystem<PacmanPlayer>();
+        ECS.AddSystem<PacmanGhostAI>();
 
         Gizmos = ECS.AddSystem<GizmosRenderer>();
 
@@ -88,7 +89,7 @@ public class MazeScene : Scene
 
     public override void SetupScene()
     {
-        Maze = ECS.GetSystem<MazeBuilder>();
+        Maze = ECS.GetSystem<PacmanMazeBuilder>();
         Maze.Layout = PacmanLayout;
 
         Maze.WallThickness = 4f;
@@ -108,16 +109,26 @@ public class MazeScene : Scene
         for (int i = 0; i < count; i++)
         {
             startCells[i] = GhostHouseCells[i % GhostHouseCells.Length];
-            colors[i] = GhostAI.PersonalityColor((GhostType)(i % 6));
+            colors[i] = PacmanGhostAI.PersonalityColor((PacmanGhostType)(i % 6));
         }
 
         var ghostTexture = Renderer.GetTexture("Ghost");
         var ghostIds = Maze.SpawnAtCells(startCells, colors, 30f, 65530f, ghostTexture);
 
-        var ghosts = ECS.GetSystem<GhostAI>();
+        var ghosts = ECS.GetSystem<PacmanGhostAI>();
         ghosts.BodyTexture = ghostTexture;
         ghosts.EyesTexture = Renderer.GetTexture("Eyes");
         ghosts.Track(ghostIds, startCells);
+
+        // Player
+        var playerCell = (x: 14, y: 23);
+        var playerCells = new[] { playerCell };
+        var playerColors = new[] { Color.White };
+        var playerIds = Maze.SpawnAtCells(playerCells, playerColors, 30f, 65530f, ghostTexture);
+
+        var player = ECS.GetSystem<PacmanPlayer>();
+        player.Track(playerIds[0], playerCell, 65530f);
+        ghosts.Player = player;
 
         UpdateUDRInput();
 

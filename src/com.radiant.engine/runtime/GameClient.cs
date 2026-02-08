@@ -12,7 +12,7 @@ public class GameClient
     {
         GameLoop = new GameLoop();
 
-        GameLoop.AddScene(new MazeScene());
+        GameLoop.AddScene(new PacmanMazeLevelScene());
 
         Window = new Window(GameLoop);
         Window.Run();
