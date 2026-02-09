@@ -12,7 +12,6 @@ public class RCGI : core.System
     private const int MaxCascades = 10;
 
     private Geometry Geometry;
-    private GizmosRenderer Gizmos;
     private RenderTarget2D[] CascadeLayers;
     private RenderTarget2D FinalTexture;
     private Vector2 ScreenSize;
@@ -53,7 +52,6 @@ public class RCGI : core.System
     public override void Initialize()
     {
         Geometry = Scene.ECS.GetSystem<Geometry>();
-        Gizmos = Scene.ECS.GetSystem<GizmosRenderer>();
 
         ScreenSize = Renderer.ScaledSize;
         CascadeSize = ScreenSize / CascadeLinear;
@@ -68,6 +66,9 @@ public class RCGI : core.System
 
         if (Geometry != null)
             Geometry.EnableSDF = true;
+
+        UISystem.CreateWindow("rcgi", "RCGI", new Vector2(380, 20), new Vector2(340, 0));
+        UISystem.AddLabel("rcgi", "info", "...");
     }
 
     private void OnRenderScaleChanged(float newScale)
@@ -202,7 +203,7 @@ public class RCGI : core.System
 
         Renderer.PopTargets();
 
-        Gizmos.Set("RCGI", $"Screen: {(int)ScreenSize.X}x{(int)ScreenSize.Y} | Cascades: {ActiveCascades}");
+        UISystem.SetLabel("rcgi", "info", $"Screen: {(int)ScreenSize.X}x{(int)ScreenSize.Y} | Cascades: {ActiveCascades}");
     }
 
     private void RenderCascade(int cascadeIndex, Texture2D emissive, Texture2D sdf)

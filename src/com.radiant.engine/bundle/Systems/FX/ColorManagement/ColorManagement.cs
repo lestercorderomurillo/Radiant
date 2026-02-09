@@ -2,7 +2,6 @@ using System;
 using com.radiant.engine.core;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using Microsoft.Xna.Framework.Input;
 
 namespace com.radiant.engine.bundle;
 
@@ -18,13 +17,13 @@ public class ColorManagement : core.System
     private int TechniqueIndex = 2;
     private Func<Texture2D> InputSource;
     private RenderTarget2D OutputTexture;
-    private GizmosRenderer Gizmos;
-    private KeyboardState PrevKeyState;
 
     public override void Initialize()
     {
-        Gizmos = Scene.ECS.GetSystem<GizmosRenderer>();
-        PrevKeyState = Keyboard.GetState();
+        UISystem.CreateWindow("colormgmt", "Color Management", new Vector2(380, 230), new Vector2(340, 0));
+        UISystem.AddLabel("colormgmt", "mode", $"Tonemapping: {TechniqueNames[TechniqueIndex]}");
+        UISystem.AddButton("colormgmt", "cycle", "Cycle Tonemapping", () =>
+            TechniqueIndex = (TechniqueIndex + 1) % TechniqueNames.Length);
     }
 
     public void SetInputSource(Func<Texture2D> source)
@@ -41,8 +40,6 @@ public class ColorManagement : core.System
 
     public override void Update()
     {
-        HandleInput();
-
         if (InputSource == null)
             return;
 
@@ -64,7 +61,7 @@ public class ColorManagement : core.System
             .Commit()
             .SetTarget(null);
 
-        Gizmos?.Set("ColorMgmt", $"Tonemapping: {TechniqueNames[TechniqueIndex]} [F6]");
+        UISystem.SetLabel("colormgmt", "mode", $"Tonemapping: {TechniqueNames[TechniqueIndex]}");
     }
 
     public override void Render()
@@ -73,14 +70,6 @@ public class ColorManagement : core.System
             return;
 
         Renderer.Blit(OutputTexture, BlendState.AlphaBlend, SamplerState.PointClamp);
-    }
-
-    private void HandleInput()
-    {
-        var keyboard = Keyboard.GetState();
-        if (keyboard.IsKeyDown(Keys.F6) && !PrevKeyState.IsKeyDown(Keys.F6))
-            TechniqueIndex = (TechniqueIndex + 1) % TechniqueNames.Length;
-        PrevKeyState = keyboard;
     }
 
     private void EnsureRenderTarget(int Width, int Height)

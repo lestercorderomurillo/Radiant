@@ -2,7 +2,6 @@ using System;
 using com.radiant.engine.core;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using Microsoft.Xna.Framework.Input;
 
 namespace com.radiant.engine.bundle;
 
@@ -21,23 +20,28 @@ public class UDR3 : core.System
     private Vector2 OutputSize;
 
     private Func<Texture2D> InputSource;
-    private GizmosRenderer Gizmos;
     private Geometry Geometry;
-    private KeyboardState PrevKeyState;
 
     private int FrameIndex = 0;
 
     public override void Initialize()
     {
-        Gizmos = Scene.ECS.GetSystem<GizmosRenderer>();
         Geometry = Scene.ECS.GetSystem<Geometry>();
 
         OutputSize = Renderer.ScreenSize;
         CreateRenderTargets();
         ApplyRenderScale();
         UDRQuality.Changed += _ => ApplyRenderScale();
-        PrevKeyState = Keyboard.GetState();
         FrameIndex = 0;
+
+        UISystem.CreateWindow("udr3", "UDR3", new Vector2(380, 370), new Vector2(340, 0));
+        UISystem.AddLabel("udr3", "quality", "...");
+        UISystem.AddLabel("udr3", "input", "...");
+        UISystem.AddLabel("udr3", "output", "...");
+        UISystem.AddLabel("udr3", "frames", "...");
+        UISystem.AddButton("udr3", "cycleQuality", "Cycle Quality", () => UDRQuality.Cycle());
+        UISystem.AddButton("udr3", "debugEdges", "Toggle Debug Edges", () => DebugEdges = (DebugEdges + 1) % 2);
+        UISystem.AddLabel("udr3", "debugInfo", "Debug Edges: OFF");
     }
 
     public void SetInputSource(Func<Texture2D> source)
@@ -69,8 +73,6 @@ public class UDR3 : core.System
     {
         if (InputSource == null)
             return;
-
-        HandleInput();
 
         var input = InputSource();
 
@@ -108,14 +110,12 @@ public class UDR3 : core.System
             .SetParameter("AbsorptionTexture", Geometry?.AbsorptionTexture)
             .SetParameter("InputSize", inputSize)
             .SetParameter("OutputSize", OutputSize)
-
             .SetParameter("DebugEdges", (float)DebugEdges)
             .Draw()
             .Commit()
             .SetTarget(null);
 
         // Pass 3: Temporal accumulation
-        // Weight for current frame: 1/N where N = min(FrameIndex+1, FramesToAccumulate)
         int effectiveFrames = Math.Min(FrameIndex + 1, FramesToAccumulate);
         float currentWeight = 1.0f / effectiveFrames;
 
@@ -165,29 +165,12 @@ public class UDR3 : core.System
         if (FrameIndex < FramesToAccumulate)
             FrameIndex++;
 
-        Gizmos?.Set("UDR3", $"Quality: {UDRQuality.Names[UDRQuality.Index]} ({UDRQuality.ScaleNormalized:P0}) [F4]");
-        Gizmos?.Set("UDR3", $"Input Size: {input.Width}x{input.Height}");
-        Gizmos?.Set("UDR3", $"Output Size: {OutputSize.X}x{OutputSize.Y}");
-        Gizmos?.Set("UDR3", $"Frames to Accumulate: {FramesToAccumulate} (current: {effectiveFrames})");
         string[] debugNames = ["OFF", "Edge Mask"];
-        Gizmos?.Set("UDR3", $"Debug Edges: {debugNames[DebugEdges]} [K]");
-    }
-
-    private void HandleInput()
-    {
-        var key = Keyboard.GetState();
-
-        if (key.IsKeyDown(Keys.F4) && !PrevKeyState.IsKeyDown(Keys.F4))
-        {
-            UDRQuality.Cycle();
-        }
-
-        if (key.IsKeyDown(Keys.K) && !PrevKeyState.IsKeyDown(Keys.K))
-        {
-            DebugEdges = (DebugEdges + 1) % 2; // 0=off, 1=edge mask
-        }
-
-        PrevKeyState = key;
+        UISystem.SetLabel("udr3", "quality", $"Quality: {UDRQuality.Names[UDRQuality.Index]} ({UDRQuality.ScaleNormalized:P0})");
+        UISystem.SetLabel("udr3", "input", $"Input Size: {input.Width}x{input.Height}");
+        UISystem.SetLabel("udr3", "output", $"Output Size: {OutputSize.X}x{OutputSize.Y}");
+        UISystem.SetLabel("udr3", "frames", $"Frames to Accumulate: {FramesToAccumulate} (current: {effectiveFrames})");
+        UISystem.SetLabel("udr3", "debugInfo", $"Debug Edges: {debugNames[DebugEdges]}");
     }
 
     public override void Render()

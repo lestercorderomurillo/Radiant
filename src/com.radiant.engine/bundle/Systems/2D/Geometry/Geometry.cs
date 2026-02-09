@@ -5,7 +5,6 @@ using System.Threading.Tasks;
 using com.radiant.engine.core;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using Microsoft.Xna.Framework.Input;
 using RendererShape = com.radiant.engine.core.Shape;
 
 namespace com.radiant.engine.bundle;
@@ -41,8 +40,6 @@ public class Geometry : core.System
     private enum DebugMode { None, Emissive, Absorption, SDF, JFADirection, JFARaw, MotionVectors }
     private DebugMode CurrentDebug = DebugMode.None;
     public bool IsDebugging => CurrentDebug != DebugMode.None;
-    private KeyboardState PrevKeyState;
-    private GizmosRenderer Gizmos;
 
     // Z-layer config: Z values map directly to layers (Z=0 -> layer 0, etc.)
     // 65536 layers supports millions of entities with unique Z ordering
@@ -158,8 +155,20 @@ public class Geometry : core.System
         WriteBuffer = 0;
         ReadBuffer = 1;
 
-        Gizmos = Scene.ECS.GetSystem<GizmosRenderer>();
-        PrevKeyState = Keyboard.GetState();
+        UISystem.CreateWindow("geometry", "Geometry", new Vector2(20, 400), new Vector2(340, 0));
+        UISystem.AddLabel("geometry", "debug", "Debug: None");
+        UISystem.AddButton("geometry", "cycleDebug", "Cycle Debug Mode", () =>
+        {
+            int count = Enum.GetValues<DebugMode>().Length;
+            CurrentDebug = (DebugMode)(((int)CurrentDebug + 1) % count);
+        });
+        UISystem.AddLabel("geometry", "emissive", "Emissive Objects: 0");
+        UISystem.AddLabel("geometry", "absorption", "Absorption Objects: 0");
+        UISystem.AddLabel("geometry", "buffers", "Buffers: -");
+        UISystem.AddLabel("geometry", "timing", "Timing: -");
+        UISystem.AddLabel("geometry", "gpu", "GPU: -");
+        UISystem.AddLabel("geometry", "sdf", "SDF: -");
+        UISystem.AddLabel("geometry", "jfa", "JFA: -");
     }
 
     private void InitializeJFA()
@@ -222,16 +231,6 @@ public class Geometry : core.System
 
     public override void Update()
     {
-        var key = Keyboard.GetState();
-
-        if (key.IsKeyDown(Keys.F2) && !PrevKeyState.IsKeyDown(Keys.F2))
-        {
-            int count = Enum.GetValues<DebugMode>().Length;
-            CurrentDebug = (DebugMode)(((int)CurrentDebug + 1) % count);
-        }
-
-        PrevKeyState = key;
-
         int collectBuffer = WriteBuffer;
         CollectionTask = Task.Run(() => CollectShapes(collectBuffer));
 
@@ -680,21 +679,22 @@ public class Geometry : core.System
 
     private void UpdateGizmos()
     {
-        Gizmos.Set("Geometry", $"Debug: {CurrentDebug} (F2)");
-        Gizmos.Set("Geometry", $"Emissive Objects: {EmissiveCount}");
-        Gizmos.Set("Geometry", $"Absorption Objects: {AbsorptionCount}");
-        Gizmos.Set("Geometry", $"Buffers: {WorldBounds.X}x{WorldBounds.Y}");
-        Gizmos.Set("Geometry", $"Collect: {CollectMs:F2}ms | Flatten: {FlattenMs:F2}ms | Render: {RenderMs:F2}ms");
-        Gizmos.Set("Geometry", $"GPU: SetData: {Renderer.LastSetDataMs:F2}ms | Draw: {Renderer.LastDrawMs:F2}ms");
+        UISystem.SetLabel("geometry", "debug", $"Debug: {CurrentDebug}");
+        UISystem.SetLabel("geometry", "emissive", $"Emissive Objects: {EmissiveCount}");
+        UISystem.SetLabel("geometry", "absorption", $"Absorption Objects: {AbsorptionCount}");
+        UISystem.SetLabel("geometry", "buffers", $"Buffers: {WorldBounds.X}x{WorldBounds.Y}");
+        UISystem.SetLabel("geometry", "timing", $"Collect: {CollectMs:F2}ms | Flatten: {FlattenMs:F2}ms | Render: {RenderMs:F2}ms");
+        UISystem.SetLabel("geometry", "gpu", $"GPU: SetData: {Renderer.LastSetDataMs:F2}ms | Draw: {Renderer.LastDrawMs:F2}ms");
 
         if (EnableSDF)
         {
-            Gizmos.Set("Geometry", $"SDF: {SDFBounds.X}x{SDFBounds.Y} ({SDFScale:P0})");
-            Gizmos.Set("Geometry", $"JFA Passes: {JFAPassCount}");
+            UISystem.SetLabel("geometry", "sdf", $"SDF: {SDFBounds.X}x{SDFBounds.Y} ({SDFScale:P0})");
+            UISystem.SetLabel("geometry", "jfa", $"JFA Passes: {JFAPassCount}");
         }
         else
         {
-            Gizmos.Set("Geometry", "SDF: Disabled");
+            UISystem.SetLabel("geometry", "sdf", "SDF: Disabled");
+            UISystem.SetLabel("geometry", "jfa", "");
         }
     }
 

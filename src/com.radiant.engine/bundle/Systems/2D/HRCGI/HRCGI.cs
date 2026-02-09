@@ -2,7 +2,6 @@ using System;
 using com.radiant.engine.core;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using Microsoft.Xna.Framework.Input;
 
 namespace com.radiant.engine.bundle;
 
@@ -24,7 +23,6 @@ public class HRCGI : core.System
     private int CascadeCount;
 
     private Geometry Geometry;
-    private GizmosRenderer Gizmos;
 
     // Paired cascade surfaces (radiance + transmittance) - reused for each frustum
     private RenderTarget2D[] VraysRadiance;
@@ -55,7 +53,6 @@ public class HRCGI : core.System
         new Vector2(0, 0)
     ];
 
-    private KeyboardState PrevKeyState;
     private int DebugIndex = 0;
     private int DebugTextureCount;
 
@@ -66,7 +63,6 @@ public class HRCGI : core.System
     public override void Initialize()
     {
         Geometry = Scene.ECS.GetSystem<Geometry>();
-        Gizmos = Scene.ECS.GetSystem<GizmosRenderer>();
 
         WorldSize = new Vector2(Renderer.ScaledHigherPowerOfTwo, Renderer.ScaledHigherPowerOfTwo);
 
@@ -78,8 +74,19 @@ public class HRCGI : core.System
         CreateRenderTargets();
 
         DebugTextureCount = 1 + CascadeCount * 4 + FrustumCount * 2 + 2;
-        PrevKeyState = Keyboard.GetState();
         Renderer.RenderScaleChanged += OnRenderScaleChanged;
+
+        UISystem.CreateWindow("hrcgi", "HRCGI", new Vector2(380, 20), new Vector2(340, 0));
+        UISystem.AddLabel("hrcgi", "info", "...");
+        UISystem.AddButton("hrcgi", "cycleDebug", "Cycle Debug Texture", () =>
+            DebugIndex = (DebugIndex + 1) % DebugTextureCount);
+        UISystem.AddButton("hrcgi", "cycleQuality", "Cycle Quality", () =>
+        {
+            ProbeScaleIndex = (ProbeScaleIndex + 1) % ProbeScales.Length;
+            DisposeRenderTargets();
+            CalculateCascadeSizes();
+            CreateRenderTargets();
+        });
     }
 
     private void OnRenderScaleChanged(float newScale)
@@ -144,8 +151,6 @@ public class HRCGI : core.System
 
     public override void Update()
     {
-        HandleDebugInput();
-
         var emissive = Geometry.EmissiveTexture;
         var absorption = Geometry.AbsorptionTexture;
 
@@ -169,7 +174,7 @@ public class HRCGI : core.System
 
         Renderer.PopTargets();
 
-        Gizmos.Set("HRCGI", $"World: {(int)WorldSize.X} | Cascades: {CascadeCount} | Shadow Quality: {QualityNames[ProbeScaleIndex]} [F5]");
+        UISystem.SetLabel("hrcgi", "info", $"World: {(int)WorldSize.X} | Cascades: {CascadeCount} | Quality: {QualityNames[ProbeScaleIndex]}");
     }
 
     private void RenderFrustumSeed(int frustum, Texture2D emissive, Texture2D absorption)
@@ -256,21 +261,6 @@ public class HRCGI : core.System
             .SetParameter("WorldSize", WorldSize)
             .Draw()
             .Commit();
-    }
-
-    private void HandleDebugInput()
-    {
-        var keyboard = Keyboard.GetState();
-        if (keyboard.IsKeyDown(Keys.F3) && !PrevKeyState.IsKeyDown(Keys.F3))
-            DebugIndex = (DebugIndex + 1) % DebugTextureCount;
-        if (keyboard.IsKeyDown(Keys.F5) && !PrevKeyState.IsKeyDown(Keys.F5))
-        {
-            ProbeScaleIndex = (ProbeScaleIndex + 1) % ProbeScales.Length;
-            DisposeRenderTargets();
-            CalculateCascadeSizes();
-            CreateRenderTargets();
-        }
-        PrevKeyState = keyboard;
     }
 
     public override void Render()

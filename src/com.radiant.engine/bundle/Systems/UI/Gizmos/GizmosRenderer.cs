@@ -17,27 +17,15 @@ public class GizmosRenderer : core.System
     private List<TextGizmo> TextQueue = new();
     private List<RectGizmo> RectQueue = new();
 
-    private Dictionary<string, List<string>> PendingStats = new();
-    private List<string> CategoryOrder = new();
     private new bool Enabled = false;
-    private Vector2 StatsPosition = new(15, 15);
-    private const float LineSpacing = 32f;
     private const float TextPadding = 4f;
     private Color TextBackgroundColor = new(0, 0, 0, 180);
-
-    private static readonly Color[] CategoryColors =
-    [
-        Color.Cyan, Color.LimeGreen, Color.Gold, Color.HotPink,
-        Color.Orange, Color.LightBlue, Color.Violet, Color.Yellow
-    ];
-    private Dictionary<string, Color> CategoryColorMap = new();
 
     private KeyboardState PrevKeyState;
 
     public override void Initialize()
     {
         BaseFont = Renderer.GetFont("fonts/BaseFont");
-
         PrevKeyState = Keyboard.GetState();
     }
 
@@ -60,25 +48,6 @@ public class GizmosRenderer : core.System
         ArcQueue.Clear();
         TextQueue.Clear();
         RectQueue.Clear();
-    }
-
-    public void Set(string category, string text)
-    {
-        if (!PendingStats.TryGetValue(category, out var list))
-        {
-            list = new List<string>();
-            PendingStats[category] = list;
-            CategoryOrder.Add(category);
-
-            if (!CategoryColorMap.ContainsKey(category))
-                CategoryColorMap[category] = CategoryColors[CategoryColorMap.Count % CategoryColors.Length];
-        }
-        list.Add(text);
-    }
-
-    private Color GetCategoryColor(string category)
-    {
-        return CategoryColorMap.TryGetValue(category, out var color) ? color : Color.White;
     }
 
     public void AddGizmoLine(Vector2 start, Vector2 end, Color color, float thickness = 1f)
@@ -118,10 +87,7 @@ public class GizmosRenderer : core.System
         if (Enabled)
         {
             Renderer.BeginDraw(SpriteSortMode.Deferred, BlendState.AlphaBlend, transform: Scale);
-
             RenderGizmos();
-            RenderStats();
-
             Renderer.EndDraw();
         }
 
@@ -133,10 +99,6 @@ public class GizmosRenderer : core.System
         Renderer.BeginDraw(SpriteSortMode.Deferred, BlendState.AlphaBlend, transform: Scale);
         RenderTextWithBackground(new TextGizmo(BuildPos, BuildText, Color.Gray));
         Renderer.EndDraw();
-
-        // Clear stats after render (ready for next frame)
-        foreach (var list in PendingStats.Values)
-            list.Clear();
     }
 
     private void RenderGizmos()
@@ -249,38 +211,6 @@ public class GizmosRenderer : core.System
             RenderLine(new LineGizmo(topRight, bottomRight, rect.Color, 1f));
             RenderLine(new LineGizmo(bottomRight, bottomLeft, rect.Color, 1f));
             RenderLine(new LineGizmo(bottomLeft, topLeft, rect.Color, 1f));
-        }
-    }
-
-    private void RenderStats()
-    {
-        if (BaseFont == null) return;
-
-        float y = StatsPosition.Y;
-
-        // Show controls hint
-        RenderTextWithBackground(new TextGizmo(
-            new Vector2(StatsPosition.X, y), "Hide [F1]", Color.Gray));
-        y += LineSpacing + 12;
-
-        foreach (var category in CategoryOrder)
-        {
-            if (!PendingStats.TryGetValue(category, out var lines) || lines.Count == 0)
-                continue;
-
-            var titleColor = GetCategoryColor(category);
-            RenderTextWithBackground(new TextGizmo(
-                new Vector2(StatsPosition.X, y), category, titleColor));
-            y += LineSpacing;
-
-            foreach (var line in lines)
-            {
-                RenderTextWithBackground(new TextGizmo(
-                    new Vector2(StatsPosition.X, y), line, Color.White));
-                y += LineSpacing;
-            }
-
-            y += 12;
         }
     }
 

@@ -12,7 +12,6 @@ namespace com.radiant.engine.bundle;
 public class PerformanceMonitor : core.System
 {
     // Dependencies
-    private GizmosRenderer Gizmos;
     private Process Process;
     private PerformanceCounter CpuCounter;
     private List<PerformanceCounter> GpuCounters;
@@ -59,7 +58,6 @@ public class PerformanceMonitor : core.System
 
     public override void Initialize()
     {
-        Gizmos = Scene.ECS.GetSystem<GizmosRenderer>();
         Process = Process.GetCurrentProcess();
         CpuCoreCount = Environment.ProcessorCount;
         CpuCoreCountInv = 1f / CpuCoreCount;
@@ -67,6 +65,15 @@ public class PerformanceMonitor : core.System
         InitializeCpuCounter();
         InitializeGpuCounters();
         StartSamplerThread();
+
+        UISystem.CreateWindow("perf", "Performance", new Vector2(20, 20), new Vector2(340, 0));
+        UISystem.AddLabel("perf", "fps", "FPS: -");
+        UISystem.AddLabel("perf", "frame", "Frame: -");
+        UISystem.AddLabel("perf", "cpu", "CPU: -");
+        UISystem.AddLabel("perf", "gpu", "GPU: -");
+        UISystem.AddLabel("perf", "ram", "RAM: -");
+        UISystem.AddLabel("perf", "peak", "Peak: -");
+        UISystem.AddLabel("perf", "build", Window.BuildTag);
     }
 
     private void StartSamplerThread()
@@ -216,30 +223,27 @@ public class PerformanceMonitor : core.System
 
         // Reuse StringBuilders - zero allocation
         FpsBuilder.Clear().Append("FPS: ").Append(DisplayFps).Append('/').Append(TargetFps);
-        Gizmos.Set("Performance", FpsBuilder.ToString());
+        UISystem.SetLabel("perf", "fps", FpsBuilder.ToString());
 
-        // Show both: avg frametime and actual frame pacing time
         FrameTimeBuilder.Clear()
             .Append("Frame: ")
             .AppendFormat("{0:F2}", FrameTimeAverage)
             .Append("ms (target: ")
             .AppendFormat("{0:F2}", TargetMs)
             .Append("ms)");
-        Gizmos.Set("Performance", FrameTimeBuilder.ToString());
+        UISystem.SetLabel("perf", "frame", FrameTimeBuilder.ToString());
 
         CpuBuilder.Clear().Append("CPU: ").AppendFormat("{0:F1}", CpuUsage).Append("% (").Append(CpuCoreCount).Append(" cores)");
-        Gizmos.Set("Performance", CpuBuilder.ToString());
+        UISystem.SetLabel("perf", "cpu", CpuBuilder.ToString());
 
         GpuBuilder.Clear().Append("GPU: ").AppendFormat("{0:F1}", GpuUsage).Append('%');
-        Gizmos.Set("Performance", GpuBuilder.ToString());
+        UISystem.SetLabel("perf", "gpu", GpuBuilder.ToString());
 
         RamBuilder.Clear().Append("RAM: ").AppendFormat("{0:F1}", MemoryMB).Append("MB");
-        Gizmos.Set("Memory", RamBuilder.ToString());
+        UISystem.SetLabel("perf", "ram", RamBuilder.ToString());
 
         PeakBuilder.Clear().Append("Peak: ").AppendFormat("{0:F1}", PeakMemoryMB).Append("MB");
-        Gizmos.Set("Memory", PeakBuilder.ToString());
-
-        Gizmos.Set("Build", Window.BuildTag);
+        UISystem.SetLabel("perf", "peak", PeakBuilder.ToString());
     }
 
     #region Public API

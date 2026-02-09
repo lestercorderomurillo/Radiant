@@ -81,8 +81,9 @@ radiant/
 │   │       ├── FX/ColorManagement/ColorManagement.cs  # Tonemapping post-process (F6 cycle)
 │   │       ├── FX/UDR/                         # Bilinear.cs, UDR1-3.cs, UDRQuality.cs
 │   │       └── UI/
-│   │           ├── Gizmos/Gizmos.cs + GizmosRenderer.cs  # Debug overlay (F1 toggle)
-│   │           └── Profiler/PerformanceMonitor.cs         # FPS/CPU/GPU/RAM stats
+│   │           ├── Gizmos/Gizmos.cs + GizmosRenderer.cs  # Visual gizmo overlay (F1 toggle, lines/circles/arcs/rects)
+│   │           ├── UIWindow/UITypes.cs + UISystem.cs      # Retained-mode UI windows (drag, widgets, stats, controls)
+│   │           └── Profiler/PerformanceMonitor.cs         # FPS/CPU/GPU/RAM stats (→ UISystem window)
 │   ├── runtime/
 │   │   ├── GameClient.cs             # Entry: creates Window + GameLoop + Scene
 │   │   ├── GameLoop.cs               # 144 FPS / 64 UPS, frame pacing (~212 lines)
@@ -93,7 +94,7 @@ radiant/
 │   │   ├── NetworkManager.cs
 │   │   └── NetworkMessage.cs
 │   └── tests/2D/                     # Test scenes
-│       ├── PacmanMazeLevelScene.cs    # Pac-Man demo (Tab=GI, F11=upscaler, X=lights, N=level, coin collection + HUD)
+│       ├── PacmanMazeLevelScene.cs    # Pac-Man demo (UISystem buttons for GI/upscaler/level/lights, coin collection + HUD)
 │       ├── SimpleLightScene.cs       # Single warm light
 │       └── TilesetScene.cs           # Tile world demo
 └── Program.cs                        # Entry point
@@ -326,17 +327,43 @@ public class MyScene : Scene {
 ## Debug Controls
 | Key | Action |
 |-----|--------|
-| F1 | Toggle gizmos overlay |
-| F2 | Cycle Geometry debug (emissive, absorption, SDF, JFA, motion) |
-| F3 | Cycle HRC texture displays |
-| F5 | Cycle HRC quality preset |
-| F6 | Cycle tonemapping (None/ACES/ACES2/AgX) |
-| F11 | Toggle upscaler (Bilinear ↔ UDR variants) |
-| Tab | Toggle GI system (HRCGI ↔ RCGI) |
+| F1 | Toggle gizmos visual overlay (lines, circles, arcs, rects) |
 | Arrow keys | Move player + collect coins (PacmanMazeLevelScene) |
-| N | Cycle level (PacmanMazeLevelScene) |
-| X | Spawn random lights (PacmanMazeLevelScene) |
 | ESC | Exit |
+
+All other controls (debug modes, quality cycling, GI/upscaler toggling, level cycling, light spawning, tonemapping, UDR settings) are now exposed via UISystem windows with buttons, sliders, and toggles. Each system creates its own window in `Initialize()`.
+
+## UI System (UISystem)
+Retained-mode window system with draggable panels, title bars, close buttons, and interactive widgets. Static API — safe to call even if UISystem isn't registered (calls silently ignored).
+
+### Window API
+```csharp
+UISystem.CreateWindow(id, title, position, size);  // size.Y auto-calculated
+UISystem.DestroyWindow(id);
+UISystem.ShowWindow(id) / HideWindow(id) / ToggleWindow(id);
+UISystem.IsWindowVisible(id);
+```
+
+### Widget API (call in Initialize/SetupScene)
+```csharp
+UISystem.AddLabel(windowId, widgetId, text);
+UISystem.AddButton(windowId, widgetId, text, Action callback);
+UISystem.AddToggle(windowId, widgetId, text, bool initial, Action<bool> callback);
+UISystem.AddSlider(windowId, widgetId, text, float min, float max, float initial, Action<float> callback);
+UISystem.RemoveWidget(windowId, widgetId);
+```
+
+### Update Values (call in Update)
+```csharp
+UISystem.SetLabel(windowId, widgetId, text);
+UISystem.SetSliderValue(windowId, widgetId, value);
+UISystem.SetToggleValue(windowId, widgetId, value);
+```
+
+### Input Query
+```csharp
+if (!UISystem.IsMouseOverUI()) { /* handle world clicks */ }
+```
 
 ## Key Patterns
 - **Struct components** with marker interface, ECS constrains `where T : struct, Component`
@@ -347,6 +374,8 @@ public class MyScene : Scene {
 - **GPU instancing** — Single draw call for up to 65k shapes via DynamicVertexBuffer
 - **Centralized asset loading** — All textures via `Renderer.GetTexture()`, fonts via `Renderer.GetFont()`, shaders via `Renderer.SetShader()`/`GetShaderEffect()`. Never access `Window.Content` directly.
 - **Renderer as sole MonoGame API** — `Window`, `Device`, `SpriteBatch` are `[Obsolete]`. Systems use Renderer wrappers: `Blit()`, `BeginDraw()`/`EndDraw()`, `CreateRenderTarget()`, `CreateTexture()`, `IsActive`, `ViewportBounds`, etc.
+- **Retained-mode UI** — `UISystem` provides static API (`UISystem.CreateWindow`, `UISystem.AddButton`, etc.). All systems create their own UI windows in `Initialize()` with labels for stats and buttons/sliders/toggles for controls (no keyboard shortcuts). If UISystem isn't registered, calls are silently ignored. Renders in `LateRender()` before GizmosRenderer. `UISystem.IsMouseOverUI()` for input gating.
+- **GizmosRenderer** — Visual overlay only (F1 toggle). Draws lines, circles, arcs, rects, text. No stats display — all stats are in UISystem windows. Systems no longer reference GizmosRenderer for stats (removed `Set()` method).
 
 ## Networking (mplay/)
 TCP client/server with HTTP lobby (NetworkManager). JSON serialization. Not heavily used — infrastructure exists but no active gameplay networking.
@@ -355,6 +384,6 @@ TCP client/server with HTTP lobby (NetworkManager). JSON serialization. Not heav
 Audio, physics engine, particles, skeletal animation, save/load, logging, asset hot-reload.
 
 ## Typical System Init Order
-1. PerformanceMonitor → 2. Geometry → 3. HRCGI/RCGI → 4. ColorManagement → 5. Bilinear/UDR → 6. PacmanMazeBuilder → 7. PacmanPlayer → 8. PacmanGhostAI → 9. RainbowGhostAI → 10. GizmosRenderer
+1. PerformanceMonitor → 2. Geometry → 3. HRCGI/RCGI → 4. ColorManagement → 5. Bilinear/UDR → 6. PacmanMazeBuilder → 7. PacmanPlayer → 8. PacmanGhostAI → 9. RainbowGhostAI → 10. UISystem → 11. GizmosRenderer
 
 (Actual order determined by `[RunAfter]`/`[RunBefore]` topological sort)

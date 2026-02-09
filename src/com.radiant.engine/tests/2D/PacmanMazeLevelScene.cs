@@ -2,18 +2,15 @@ using com.radiant.engine.bundle;
 using com.radiant.engine.runtime;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using Microsoft.Xna.Framework.Input;
 using System;
 
 namespace com.radiant.engine.core;
 
 public class PacmanMazeLevelScene : Scene
 {
-    private KeyboardState PrevKeyboard;
     private SystemGroup GI;
     private ColorManagement ColorMgmt;
     private SystemGroup UDR;
-    private GizmosRenderer Gizmos;
     private PacmanMazeBuilder Maze;
     private PacmanGhostAI GhostAI;
     private RainbowGhostAI RainbowAI;
@@ -101,7 +98,7 @@ public class PacmanMazeLevelScene : Scene
             CoinColor = new Color(80, 255, 200),
             CoinPulseSpeed = 1.5f,
             CoinPulseMin = 0.3f,
-             CoinPulseMax = 0.6f,
+            CoinPulseMax = 0.6f,
         },
         // Level 3: Rainbow, Clyde, Inky, Blinky (seeded)
         new PacmanLevelConfig
@@ -154,7 +151,7 @@ public class PacmanMazeLevelScene : Scene
             WallLight = new Color((byte)0, (byte)0, (byte)0, (byte)255),
 
             MazeSeed = 7131,
-            
+
             CoinColor = new Color(255, 255, 255),
             CoinPulseSpeed = 2.0f,
             CoinPulseMin = 0.3f,
@@ -176,6 +173,7 @@ public class PacmanMazeLevelScene : Scene
 
     public override void SetupECS()
     {
+        ECS.AddSystem<UISystem>();
         ECS.AddSystem<PerformanceMonitor>();
         ECS.AddSystem<Geometry>();
 
@@ -198,7 +196,7 @@ public class PacmanMazeLevelScene : Scene
         ECS.AddSystem<PacmanGhostAI>();
         ECS.AddSystem<RainbowGhostAI>();
 
-        Gizmos = ECS.AddSystem<GizmosRenderer>();
+        ECS.AddSystem<GizmosRenderer>();
 
         base.SetupECS();
     }
@@ -212,6 +210,28 @@ public class PacmanMazeLevelScene : Scene
 
         LoadLevel(0);
         UpdateUDRInput();
+
+        // Scene control window
+        UISystem.CreateWindow("scene", "Scene", new Vector2(20, 820), new Vector2(340, 0));
+        UISystem.AddLabel("scene", "level", $"Level: 1/{Levels.Length}");
+        UISystem.AddLabel("scene", "gi", $"GI: {GI.ActiveName}");
+        UISystem.AddLabel("scene", "upscaler", $"Upscaler: {UDR.ActiveName}");
+        UISystem.AddButton("scene", "nextLevel", "Next Level", () => LoadLevel((CurrentLevel + 1) % Levels.Length));
+        UISystem.AddButton("scene", "spawnLights", "Spawn Lights", () => LightFactory.SpawnRandom(ECS, 100_000, Renderer.VirtualSize));
+        UISystem.AddButton("scene", "toggleGI", "Toggle GI", () =>
+        {
+            GI.Toggle();
+            UpdateUDRInput();
+            UpdateWindowVisibility();
+        });
+        UISystem.AddButton("scene", "toggleUpscaler", "Toggle Upscaler", () =>
+        {
+            UDR.Toggle();
+            UpdateUDRInput();
+            UpdateWindowVisibility();
+        });
+
+        UpdateWindowVisibility();
 
         base.SetupScene();
     }
@@ -318,28 +338,6 @@ public class PacmanMazeLevelScene : Scene
 
     public override void Update()
     {
-        var keyboard = Keyboard.GetState();
-
-        if (keyboard.IsKeyDown(Keys.Tab) && PrevKeyboard.IsKeyUp(Keys.Tab))
-        {
-            GI.Toggle();
-            UpdateUDRInput();
-        }
-
-        if (keyboard.IsKeyDown(Keys.F11) && PrevKeyboard.IsKeyUp(Keys.F11))
-        {
-            UDR.Toggle();
-            UpdateUDRInput();
-        }
-
-        if (keyboard.IsKeyDown(Keys.X) && PrevKeyboard.IsKeyUp(Keys.X))
-            LightFactory.SpawnRandom(ECS, 100_000, Renderer.VirtualSize);
-
-        if (keyboard.IsKeyDown(Keys.N) && PrevKeyboard.IsKeyUp(Keys.N))
-            LoadLevel((CurrentLevel + 1) % Levels.Length);
-
-        PrevKeyboard = keyboard;
-
         // Pulse wall borders
         PulseTime += (float)GameTime.ElapsedGameTime.TotalSeconds;
         float t = 0.5f + 0.5f * MathF.Sin(PulseTime * 0.6f);
@@ -370,9 +368,9 @@ public class PacmanMazeLevelScene : Scene
                 BaseCoinColor.A);
         }
 
-        Gizmos.Set("Scene", $"Level: {CurrentLevel + 1}/{Levels.Length} [N]");
-        Gizmos.Set("Scene", $"GI: {GI.ActiveName} [Tab]");
-        Gizmos.Set("Scene", $"Upscaler: {UDR.ActiveName} [F11]");
+        UISystem.SetLabel("scene", "level", $"Level: {CurrentLevel + 1}/{Levels.Length}");
+        UISystem.SetLabel("scene", "gi", $"GI: {GI.ActiveName}");
+        UISystem.SetLabel("scene", "upscaler", $"Upscaler: {UDR.ActiveName}");
     }
 
     private void UpdateUDRInput()
@@ -395,5 +393,39 @@ public class PacmanMazeLevelScene : Scene
                 case UDR3 u3: u3.SetInputSource(colorOutput); break;
             }
         });
+    }
+
+    private void UpdateWindowVisibility()
+    {
+        // GI: show active, hide inactive
+        if (GI.Active is HRCGI)
+        {
+            UISystem.ShowWindow("hrcgi");
+            UISystem.HideWindow("rcgi");
+        }
+        else
+        {
+            UISystem.HideWindow("hrcgi");
+            UISystem.ShowWindow("rcgi");
+        }
+
+        // UDR: show active, hide rest
+        string[] udrWindows = ["bilinear", "udr1", "udr2", "udr3"];
+        string activeWindow = UDR.Active switch
+        {
+            Bilinear => "bilinear",
+            UDR1 => "udr1",
+            UDR2 => "udr2",
+            UDR3 => "udr3",
+            _ => ""
+        };
+
+        foreach (var w in udrWindows)
+        {
+            if (w == activeWindow)
+                UISystem.ShowWindow(w);
+            else
+                UISystem.HideWindow(w);
+        }
     }
 }

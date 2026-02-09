@@ -2,7 +2,6 @@ using System;
 using com.radiant.engine.core;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using Microsoft.Xna.Framework.Input;
 
 namespace com.radiant.engine.bundle;
 
@@ -19,18 +18,23 @@ public class UDR1 : core.System
 
     private Func<Texture2D> InputSource;
     private Geometry Geometry;
-    private GizmosRenderer Gizmos;
-    private KeyboardState PrevKeyState;
 
     public override void Initialize()
     {
-        Gizmos = Scene.ECS.GetSystem<GizmosRenderer>();
         Geometry = Scene.ECS.GetSystem<Geometry>();
         OutputSize = Renderer.ScreenSize;
         CreateRenderTargets();
         ApplyRenderScale();
         UDRQuality.Changed += _ => ApplyRenderScale();
-        PrevKeyState = Keyboard.GetState();
+
+        UISystem.CreateWindow("udr1", "UDR1", new Vector2(380, 370), new Vector2(340, 0));
+        UISystem.AddLabel("udr1", "quality", "...");
+        UISystem.AddLabel("udr1", "input", "...");
+        UISystem.AddLabel("udr1", "output", "...");
+        UISystem.AddButton("udr1", "cycleQuality", "Cycle Quality", () => UDRQuality.Cycle());
+        UISystem.AddSlider("udr1", "sharpness", "Sharpness", 0f, 2f, Sharpness, V => Sharpness = V);
+        UISystem.AddToggle("udr1", "edgeCorr", "Detail Reconstruction", EdgeCorrection, V => EdgeCorrection = V);
+        UISystem.AddToggle("udr1", "debugRays", "Debug Rays", DebugRays, V => DebugRays = V);
     }
 
     public void SetInputSource(Func<Texture2D> source)
@@ -56,15 +60,6 @@ public class UDR1 : core.System
     {
         if (InputSource == null)
             return;
-
-        HandleInput();
-
-        // Skip UDR1 processing when Off (native resolution)
-        /*if (ScaleFactor == 100)
-        {
-            Gizmos?.Set("UDR1", $"Quality: {QualityNames[QualityIndex]} [F4]");
-            return;
-        }*/
 
         var input = InputSource();
 
@@ -107,47 +102,9 @@ public class UDR1 : core.System
             .Commit()
             .SetTarget(null);
 
-        Gizmos?.Set("UDR1", $"Quality: {UDRQuality.Names[UDRQuality.Index]} ({UDRQuality.ScaleNormalized:P0}) [F4]");
-        Gizmos?.Set("UDR1", $"Input Size: {input.Width}x{input.Height}");
-        Gizmos?.Set("UDR1", $"Output Size: {OutputSize.X}x{OutputSize.Y}");
-        Gizmos?.Set("UDR1", $"Sharpness: {Sharpness:F2} [F7/F8]");
-        Gizmos?.Set("UDR1", $"Detail Reconstruction: {(EdgeCorrection ? "On" : "Off")} [F9]");
-        Gizmos?.Set("UDR1", $"Debug Rays: {(DebugRays ? "On" : "Off")} [F10]");
-    }
-
-    private void HandleInput()
-    {
-        var key = Keyboard.GetState();
-
-        // F4 to cycle quality
-        if (key.IsKeyDown(Keys.F4) && !PrevKeyState.IsKeyDown(Keys.F4))
-        {
-            UDRQuality.Cycle();
-        }
-
-        // F7/F8 to adjust sharpness
-        if (key.IsKeyDown(Keys.F7) && !PrevKeyState.IsKeyDown(Keys.F7))
-        {
-            Sharpness = Math.Max(0f, Sharpness - 0.1f);
-        }
-        if (key.IsKeyDown(Keys.F8) && !PrevKeyState.IsKeyDown(Keys.F8))
-        {
-            Sharpness = Math.Min(2f, Sharpness + 0.1f);
-        }
-
-        // F9 to toggle edge overlay
-        if (key.IsKeyDown(Keys.F9) && !PrevKeyState.IsKeyDown(Keys.F9))
-        {
-            EdgeCorrection = !EdgeCorrection;
-        }
-
-        // F10 to toggle debug rays visualization
-        if (key.IsKeyDown(Keys.F10) && !PrevKeyState.IsKeyDown(Keys.F10))
-        {
-            DebugRays = !DebugRays;
-        }
-
-        PrevKeyState = key;
+        UISystem.SetLabel("udr1", "quality", $"Quality: {UDRQuality.Names[UDRQuality.Index]} ({UDRQuality.ScaleNormalized:P0})");
+        UISystem.SetLabel("udr1", "input", $"Input Size: {input.Width}x{input.Height}");
+        UISystem.SetLabel("udr1", "output", $"Output Size: {OutputSize.X}x{OutputSize.Y}");
     }
 
     public override void Render()

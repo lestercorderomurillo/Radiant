@@ -2,7 +2,6 @@ using System;
 using com.radiant.engine.core;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using Microsoft.Xna.Framework.Input;
 
 namespace com.radiant.engine.bundle;
 
@@ -25,24 +24,30 @@ public class UDR2 : core.System
 
     private Func<Texture2D> InputSource;
     private Geometry Geometry;
-    private GizmosRenderer Gizmos;
-    private KeyboardState PrevKeyState;
 
     private int FrameIndex = 0;
 
     public override void Initialize()
     {
-        Gizmos = Scene.ECS.GetSystem<GizmosRenderer>();
         Geometry = Scene.ECS.GetSystem<Geometry>();
         OutputSize = Renderer.ScreenSize;
         CreateRenderTargets();
         ApplyRenderScale();
         UDRQuality.Changed += _ => ApplyRenderScale();
-        PrevKeyState = Keyboard.GetState();
         FrameIndex = 0;
 
         if (Geometry != null)
             Geometry.EnableSDF = true;
+
+        UISystem.CreateWindow("udr2", "UDR2", new Vector2(380, 370), new Vector2(340, 0));
+        UISystem.AddLabel("udr2", "quality", "...");
+        UISystem.AddLabel("udr2", "input", "...");
+        UISystem.AddLabel("udr2", "output", "...");
+        UISystem.AddButton("udr2", "cycleQuality", "Cycle Quality", () => UDRQuality.Cycle());
+        UISystem.AddSlider("udr2", "sharpness", "Sharpness", 0f, 2f, Sharpness, V => Sharpness = V);
+        UISystem.AddSlider("udr2", "frames", "Frames to Accumulate", 1, 16, FramesToAccumulate, V => { FramesToAccumulate = (int)V; FrameIndex = 0; });
+        UISystem.AddToggle("udr2", "edgeCorr", "Detail Reconstruction", EdgeCorrection, V => EdgeCorrection = V);
+        UISystem.AddToggle("udr2", "debugRays", "Debug Rays", DebugRays, V => DebugRays = V);
     }
 
     public void SetInputSource(Func<Texture2D> source)
@@ -84,8 +89,6 @@ public class UDR2 : core.System
         if (InputSource == null)
             return;
 
-        HandleInput();
-
         var input = InputSource();
 
         if (input == null)
@@ -115,7 +118,6 @@ public class UDR2 : core.System
             .SetTarget(null);
 
         // Pass 2: Temporal accumulation (running average)
-        // Weight for current frame: 1/N where N = min(FrameIndex+1, FramesToAccumulate)
         int effectiveFrames = Math.Min(FrameIndex + 1, FramesToAccumulate);
         float currentWeight = 1.0f / effectiveFrames;
 
@@ -153,60 +155,9 @@ public class UDR2 : core.System
 
         FrameIndex++;
 
-        Gizmos?.Set("UDR2", $"Quality: {UDRQuality.Names[UDRQuality.Index]} ({UDRQuality.ScaleNormalized:P0}) [F4]");
-        Gizmos?.Set("UDR2", $"Input Size: {input.Width}x{input.Height}");
-        Gizmos?.Set("UDR2", $"Output Size: {OutputSize.X}x{OutputSize.Y}");
-        Gizmos?.Set("UDR2", $"Sharpness: {Sharpness:F2} [F7/F8]");
-        Gizmos?.Set("UDR2", $"Frames to Accumulate: {FramesToAccumulate} [T/Y] (current: {effectiveFrames})");
-        Gizmos?.Set("UDR2", $"Detail Reconstruction: {(EdgeCorrection ? "On" : "Off")} [F9]");
-        Gizmos?.Set("UDR2", $"Debug Rays: {(DebugRays ? "On" : "Off")} [F10]");
-    }
-
-    private void HandleInput()
-    {
-        var key = Keyboard.GetState();
-
-        // F4 to cycle quality
-        if (key.IsKeyDown(Keys.F4) && !PrevKeyState.IsKeyDown(Keys.F4))
-        {
-            UDRQuality.Cycle();
-        }
-
-        // T/Y to adjust frames to accumulate
-        if (key.IsKeyDown(Keys.T) && !PrevKeyState.IsKeyDown(Keys.T))
-        {
-            FramesToAccumulate = Math.Max(1, FramesToAccumulate - 1);
-            FrameIndex = 0;  // Reset accumulation
-        }
-        if (key.IsKeyDown(Keys.Y) && !PrevKeyState.IsKeyDown(Keys.Y))
-        {
-            FramesToAccumulate = Math.Min(MaxFrames, FramesToAccumulate + 1);
-            FrameIndex = 0;  // Reset accumulation
-        }
-
-        // F7/F8 to adjust sharpness
-        if (key.IsKeyDown(Keys.F7) && !PrevKeyState.IsKeyDown(Keys.F7))
-        {
-            Sharpness = Math.Max(0f, Sharpness - 0.1f);
-        }
-        if (key.IsKeyDown(Keys.F8) && !PrevKeyState.IsKeyDown(Keys.F8))
-        {
-            Sharpness = Math.Min(2f, Sharpness + 0.1f);
-        }
-
-        // F9 to toggle edge correction
-        if (key.IsKeyDown(Keys.F9) && !PrevKeyState.IsKeyDown(Keys.F9))
-        {
-            EdgeCorrection = !EdgeCorrection;
-        }
-
-        // F10 to toggle debug rays visualization
-        if (key.IsKeyDown(Keys.F10) && !PrevKeyState.IsKeyDown(Keys.F10))
-        {
-            DebugRays = !DebugRays;
-        }
-
-        PrevKeyState = key;
+        UISystem.SetLabel("udr2", "quality", $"Quality: {UDRQuality.Names[UDRQuality.Index]} ({UDRQuality.ScaleNormalized:P0})");
+        UISystem.SetLabel("udr2", "input", $"Input Size: {input.Width}x{input.Height}");
+        UISystem.SetLabel("udr2", "output", $"Output Size: {OutputSize.X}x{OutputSize.Y}");
     }
 
     public override void Render()

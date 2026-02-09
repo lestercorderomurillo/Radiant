@@ -77,8 +77,7 @@ public class ECS : IGameObject
         SortSystemsByDependencies();
         
         for (int i = 0; i < Systems.Count; i++)
-            if (Systems[i].Enabled)
-                Systems[i].Initialize();
+            Systems[i].Initialize();
     }
 
     private void SortSystemsByDependencies()
