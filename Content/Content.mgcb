@@ -58,6 +58,12 @@
 /processorParam:DebugMode=Auto
 /build:shaders/HRC/HRC_MergingCones.fx
 
+#begin ColorManagement.fx
+/importer:EffectImporter
+/processor:EffectProcessor
+/processorParam:DebugMode=Auto
+/build:shaders/ColorManagement.fx
+
 #begin UDR1.fx
 /importer:EffectImporter
 /processor:EffectProcessor

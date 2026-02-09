@@ -11,6 +11,7 @@ public class PacmanMazeLevelScene : Scene
 {
     private KeyboardState PrevKeyboard;
     private SystemGroup GI;
+    private ColorManagement ColorMgmt;
     private SystemGroup UDR;
     private GizmosRenderer Gizmos;
     private PacmanMazeBuilder Maze;
@@ -182,6 +183,8 @@ public class PacmanMazeLevelScene : Scene
             ("HRCGI", ECS.AddSystem<HRCGI>()),
             ("RCGI", ECS.AddSystem<RCGI>(enabled: false))
         );
+
+        ColorMgmt = ECS.AddSystem<ColorManagement>();
 
         UDR = new SystemGroup(
             ("Raw", ECS.AddSystem<Bilinear>(enabled: false)),
@@ -374,18 +377,22 @@ public class PacmanMazeLevelScene : Scene
 
     private void UpdateUDRInput()
     {
-        Func<Texture2D> inputSource = () =>
+        Func<Texture2D> giSource = () =>
             GI.Active is HRCGI h ? h.GetOutput() :
             GI.Active is RCGI r ? r.GetOutput() : null;
+
+        ColorMgmt.SetInputSource(giSource);
+
+        Func<Texture2D> colorOutput = () => ColorMgmt.GetOutput();
 
         UDR.ForEach(s =>
         {
             switch (s)
             {
-                case Bilinear b: b.SetInputSource(inputSource); break;
-                case UDR1 u1: u1.SetInputSource(inputSource); break;
-                case UDR2 u2: u2.SetInputSource(inputSource); break;
-                case UDR3 u3: u3.SetInputSource(inputSource); break;
+                case Bilinear b: b.SetInputSource(colorOutput); break;
+                case UDR1 u1: u1.SetInputSource(colorOutput); break;
+                case UDR2 u2: u2.SetInputSource(colorOutput); break;
+                case UDR3 u3: u3.SetInputSource(colorOutput); break;
             }
         });
     }

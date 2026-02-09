@@ -62,12 +62,6 @@ PixelShaderInput MainVS(VertexShaderInput input)
     return output;
 }
 
-float3 ACESToneMapping(float3 color)
-{
-    float3 x = color;
-    return saturate((x * mad(2.51, x, 0.03)) / mad(x, mad(2.43, x, 0.59), 0.14));
-}
-
 float3 IntegrateSkyRadiance_Optimized(float2 angle)
 {
     float cosA0, cosA1, sinA0, sinA1;
@@ -192,10 +186,7 @@ float4 GenerateOutputTexture(PixelShaderInput input) : SV_Target
     }
 
     color.rgb *= 0.25;
-    
-    if (CascadeIndex == 0.0)
-        color.rgb = ACESToneMapping(color.rgb);
-    
+
     return float4(color.rgb, 1.0);
 }
 

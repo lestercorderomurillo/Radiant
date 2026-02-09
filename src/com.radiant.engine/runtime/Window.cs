@@ -60,7 +60,7 @@ public class Window : Game
         GameLoop.SpriteBatch = SpriteBatch;
 
         // Hook into Form resize events for WindowsDX
-        Form = (WinForms.Form)WinForms.Form.FromHandle(Window.Handle);
+        Form = (WinForms.Form)WinForms.Control.FromHandle(Window.Handle);
         Form.WindowState = WinForms.FormWindowState.Maximized;
         Form.Resize += OnFormResize;
 

@@ -27,8 +27,6 @@ PixelShaderInput MainVS(VertexShaderInput input)
     return output;
 }
 
-float3 ToSRGB(float3 c) { return pow(abs(c), 1.0 / 2.2); }
-
 float4 MainPS(PixelShaderInput input) : SV_Target0
 {
     float2 uv = input.UV;
@@ -46,7 +44,7 @@ float4 MainPS(PixelShaderInput input) : SV_Target0
 
     float3 radiance = r0 + r1 + r2 + r3;
 
-    return float4(ToSRGB(radiance / 4.0), 1.0);
+    return float4(radiance / 4.0, 1.0);
 }
 
 technique GenerateOutputTexture

@@ -115,7 +115,7 @@ public class HRCGI : core.System
     private void CreateRenderTargets()
     {
         var cascadeFormat = SurfaceFormat.HalfVector4;
-        var finalFormat = SurfaceFormat.Color;
+        var finalFormat = SurfaceFormat.HalfVector4;
 
         // Paired cascade surfaces (reused for each frustum)
         VraysRadiance = new RenderTarget2D[CascadeCount];

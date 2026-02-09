@@ -33,6 +33,7 @@ radiant/
 │   │   │   ├── HRC_FrustumSeed.fx
 │   │   │   └── HRC_MergingCones.fx
 │   │   ├── RCGI/RCGI.fx              # Older ray-march GI (alternative)
+│   │   ├── ColorManagement.fx        # Tonemapping post-process (None/ACES/ACES2/AgX)
 │   │   └── UDR/UDR1-3.fx            # Ultra Dynamic Range upscalers
 │   └── Content.mgcb                  # Content pipeline (HiDef, Windows)
 ├── src/com.radiant.engine/
@@ -77,6 +78,7 @@ radiant/
 │   │       │       ├── Player/PacmanPlayer.cs          # Arrow-key player + coin collection + HUD
 │   │       │       └── RainbowGhost/RainbowGhostAI.cs  # Rainbow ghost (clone/merge cycle)
 │   │       ├── 3D/Tileset3D/Tileset3D.cs       # 3D tilemap (placeholder)
+│   │       ├── FX/ColorManagement/ColorManagement.cs  # Tonemapping post-process (F6 cycle)
 │   │       ├── FX/UDR/                         # Bilinear.cs, UDR1-3.cs, UDRQuality.cs
 │   │       └── UI/
 │   │           ├── Gizmos/Gizmos.cs + GizmosRenderer.cs  # Debug overlay (F1 toggle)
@@ -278,7 +280,8 @@ Quality presets (F5): ProbeScale 4/3/2/1 (Performance → Native)
 | VraysRadiance/Transmittance[C] | HalfVector4 | Per-cascade |
 | MergeRadiance/Transmittance[C] | HalfVector4 | Per-cascade |
 | FrustumRadiance/Transmittance[F] | HalfVector4 | Per-frustum (4) |
-| FinalTexture | Color | World-sized, final GI output |
+| FinalTexture (HRCGI) | HalfVector4 | World-sized, raw linear GI output |
+| ColorManagement OutputTexture | Color | Matches input size, tonemapped sRGB |
 
 ## Shader Rules (Critical)
 - **Register collision**: InstancedShapes.fx must NOT overlap with Geometry.fx (t0-t3, s0-s1). Use t4+/s2+ for InstancedShapes texture params.
@@ -307,6 +310,7 @@ public class MyScene : Scene {
         ECS.AddSystem<PerformanceMonitor>();
         ECS.AddSystem<Geometry>();
         ECS.AddSystem<HRCGI>();
+        ECS.AddSystem<ColorManagement>();
         ECS.AddSystem<Bilinear>();
         ECS.AddSystem<GizmosRenderer>();
         base.SetupECS(); // triggers topological sort
@@ -326,6 +330,7 @@ public class MyScene : Scene {
 | F2 | Cycle Geometry debug (emissive, absorption, SDF, JFA, motion) |
 | F3 | Cycle HRC texture displays |
 | F5 | Cycle HRC quality preset |
+| F6 | Cycle tonemapping (None/ACES/ACES2/AgX) |
 | F11 | Toggle upscaler (Bilinear ↔ UDR variants) |
 | Tab | Toggle GI system (HRCGI ↔ RCGI) |
 | Arrow keys | Move player + collect coins (PacmanMazeLevelScene) |
@@ -350,6 +355,6 @@ TCP client/server with HTTP lobby (NetworkManager). JSON serialization. Not heav
 Audio, physics engine, particles, skeletal animation, save/load, logging, asset hot-reload.
 
 ## Typical System Init Order
-1. PerformanceMonitor → 2. Geometry → 3. HRCGI/RCGI → 4. Bilinear/UDR → 5. PacmanMazeBuilder → 6. PacmanPlayer → 7. PacmanGhostAI → 8. RainbowGhostAI → 9. GizmosRenderer
+1. PerformanceMonitor → 2. Geometry → 3. HRCGI/RCGI → 4. ColorManagement → 5. Bilinear/UDR → 6. PacmanMazeBuilder → 7. PacmanPlayer → 8. PacmanGhostAI → 9. RainbowGhostAI → 10. GizmosRenderer
 
 (Actual order determined by `[RunAfter]`/`[RunBefore]` topological sort)
