@@ -63,9 +63,9 @@ public class PacmanMazeLevelScene : Scene
 
     private static readonly (int x, int y)[] DefaultGhostHouseCells =
     [
-        (11, 13), (12, 13), (13, 13), (14, 13), (15, 13), (16, 13),
-        (11, 14), (12, 14), (13, 14), (14, 14), (15, 14), (16, 14),
         (11, 15), (12, 15), (13, 15), (14, 15), (15, 15), (16, 15),
+        (11, 14), (12, 14), (13, 14), (14, 14), (15, 14), (16, 14),
+        (11, 13), (12, 13), (13, 13), (14, 13), (15, 13), (16, 13),
     ];
 
     private static readonly PacmanLevelConfig[] Levels =
@@ -82,7 +82,7 @@ public class PacmanMazeLevelScene : Scene
             CoinColor = new Color(165, 130, 15),
 
             Ghosts = [PacmanGhostType.Blinky, PacmanGhostType.Pinky, PacmanGhostType.Inky, PacmanGhostType.Clyde],
-            GhostReleaseTimes = [1f, 3f, 5f, 7f],
+            GhostReleaseTimes = [4f, 8f, 12f, 16f],
             PlayerStartCell = (14, 23),
         },
         // Level 2: Pinky, Blinky, Shadow (seeded)
@@ -90,7 +90,7 @@ public class PacmanMazeLevelScene : Scene
         {
             Procedural = true,
             Ghosts = [PacmanGhostType.Pinky, PacmanGhostType.Blinky, PacmanGhostType.Shadow],
-            GhostReleaseTimes = [1f, 6f, 10f],
+            GhostReleaseTimes = [4f, 8f, 24f],
             PlayerStartCell = (14, 23),
 
             MazeSeed = 2482,
@@ -108,7 +108,7 @@ public class PacmanMazeLevelScene : Scene
         {
             Procedural = true,
             Ghosts = [PacmanGhostType.Rainbow, PacmanGhostType.Clyde, PacmanGhostType.Inky, PacmanGhostType.Blinky],
-            GhostReleaseTimes = [1f, 8f, 10f, 25f],
+            GhostReleaseTimes = [4f, 8f, 12f, 16f],
             PlayerStartCell = (14, 23),
 
             MazeSeed = 1344,
@@ -127,7 +127,7 @@ public class PacmanMazeLevelScene : Scene
         {
             Procedural = true,
             Ghosts = [PacmanGhostType.Dinky, PacmanGhostType.Clyde, PacmanGhostType.Blinky],
-            GhostReleaseTimes = [1f, 3f, 5f],
+            GhostReleaseTimes = [4f, 4f, 4f],
             PlayerStartCell = (14, 23),
 
             MazeSeed = 1235,
@@ -146,7 +146,7 @@ public class PacmanMazeLevelScene : Scene
         {
             Procedural = true,
             Ghosts = [PacmanGhostType.Shadow, PacmanGhostType.Pinky, PacmanGhostType.Rainbow, PacmanGhostType.Clyde],
-            GhostReleaseTimes = [1f, 5f, 7f, 9f],
+            GhostReleaseTimes = [4f, 8f, 16f, 24f],
             PlayerStartCell = (14, 23),
 
             // dark color, no light on walls, bright coins with fast pulse

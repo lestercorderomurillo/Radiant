@@ -24,7 +24,7 @@ public class RainbowGhostAI : core.System
     private const float SoloDuration = 5f;
     private const float DuoSplitDelay = 3f;
     private const float TrioDuration = 7f;
-    private const float MergeSpeedMult = 1.5f;
+    private static readonly float[] MergeSpeedMults = [1.8f, 1.5f, 1.3f];
     private const float HueCycleSpeed = 0.35f;
 
     // Pac-Man direction priority: Up, Left, Down, Right
@@ -81,7 +81,7 @@ public class RainbowGhostAI : core.System
         MainId = entityId;
         MainCell = startCell;
         MainTarget = startCell;
-        MainDir = (0, 0);
+        MainDir = (1, 0);
         MainHue = 0f;
         MainExitedHouse = false;
         CloneCount = 0;
@@ -135,8 +135,12 @@ public class RainbowGhostAI : core.System
         for (int i = 0; i < CloneCount; i++)
             UpdateCloneColor(i);
 
-        // Wait for release
-        if (ElapsedTime < ReleaseTime) return;
+        // Before release: wander in house
+        if (ElapsedTime < ReleaseTime)
+        {
+            MoveEntity(ref MainCell, ref MainTarget, ref MainDir, MainId, dt, 0);
+            return;
+        }
 
         // State machine
         PhaseTimer += dt;
@@ -176,10 +180,9 @@ public class RainbowGhostAI : core.System
                 break;
 
             case RainbowPhase.Merging:
-                float mergeDt = dt * MergeSpeedMult;
-                MoveEntity(ref MainCell, ref MainTarget, ref MainDir, MainId, mergeDt, 0);
+                MoveEntity(ref MainCell, ref MainTarget, ref MainDir, MainId, dt * MergeSpeedMults[0], 0);
                 for (int i = 0; i < CloneCount; i++)
-                    MoveEntity(ref CloneCells[i], ref CloneTargets[i], ref CloneDirs[i], CloneIds[i], mergeDt, 1 + i);
+                    MoveEntity(ref CloneCells[i], ref CloneTargets[i], ref CloneDirs[i], CloneIds[i], dt * MergeSpeedMults[1 + i], 1 + i);
 
                 CheckMerges();
 
@@ -343,6 +346,8 @@ public class RainbowGhostAI : core.System
         ref (int dx, int dy) Dir, int EntityId, float dt, int EyeIndex)
     {
         float step = GhostSpeed * dt;
+        if (EyeIndex == 0 && !MainExitedHouse && ElapsedTime < ReleaseTime)
+            step *= 0.5f;
         ref var transform = ref Scene.ECS.GetComponent<Transform>(EntityId);
         var pos = new Vector2(transform.Position.X, transform.Position.Y);
         var target = Maze.CellCenter(Target.x, Target.y);
@@ -363,7 +368,10 @@ public class RainbowGhostAI : core.System
                     MainExitedHouse = true;
                 else
                 {
-                    PickHouseExit(ref Cell, ref Target, ref Dir);
+                    if (ElapsedTime >= ReleaseTime)
+                        PickHouseExit(ref Cell, ref Target, ref Dir);
+                    else
+                        PickHouseWander(ref Cell, ref Target, ref Dir);
                     target = Maze.CellCenter(Target.x, Target.y);
                     diff = target - pos;
                     dist = diff.Length();
@@ -420,6 +428,32 @@ public class RainbowGhostAI : core.System
                     Target = (cx + DXs[d], cy + DYs[d]);
                     return;
                 }
+        }
+    }
+
+    private void PickHouseWander(ref (int x, int y) Cell, ref (int x, int y) Target,
+        ref (int dx, int dy) Dir)
+    {
+        var (cx, cy) = Cell;
+        var (pdx, _) = Dir;
+
+        if (pdx == 0)
+            pdx = 1;
+
+        if (Maze.CanMove(cx, cy, pdx, 0) && Maze.InGhostHouse(cx + pdx, cy))
+        {
+            Dir = (pdx, 0);
+            Target = (cx + pdx, cy);
+        }
+        else if (Maze.CanMove(cx, cy, -pdx, 0) && Maze.InGhostHouse(cx - pdx, cy))
+        {
+            Dir = (-pdx, 0);
+            Target = (cx - pdx, cy);
+        }
+        else
+        {
+            Dir = (0, 0);
+            Target = (cx, cy);
         }
     }
 

@@ -114,7 +114,7 @@ public class PacmanGhostAI : core.System
         {
             GhostCells[i] = startCells[i];
             GhostTargets[i] = startCells[i];
-            GhostDirs[i] = (0, 0);
+            GhostDirs[i] = (1, 0);
             PacmanGhostTypes[i] = types != null ? types[i] : (PacmanGhostType)(i % 6);
             ChaseTargets[i] = PickRandomWalkable();
             ExitedHouse[i] = false;
@@ -188,13 +188,13 @@ public class PacmanGhostAI : core.System
 
         for (int i = 0; i < GhostIds.Length; i++)
         {
-            if (ElapsedTime < ReleaseTimes[i]) continue;
-
-            float currentStep = (CurrentMode == PacmanGhostMode.Frightened && ExitedHouse[i])
-                ? frightenedStep : step;
+            float currentStep = !ExitedHouse[i] && ElapsedTime < ReleaseTimes[i]
+                ? step * 0.5f
+                : (CurrentMode == PacmanGhostMode.Frightened && ExitedHouse[i])
+                    ? frightenedStep : step;
 
             // Shadow: 1.25x base, ramps to 1.5x when approaching, normal speed when very close
-            if (PacmanGhostTypes[i] == PacmanGhostType.Shadow && CurrentMode != PacmanGhostMode.Frightened)
+            if (PacmanGhostTypes[i] == PacmanGhostType.Shadow && ExitedHouse[i] && CurrentMode != PacmanGhostMode.Frightened)
             {
                 var (scx, scy) = GhostCells[i];
                 var (stx, sty) = Player != null ? Player.Cell : ChaseTargets[i];
@@ -400,14 +400,17 @@ public class PacmanGhostAI : core.System
         var (cx, cy) = GhostCells[i];
         var (pdx, pdy) = GhostDirs[i];
 
-        // Ghost house exit: special movement (center horizontally, then straight up)
+        // Ghost house: wander horizontally until released, then exit
         if (!ExitedHouse[i])
         {
             if (!Maze.InGhostHouse(cx, cy) && !Maze.IsGhostDoor(cx, cy))
                 ExitedHouse[i] = true;
             else
             {
-                PickHouseExit(i);
+                if (ElapsedTime >= ReleaseTimes[i])
+                    PickHouseExit(i);
+                else
+                    PickHouseWander(i);
                 return;
             }
         }
@@ -503,6 +506,32 @@ public class PacmanGhostAI : core.System
                     GhostTargets[i] = (cx + DXs[d], cy + DYs[d]);
                     return;
                 }
+        }
+    }
+
+    /// <summary>Ghost house wander: bounce horizontally on current row until released.</summary>
+    private void PickHouseWander(int i)
+    {
+        var (cx, cy) = GhostCells[i];
+        var (pdx, _) = GhostDirs[i];
+
+        if (pdx == 0)
+            pdx = Rng.Next(2) == 0 ? -1 : 1;
+
+        if (Maze.CanMove(cx, cy, pdx, 0) && Maze.InGhostHouse(cx + pdx, cy))
+        {
+            GhostDirs[i] = (pdx, 0);
+            GhostTargets[i] = (cx + pdx, cy);
+        }
+        else if (Maze.CanMove(cx, cy, -pdx, 0) && Maze.InGhostHouse(cx - pdx, cy))
+        {
+            GhostDirs[i] = (-pdx, 0);
+            GhostTargets[i] = (cx - pdx, cy);
+        }
+        else
+        {
+            GhostDirs[i] = (0, 0);
+            GhostTargets[i] = (cx, cy);
         }
     }
 
