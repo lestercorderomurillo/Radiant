@@ -1,6 +1,7 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
+using com.radiant.engine.runtime;
 using System;
 using System.Collections.Generic;
 
@@ -18,7 +19,7 @@ public class GizmosRenderer : core.System
 
     private Dictionary<string, List<string>> PendingStats = new();
     private List<string> CategoryOrder = new();
-    private new bool Enabled = true;
+    private new bool Enabled = false;
     private Vector2 StatsPosition = new(15, 15);
     private const float LineSpacing = 32f;
     private const float TextPadding = 4f;
@@ -107,22 +108,31 @@ public class GizmosRenderer : core.System
 
     public override void LateRender()
     {
+        // Scale from virtual coordinates to actual screen pixels so gizmos
+        // resize proportionally with the window (resolution-independent).
+        var Scale = Matrix.CreateScale(
+            (float)Renderer.ScreenWidth / Renderer.VirtualWidth,
+            (float)Renderer.ScreenHeight / Renderer.VirtualHeight,
+            1f);
+
         if (Enabled)
         {
-            // Scale from virtual coordinates to actual screen pixels so gizmos
-            // resize proportionally with the window (resolution-independent).
-            var scale = Matrix.CreateScale(
-                (float)Renderer.ScreenWidth / Renderer.VirtualWidth,
-                (float)Renderer.ScreenHeight / Renderer.VirtualHeight,
-                1f);
-
-            Renderer.BeginDraw(SpriteSortMode.Deferred, BlendState.AlphaBlend, transform: scale);
+            Renderer.BeginDraw(SpriteSortMode.Deferred, BlendState.AlphaBlend, transform: Scale);
 
             RenderGizmos();
             RenderStats();
 
             Renderer.EndDraw();
         }
+
+        // Always render build number in bottom-left corner
+        var BuildText = $"Build {Window.BuildNumber}";
+        var TextSize = BaseFont.MeasureString(BuildText);
+        var BuildPos = new Vector2(15, Renderer.VirtualHeight - TextSize.Y - 15);
+
+        Renderer.BeginDraw(SpriteSortMode.Deferred, BlendState.AlphaBlend, transform: Scale);
+        RenderTextWithBackground(new TextGizmo(BuildPos, BuildText, Color.Gray));
+        Renderer.EndDraw();
 
         // Clear stats after render (ready for next frame)
         foreach (var list in PendingStats.Values)

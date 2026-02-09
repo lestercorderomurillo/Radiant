@@ -69,10 +69,13 @@ radiant/
 │   │       │   ├── PerlinNoise2D/PerlinNoise.cs
 │   │       │   ├── MouseLight/MouseLight.cs    # Mouse-following light
 │   │       │   ├── PaintBrush/PaintBrush.cs    # Brush-based entity painting
-│   │       │   ├── MazeBuilder/PacmanMazeBuilder.cs    # Pac-Man maze layout
+│   │       │   ├── MazeBuilder/PacmanMazeBuilder.cs    # Pac-Man maze layout + coin cell tracking
+│   │       │   ├── MazeBuilder/PacmanMazeGenerator.cs # Procedural maze generation (randomfill)
+│   │       │   ├── MazeBuilder/PacmanLevelConfig.cs   # Per-level config (coins, pulse, ghosts, walls)
 │   │       │   └── AI/Pacman/
 │   │       │       ├── GhostAI/PacmanGhostAI.cs       # Ghost AI (scatter/chase/frightened)
-│   │       │       └── Player/PacmanPlayer.cs          # Arrow-key player (tile-based movement)
+│   │       │       ├── Player/PacmanPlayer.cs          # Arrow-key player + coin collection + HUD
+│   │       │       └── RainbowGhost/RainbowGhostAI.cs  # Rainbow ghost (clone/merge cycle)
 │   │       ├── 3D/Tileset3D/Tileset3D.cs       # 3D tilemap (placeholder)
 │   │       ├── FX/UDR/                         # Bilinear.cs, UDR1-3.cs, UDRQuality.cs
 │   │       └── UI/
@@ -88,7 +91,7 @@ radiant/
 │   │   ├── NetworkManager.cs
 │   │   └── NetworkMessage.cs
 │   └── tests/2D/                     # Test scenes
-│       ├── PacmanMazeLevelScene.cs    # Pac-Man demo (Tab=GI, F11=upscaler, X=lights)
+│       ├── PacmanMazeLevelScene.cs    # Pac-Man demo (Tab=GI, F11=upscaler, X=lights, N=level, coin collection + HUD)
 │       ├── SimpleLightScene.cs       # Single warm light
 │       └── TilesetScene.cs           # Tile world demo
 └── Program.cs                        # Entry point
@@ -325,7 +328,8 @@ public class MyScene : Scene {
 | F5 | Cycle HRC quality preset |
 | F11 | Toggle upscaler (Bilinear ↔ UDR variants) |
 | Tab | Toggle GI system (HRCGI ↔ RCGI) |
-| Arrow keys | Move player (PacmanMazeLevelScene) |
+| Arrow keys | Move player + collect coins (PacmanMazeLevelScene) |
+| N | Cycle level (PacmanMazeLevelScene) |
 | X | Spawn random lights (PacmanMazeLevelScene) |
 | ESC | Exit |
 
@@ -346,6 +350,6 @@ TCP client/server with HTTP lobby (NetworkManager). JSON serialization. Not heav
 Audio, physics engine, particles, skeletal animation, save/load, logging, asset hot-reload.
 
 ## Typical System Init Order
-1. PerformanceMonitor → 2. Geometry → 3. HRCGI/RCGI → 4. Bilinear/UDR → 5. PacmanMazeBuilder → 6. PacmanPlayer → 7. PacmanGhostAI → 8. GizmosRenderer
+1. PerformanceMonitor → 2. Geometry → 3. HRCGI/RCGI → 4. Bilinear/UDR → 5. PacmanMazeBuilder → 6. PacmanPlayer → 7. PacmanGhostAI → 8. RainbowGhostAI → 9. GizmosRenderer
 
 (Actual order determined by `[RunAfter]`/`[RunBefore]` topological sort)

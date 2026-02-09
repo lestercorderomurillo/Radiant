@@ -17,6 +17,8 @@ public class PacmanMazeBuilder : core.System
     public string[] Sections { get; set; }
 
     public List<int> BorderIds { get; private set; } = new();
+    public List<int> WallIds { get; private set; } = new();
+    public Dictionary<(int, int), int> CoinCells { get; private set; } = new();
 
     // Ghost house bounds (grid coordinates, inclusive). (-1,-1,-1,-1) = none.
     public (int left, int top, int right, int bottom) GhostHouse { get; set; } = (-1, -1, -1, -1);
@@ -99,6 +101,7 @@ public class PacmanMazeBuilder : core.System
     public int[] SpawnCoins(float radius, Color emissive, float z)
     {
         var ecs = Scene.ECS;
+        CoinCells.Clear();
 
         int count = 0;
         for (int y = 0; y < Rows; y++)
@@ -112,11 +115,28 @@ public class PacmanMazeBuilder : core.System
             for (int x = 0; x < Cols; x++)
             {
                 if (Grid[x, y] || InGhostHouse(x, y) || IsGhostDoor(x, y)) continue;
-                ids[idx++] = LightFactory.CreateLight(ecs, CellCenter(x, y), radius,
+                int id = LightFactory.CreateLight(ecs, CellCenter(x, y), radius,
                     emissive, emissive, z);
+                ids[idx++] = id;
+                CoinCells[(x, y)] = id;
             }
 
         return ids;
+    }
+
+    public bool TryCollectCoin(int cx, int cy)
+    {
+        if (!CoinCells.Remove((cx, cy), out int entityId)) return false;
+        Scene.ECS.DestroyEntity(entityId);
+        return true;
+    }
+
+    public void ClearCoins()
+    {
+        var ecs = Scene.ECS;
+        foreach (var id in CoinCells.Values)
+            ecs.DestroyEntity(id);
+        CoinCells.Clear();
     }
 
     public int[] SpawnAtCells((int x, int y)[] cells, Color[] colors, float radius, float z,
@@ -244,6 +264,18 @@ public class PacmanMazeBuilder : core.System
             }
     }
 
+    public void ClearMaze()
+    {
+        var ecs = Scene.ECS;
+        for (int i = 0; i < WallIds.Count; i++)
+            ecs.DestroyEntity(WallIds[i]);
+        for (int i = 0; i < BorderIds.Count; i++)
+            ecs.DestroyEntity(BorderIds[i]);
+        WallIds.Clear();
+        BorderIds.Clear();
+        Grid = null;
+    }
+
     private void CreateWall(Vector2 position, Vector2 size)
     {
         var ecs = Scene.ECS;
@@ -262,6 +294,8 @@ public class PacmanMazeBuilder : core.System
 
         material.Albedo = WallColor;
         material.Emissive = Color.Transparent;
+
+        WallIds.Add(id);
     }
 
     private void CreateEmissiveBorder(Vector2 position, Vector2 size, Color emissive)

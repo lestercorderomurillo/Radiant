@@ -1,5 +1,6 @@
 using com.radiant.engine.core;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using System;
 
@@ -11,11 +12,17 @@ public class PacmanPlayer : core.System
 {
     public (int x, int y) Cell { get; private set; }
     public Vector2 WorldPosition { get; private set; }
+    public int CoinsCollected { get; private set; }
+    public int CoinsTotal { get; private set; }
+    public Color CoinColor { get; set; } = new Color(255, 220, 50);
 
     PacmanMazeBuilder Maze;
     int EntityId;
     float Speed = 200f;
     float Z;
+    bool Tracked;
+    SpriteFont HudFont;
+    (int x, int y) PrevCell = (-1, -1);
 
     (int x, int y) TargetCell;
     (int dx, int dy) CurrentDir;
@@ -30,16 +37,30 @@ public class PacmanPlayer : core.System
         BufferedDir = (0, 0);
         Z = z;
         WorldPosition = Maze.CellCenter(startCell.x, startCell.y);
+        Tracked = true;
+        PrevCell = (-1, -1);
+        CoinsCollected = 0;
+        CoinsTotal = Maze.CoinCells.Count;
+    }
+
+    public void Clear()
+    {
+        if (!Tracked) return;
+        Scene.ECS.DestroyEntity(EntityId);
+        Tracked = false;
+        CoinsCollected = 0;
+        CoinsTotal = 0;
     }
 
     public override void Initialize()
     {
         Maze = Scene.ECS.GetSystem<PacmanMazeBuilder>();
+        HudFont = Renderer.GetFont("fonts/BaseFont");
     }
 
     public override void Update()
     {
-        if (Maze == null) return;
+        if (Maze == null || !Tracked) return;
 
         var kb = Keyboard.GetState();
         ReadInput(kb);
@@ -59,6 +80,14 @@ public class PacmanPlayer : core.System
             var raw = TargetCell;
             Cell = (Maze.WrapX(raw.x), raw.y);
             pos = Maze.CellCenter(Cell.x, Cell.y);
+
+            // Collect coin at new cell
+            if (Cell != PrevCell)
+            {
+                if (Maze.TryCollectCoin(Cell.x, Cell.y))
+                    CoinsCollected++;
+                PrevCell = Cell;
+            }
 
             // Try buffered direction first, then current direction
             if (BufferedDir != (0, 0) && Maze.CanMove(Cell.x, Cell.y, BufferedDir.dx, BufferedDir.dy))
@@ -90,6 +119,59 @@ public class PacmanPlayer : core.System
 
         transform.Position = new Vector3(pos, Z);
         WorldPosition = pos;
+    }
+
+    public override void LateRender()
+    {
+        if (!Tracked || HudFont == null) return;
+
+        var scale = Matrix.CreateScale(
+            (float)Renderer.ScreenWidth / Renderer.VirtualWidth,
+            (float)Renderer.ScreenHeight / Renderer.VirtualHeight,
+            1f);
+
+        string collected = CoinsCollected.ToString();
+        string separator = " / ";
+        string total = CoinsTotal.ToString();
+
+        var collectedSize = HudFont.MeasureString(collected);
+        var separatorSize = HudFont.MeasureString(separator);
+        var totalSize = HudFont.MeasureString(total);
+
+        float iconSize = 20f;
+        float gap = 10f;
+        float textWidth = collectedSize.X + separatorSize.X + totalSize.X;
+        float fullWidth = iconSize + gap + textWidth;
+        float textHeight = collectedSize.Y;
+
+        float padding = 12f;
+        float x = Renderer.VirtualWidth - fullWidth - 25f;
+        float y = 20f;
+
+        var bgRect = new Rectangle(
+            (int)(x - padding), (int)(y - padding * 0.6f),
+            (int)(fullWidth + padding * 2f), (int)(textHeight + padding * 1.2f));
+
+        Renderer.BeginDraw(SpriteSortMode.Deferred, BlendState.AlphaBlend, transform: scale);
+
+        Renderer.DrawSprite(Renderer.GetSolidTexture(Color.White), bgRect, new Color(0, 0, 0, 160));
+
+        // Coin icon
+        var coinTex = Renderer.GetCircleTexture((int)iconSize);
+        var iconRect = new Rectangle(
+            (int)x, (int)(y + (textHeight - iconSize) / 2f),
+            (int)iconSize, (int)iconSize);
+        Renderer.DrawSprite(coinTex, iconRect, CoinColor);
+
+        // Text
+        float textX = x + iconSize + gap;
+        Renderer.DrawString(HudFont, collected, new Vector2(textX, y), CoinColor);
+        textX += collectedSize.X;
+        Renderer.DrawString(HudFont, separator, new Vector2(textX, y), new Color(150, 150, 150));
+        textX += separatorSize.X;
+        Renderer.DrawString(HudFont, total, new Vector2(textX, y), new Color(200, 200, 200));
+
+        Renderer.EndDraw();
     }
 
     void ReadInput(KeyboardState kb)

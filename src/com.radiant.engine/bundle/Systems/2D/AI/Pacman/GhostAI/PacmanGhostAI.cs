@@ -6,7 +6,7 @@ using System;
 
 namespace com.radiant.engine.bundle;
 
-public enum PacmanGhostType : byte { Blinky, Pinky, Inky, Clyde, Dinky, Shadow }
+public enum PacmanGhostType : byte { Blinky, Pinky, Inky, Clyde, Dinky, Shadow, Rainbow }
 public enum PacmanGhostMode : byte { Scatter, Chase, Frightened }
 
 public class PacmanGhostAI : core.System
@@ -16,7 +16,7 @@ public class PacmanGhostAI : core.System
     public Texture2D EyesTexture { get; set; }
     public Texture2D BodyTexture { get; set; }
     public float BodyRadius { get; set; } = 30f;
-    public float ReleaseInterval { get; set; } = 0.5f;
+    public float DefaultReleaseInterval { get; set; } = 0.5f;
     public PacmanPlayer Player { get; set; }
 
     private int[] GhostIds;
@@ -65,6 +65,7 @@ public class PacmanGhostAI : core.System
         PacmanGhostType.Clyde => new Color(255, 184, 82),
         PacmanGhostType.Dinky => new Color(0, 220, 80),
         PacmanGhostType.Shadow => new Color(100, 0, 160),
+        PacmanGhostType.Rainbow => Color.White,
         _ => Color.White
     };
 
@@ -94,7 +95,7 @@ public class PacmanGhostAI : core.System
         Geometry = Scene.ECS.GetSystem<Geometry>();
     }
 
-    public void Track(int[] entityIds, (int x, int y)[] startCells)
+    public void Track(int[] entityIds, (int x, int y)[] startCells, PacmanGhostType[] types = null, float[] releaseTimes = null)
     {
         int count = entityIds.Length;
         GhostIds = entityIds;
@@ -114,10 +115,10 @@ public class PacmanGhostAI : core.System
             GhostCells[i] = startCells[i];
             GhostTargets[i] = startCells[i];
             GhostDirs[i] = (0, 0);
-            PacmanGhostTypes[i] = (PacmanGhostType)(i % 6);
+            PacmanGhostTypes[i] = types != null ? types[i] : (PacmanGhostType)(i % 6);
             ChaseTargets[i] = PickRandomWalkable();
             ExitedHouse[i] = false;
-            ReleaseTimes[i] = i * ReleaseInterval;
+            ReleaseTimes[i] = releaseTimes != null ? releaseTimes[i] : i * DefaultReleaseInterval;
 
             // GI emission via Geometry texture draw, eyes overlay via LateRender
             GhostColors[i] = PersonalityColor(PacmanGhostTypes[i]);
@@ -145,6 +146,14 @@ public class PacmanGhostAI : core.System
         ModePhase = 0;
         CurrentMode = PacmanGhostMode.Scatter;
         FrightenedTimer = 0f;
+    }
+
+    public void Clear()
+    {
+        if (GhostIds == null) return;
+        for (int i = 0; i < GhostIds.Length; i++)
+            Scene.ECS.DestroyEntity(GhostIds[i]);
+        GhostIds = null;
     }
 
     /// <summary>Trigger frightened mode (all ghosts reverse and move randomly at half speed).</summary>

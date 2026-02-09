@@ -2,12 +2,16 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using System;
+using System.IO;
 using WinForms = System.Windows.Forms;
 
 namespace com.radiant.engine.runtime;
 
 public class Window : Game
 {
+    private const string BuildFile = "build.txt";
+    public static int BuildNumber { get; private set; }
+
     public GraphicsDeviceManager GraphicsDeviceManager;
 
     public GameLoop GameLoop;
@@ -19,11 +23,13 @@ public class Window : Game
 
     public Window(GameLoop gameLoop)
     {
+        BuildNumber = LoadAndIncrementBuild();
+
         GraphicsDeviceManager = new GraphicsDeviceManager(this);
 
         Window.AllowUserResizing = true;
         Window.IsBorderless = false;
-        Window.Title = "RADIANT ENGINE BUILD 1000";
+        Window.Title = $"RADIANT ENGINE BUILD {BuildNumber}";
 
         IsMouseVisible = true;
         IsFixedTimeStep = false;
@@ -53,6 +59,7 @@ public class Window : Game
 
         // Hook into Form resize events for WindowsDX
         Form = (WinForms.Form)WinForms.Form.FromHandle(Window.Handle);
+        Form.WindowState = WinForms.FormWindowState.Maximized;
         Form.Resize += OnFormResize;
 
         GameLoop.Initialize(this);
@@ -105,6 +112,19 @@ public class Window : Game
     {
         GameLoop.GameTime = gameTime;
         GameLoop.Render();
+    }
+
+    private static int LoadAndIncrementBuild()
+    {
+        int Build = 1;
+        if (File.Exists(BuildFile))
+        {
+            var Text = File.ReadAllText(BuildFile).Trim();
+            if (int.TryParse(Text, out var Parsed))
+                Build = Parsed + 1;
+        }
+        File.WriteAllText(BuildFile, Build.ToString());
+        return Build;
     }
 
     protected override void Dispose(bool disposing)

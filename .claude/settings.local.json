@@ -16,7 +16,9 @@
       "Bash(del \"E:\\\\code\\\\beyond_proyects\\\\radiant\\\\src\\\\com.radiant.engine\\\\core\\\\Profiler.cs\")",
       "Bash(cd:*)",
       "WebSearch",
-      "WebFetch(domain:deepwiki.com)"
+      "WebFetch(domain:deepwiki.com)",
+      "Bash(findstr:*)",
+      "WebFetch(domain:shaunlebron.github.io)"
     ]
   }
 }
