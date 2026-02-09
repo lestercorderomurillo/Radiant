@@ -11,6 +11,7 @@ public class Window : Game
 {
     private const string BuildFile = "build.txt";
     public static int BuildNumber { get; private set; }
+    public static string BuildTag { get; private set; }
 
     public GraphicsDeviceManager GraphicsDeviceManager;
 
@@ -24,12 +25,13 @@ public class Window : Game
     public Window(GameLoop gameLoop)
     {
         BuildNumber = LoadAndIncrementBuild();
+        BuildTag = $"RAD-{DateTime.Now:yyyyMMdd}-{BuildNumber}";
 
         GraphicsDeviceManager = new GraphicsDeviceManager(this);
 
         Window.AllowUserResizing = true;
         Window.IsBorderless = false;
-        Window.Title = $"RADIANT ENGINE BUILD {BuildNumber}";
+        Window.Title = BuildTag;
 
         IsMouseVisible = true;
         IsFixedTimeStep = false;

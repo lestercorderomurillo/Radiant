@@ -126,7 +126,7 @@ public class GizmosRenderer : core.System
         }
 
         // Always render build number in bottom-left corner
-        var BuildText = $"Build {Window.BuildNumber}";
+        var BuildText = Window.BuildTag;
         var TextSize = BaseFont.MeasureString(BuildText);
         var BuildPos = new Vector2(15, Renderer.VirtualHeight - TextSize.Y - 15);
 

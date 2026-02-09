@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Collections.Generic;
 using System.Threading;
 using com.radiant.engine.core;
+using com.radiant.engine.runtime;
 using Microsoft.Xna.Framework;
 
 namespace com.radiant.engine.bundle;
@@ -237,6 +238,8 @@ public class PerformanceMonitor : core.System
 
         PeakBuilder.Clear().Append("Peak: ").AppendFormat("{0:F1}", PeakMemoryMB).Append("MB");
         Gizmos.Set("Memory", PeakBuilder.ToString());
+
+        Gizmos.Set("Build", Window.BuildTag);
     }
 
     #region Public API
