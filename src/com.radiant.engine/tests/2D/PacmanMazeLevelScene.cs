@@ -253,10 +253,12 @@ public class PacmanMazeLevelScene : Scene
         var config = Levels[index];
 
         // Configure maze — use procedural generator or hardcoded layout
+        float Scale = 0.9f;
         Maze.Layout = config.Procedural
             ? PacmanMazeGenerator.Generate(index + config.MazeSeed)
             : config.Layout;
-        Maze.WallThickness = config.WallThickness;
+        Maze.CellSize = 70f * Scale;
+        Maze.WallThickness = config.WallThickness * Scale;
         Maze.WallColor = config.WallColor;
         BaseWallLight = config.WallLight;
         Maze.WallLight = config.WallLight;
@@ -265,7 +267,7 @@ public class PacmanMazeLevelScene : Scene
         Maze.BuildMaze();
 
         // Coins
-        Maze.SpawnCoins(config.CoinRadius, config.CoinColor, 1f);
+        Maze.SpawnCoins(config.CoinRadius * Scale, config.CoinColor, 1f);
         BaseCoinColor = config.CoinColor;
         CoinPulseSpeed = config.CoinPulseSpeed;
         CoinPulseMin = config.CoinPulseMin;
@@ -301,10 +303,11 @@ public class PacmanMazeLevelScene : Scene
                 ri++;
             }
 
-            var ghostIds = Maze.SpawnAtCells(startCells, colors, 30f, 65530f, ghostTexture);
+            var ghostIds = Maze.SpawnAtCells(startCells, colors, 30f * Scale, 65530f, ghostTexture);
             GhostAI.BodyTexture = ghostTexture;
             GhostAI.EyesTexture = eyesTexture;
-            GhostAI.GhostSpeed = config.GhostSpeed;
+            GhostAI.BodyRadius = 30f * Scale;
+            GhostAI.GhostSpeed = config.GhostSpeed * Scale;
             GhostAI.Track(ghostIds, startCells, regularTypes, regularReleaseTimes);
         }
 
@@ -316,7 +319,7 @@ public class PacmanMazeLevelScene : Scene
                 : DefaultGhostHouseCells[rainbowIndex % DefaultGhostHouseCells.Length];
             var rainbowCenter = Maze.CellCenter(rainbowCell.x, rainbowCell.y);
             var rainbowColor = LightFactory.HueToRGB(0f);
-            int rainbowId = LightFactory.CreateLight(ECS, rainbowCenter, 30f,
+            int rainbowId = LightFactory.CreateLight(ECS, rainbowCenter, 30f * Scale,
                 Color.Transparent, rainbowColor, 65530f, ghostTexture);
             ECS.AddComponent<MotionTrackable>(rainbowId);
 
@@ -324,7 +327,8 @@ public class PacmanMazeLevelScene : Scene
                 ? config.GhostReleaseTimes[rainbowIndex] : 0f;
             RainbowAI.BodyTexture = ghostTexture;
             RainbowAI.EyesTexture = eyesTexture;
-            RainbowAI.GhostSpeed = config.RainbowSpeed;
+            RainbowAI.BodyRadius = 30f * Scale;
+            RainbowAI.GhostSpeed = config.RainbowSpeed * Scale;
             RainbowAI.Track(rainbowId, rainbowCell, rainbowRelease);
         }
 
@@ -332,10 +336,11 @@ public class PacmanMazeLevelScene : Scene
         var playerCell = config.PlayerStartCell;
         var playerColor = new Color(255, 210, 30);
         var playerCenter = Maze.CellCenter(playerCell.x, playerCell.y);
-        int playerId = LightFactory.CreateLight(ECS, playerCenter, 30f,
+        int playerId = LightFactory.CreateLight(ECS, playerCenter, 30f * Scale,
             playerColor, playerColor, 65530f);
         ECS.AddComponent<MotionTrackable>(playerId);
 
+        PlayerSystem.Speed = config.GhostSpeed * Scale;
         PlayerSystem.Track(playerId, playerCell, 65530f);
         PlayerSystem.CoinColor = config.CoinColor;
         GhostAI.Player = PlayerSystem;

@@ -21,7 +21,7 @@ public class PacmanPlayer : core.System
     PacmanMazeBuilder Maze;
     Geometry Geometry;
     int EntityId;
-    float Speed = 200f;
+    public float Speed { get; set; } = 200f;
     float Z;
     bool Tracked;
     SpriteFont HudFont;
@@ -221,10 +221,12 @@ public class PacmanPlayer : core.System
         float Pcx = RenderPosition.X;
         float Pcy = RenderPosition.Y;
 
-        float EyeR = 23f;
+        float Radius = Scene.ECS.GetComponent<Circle2D>(EntityId).Radius;
+        float EyeR = Radius * 0.767f;
         float EyeD = EyeR * 2f;
-        float Ecx = Pcx + FacingDir.dx * 4f;
-        float Ecy = Pcy + FacingDir.dy * 4f - 3f;
+        float EyeOff = Radius * 0.133f;
+        float Ecx = Pcx + FacingDir.dx * EyeOff;
+        float Ecy = Pcy + FacingDir.dy * EyeOff - Radius * 0.1f;
         int TexW = PlayerEyesTexture.Width;
         int TexH = PlayerEyesTexture.Height;
 
@@ -278,7 +280,7 @@ public class PacmanPlayer : core.System
         float TextHeight = CollectedSize.Y;
 
         float Padding = 18f;
-        float X = Renderer.VirtualWidth - FullWidth - 30f;
+        float X = (Renderer.VirtualWidth - FullWidth) / 2f;
         float Y = 20f;
 
         var BgRect = new Rectangle(

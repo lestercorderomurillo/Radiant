@@ -249,8 +249,9 @@ public class PacmanGhostAI : core.System
 
         float sx = Renderer.ScreenWidth / Renderer.VirtualSize.X;
         float sy = Renderer.ScreenHeight / Renderer.VirtualSize.Y;
-        float eyeR = 20f;
+        float eyeR = BodyRadius * 0.667f;
         float eyeD = eyeR * 2f;
+        float eyeOff = BodyRadius * 0.133f;
 
         Renderer.Reset()
             .Configure(BlendState.AlphaBlend)
@@ -259,8 +260,8 @@ public class PacmanGhostAI : core.System
         for (int i = 0; i < GhostIds.Length; i++)
         {
             var (dx, dy) = GhostDirs[i];
-            float cx = EyePositions[i].X + dx * 4f;
-            float cy = EyePositions[i].Y + dy * 4f;
+            float cx = EyePositions[i].X + dx * eyeOff;
+            float cy = EyePositions[i].Y + dy * eyeOff;
 
             if (EyesTexture != null)
             {
