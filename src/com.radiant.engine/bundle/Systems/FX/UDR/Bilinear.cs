@@ -7,6 +7,7 @@ namespace com.radiant.engine.bundle;
 
 public class Bilinear : core.System
 {
+    public override RenderLayer RenderLayer => RenderLayer.World;
     private Func<Texture2D> InputSource;
 
     public override void Initialize()

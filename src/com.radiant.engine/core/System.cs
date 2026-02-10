@@ -31,6 +31,8 @@ public class RunBeforeAttribute : Attribute
 [AttributeUsage(AttributeTargets.Class)]
 public class PausableAttribute : Attribute { }
 
+public enum RenderLayer : byte { World = 0, Gameplay = 1, Overlay = 2, UI = 3 }
+
 public abstract class System
 {
     public Scene Scene;
@@ -41,6 +43,8 @@ public abstract class System
 
     public bool Enabled = true;
     internal bool IsPausable;
+
+    public virtual RenderLayer RenderLayer => RenderLayer.Gameplay;
 
     public virtual void Initialize() {}
 

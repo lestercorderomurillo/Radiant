@@ -245,7 +245,7 @@ public class PacmanGhostAI : core.System
 
     public override void LateRender()
     {
-        if (GhostIds == null || Geometry.IsDebugging) return;
+        if (GhostIds == null || Geometry.IsDebugHidingGameplay) return;
 
         float sx = Renderer.ScreenWidth / Renderer.VirtualSize.X;
         float sy = Renderer.ScreenHeight / Renderer.VirtualSize.Y;

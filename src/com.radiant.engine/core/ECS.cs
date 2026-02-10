@@ -32,6 +32,7 @@ public class ECS : IGameObject
 
     // Systems
     private readonly List<System> Systems;
+    private List<System> RenderSystems;
     private readonly Dictionary<Type, System> SystemCache;
 
     // Thread pool
@@ -76,9 +77,21 @@ public class ECS : IGameObject
     public void Initialize()
     {
         SortSystemsByDependencies();
-        
+        BuildRenderOrder();
+
         for (int i = 0; i < Systems.Count; i++)
             Systems[i].Initialize();
+    }
+
+    private void BuildRenderOrder()
+    {
+        RenderSystems = new List<System>(Systems);
+        RenderSystems.Sort((a, b) =>
+        {
+            int layerCmp = a.RenderLayer.CompareTo(b.RenderLayer);
+            if (layerCmp != 0) return layerCmp;
+            return Systems.IndexOf(a).CompareTo(Systems.IndexOf(b));
+        });
     }
 
     private void SortSystemsByDependencies()
@@ -602,11 +615,11 @@ public class ECS : IGameObject
 
     public void LateRender()
     {
-        for (int i = 0; i < Systems.Count; i++)
+        for (int i = 0; i < RenderSystems.Count; i++)
         {
-            if (!Systems[i].Enabled) continue;
-            Systems[i].GameTime = Scene.GameTime;
-            Systems[i].LateRender();
+            if (!RenderSystems[i].Enabled) continue;
+            RenderSystems[i].GameTime = Scene.GameTime;
+            RenderSystems[i].LateRender();
         }
     }
 }

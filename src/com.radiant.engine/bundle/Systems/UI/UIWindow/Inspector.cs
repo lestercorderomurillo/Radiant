@@ -12,6 +12,7 @@ namespace com.radiant.engine.bundle;
 [RunBefore(typeof(GizmosRenderer))]
 public class Inspector : core.System
 {
+    public override RenderLayer RenderLayer => RenderLayer.UI;
     private static Inspector Instance;
 
     public Inspector()
@@ -62,7 +63,7 @@ public class Inspector : core.System
     private static readonly Color SliderTrack = new(50, 50, 65, 200);
     private static readonly Color SliderFill = new(100, 140, 220, 255);
     private static readonly Color SliderHandle = new(180, 180, 200, 255);
-    private static readonly Color ToggleOn = new(80, 160, 80, 255);
+    private static readonly Color ToggleOn = new(100, 100, 200, 255);
     private static readonly Color ToggleOff = new(80, 80, 80, 200);
     private static readonly Color CloseColor = new(180, 60, 60, 255);
     private static readonly Color CloseHover = new(220, 80, 80, 255);
@@ -690,14 +691,14 @@ public class Inspector : core.System
         var BoxRect = new Rectangle(W.Bounds.X, BoxY, ToggleBoxSize, ToggleBoxSize);
         Renderer.DrawSprite(Solid, BoxRect, W.ToggleValue ? ToggleOn : ToggleOff);
 
-        // Check mark
+        // Inner fill
         if (W.ToggleValue)
         {
-            var CheckSize = Font.MeasureString("*");
-            var CheckPos = new Vector2(
-                BoxRect.X + (BoxRect.Width - CheckSize.X) / 2,
-                BoxRect.Y + (BoxRect.Height - CheckSize.Y) / 2);
-            Renderer.DrawString(Font, "*", CheckPos, TextColor);
+            int Inset = 5;
+            var InnerRect = new Rectangle(
+                BoxRect.X + Inset, BoxRect.Y + Inset,
+                BoxRect.Width - Inset * 2, BoxRect.Height - Inset * 2);
+            Renderer.DrawSprite(Solid, InnerRect, TextColor);
         }
 
         // Label text

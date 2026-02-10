@@ -1,13 +1,15 @@
-using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
-using com.radiant.engine.runtime;
 using System;
 using System.Collections.Generic;
+using com.radiant.engine.core;
+using com.radiant.engine.runtime;
+using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 
 namespace com.radiant.engine.bundle;
 
 public class GizmosRenderer : core.System
 {
+    public override RenderLayer RenderLayer => RenderLayer.Overlay;
     private SpriteFont BaseFont;
 
     private List<LineGizmo> LineQueue = new();

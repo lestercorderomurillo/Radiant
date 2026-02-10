@@ -199,7 +199,7 @@ public class RainbowGhostAI : core.System
 
     public override void LateRender()
     {
-        if (!Initialized || Geometry.IsDebugging) return;
+        if (!Initialized || Geometry.IsDebugHidingGameplay) return;
 
         float sx = Renderer.ScreenWidth / Renderer.VirtualSize.X;
         float sy = Renderer.ScreenHeight / Renderer.VirtualSize.Y;

@@ -14,6 +14,7 @@ namespace com.radiant.engine.bundle;
 /// </summary>
 public class HRCGI : core.System
 {
+    public override RenderLayer RenderLayer => RenderLayer.World;
     private const int FrustumCount = 4;
     private const int MaxCascades = 11;
     private static readonly int[] ProbeScales = [4, 3, 2, 1];

@@ -19,6 +19,7 @@ public class PacmanPlayer : core.System
     public bool PlayerCaught { get; set; }
 
     PacmanMazeBuilder Maze;
+    Geometry Geometry;
     int EntityId;
     float Speed = 200f;
     float Z;
@@ -82,6 +83,7 @@ public class PacmanPlayer : core.System
     public override void Initialize()
     {
         Maze = Scene.ECS.GetSystem<PacmanMazeBuilder>();
+        Geometry = Scene.ECS.GetSystem<Geometry>();
         HudFont = Renderer.GetFont("fonts/BaseFont");
         PlayerEyesTexture = Renderer.GetTexture("Eyes");
         MouthTexture = CreateMouthTexture(RTSize);
@@ -172,11 +174,13 @@ public class PacmanPlayer : core.System
             (0, -1) => -MathF.PI / 2f,
             _ => 0f
         };
+
+        RenderPlayerRT();
     }
 
-    public override void Render()
+    private void RenderPlayerRT()
     {
-        if (!Tracked || PlayerRT == null) return;
+        if (PlayerRT == null) return;
 
         // Render circle-with-mouth to the player RT (feeds into Geometry texture path → GI)
         Renderer.PushTargets();
@@ -201,7 +205,7 @@ public class PacmanPlayer : core.System
 
     public override void LateRender()
     {
-        if (!Tracked) return;
+        if (!Tracked || Geometry.IsDebugHidingGameplay) return;
 
         DrawEyes();
         DrawHUD();

@@ -7,6 +7,7 @@ namespace com.radiant.engine.bundle;
 
 public class UDR3 : core.System
 {
+    public override RenderLayer RenderLayer => RenderLayer.World;
     // Temporal parameters
     public int FramesToAccumulate = 4;
 

@@ -7,7 +7,7 @@ namespace com.radiant.engine.bundle;
 
 public class UDR1 : core.System
 {
-
+    public override RenderLayer RenderLayer => RenderLayer.World;
     public float Sharpness = 0.5f;
     public bool EdgeCorrection = true;
     public bool DebugRays = false;

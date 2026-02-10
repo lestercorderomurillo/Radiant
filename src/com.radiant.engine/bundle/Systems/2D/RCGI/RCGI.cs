@@ -7,6 +7,7 @@ namespace com.radiant.engine.bundle;
 
 public class RCGI : core.System
 {
+    public override RenderLayer RenderLayer => RenderLayer.World;
     private const float CascadeLinear = 1.0f;
     private const float CascadeInterval = 1.0f;
     private const int MaxCascades = 10;

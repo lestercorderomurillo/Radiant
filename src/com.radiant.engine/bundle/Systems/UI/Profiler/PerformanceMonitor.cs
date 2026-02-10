@@ -11,6 +11,7 @@ namespace com.radiant.engine.bundle;
 
 public class PerformanceMonitor : core.System
 {
+    public override RenderLayer RenderLayer => RenderLayer.Overlay;
     // Dependencies
     private Process Process;
     private PerformanceCounter CpuCounter;

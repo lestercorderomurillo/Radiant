@@ -13,6 +13,7 @@ namespace com.radiant.engine.bundle;
 [RunBefore(typeof(UDR3))]
 public class ColorManagement : core.System
 {
+    public override RenderLayer RenderLayer => RenderLayer.World;
     private static readonly string[] TechniqueNames = ["None", "ACES", "ACES2", "AgX"];
     private int TechniqueIndex = 2;
     private Func<Texture2D> InputSource;
@@ -22,8 +23,7 @@ public class ColorManagement : core.System
     {
         Inspector.CreateWindow("colormgmt", "Color Management");
         Inspector.AddLabel("colormgmt", "mode", $"Tonemapping: {TechniqueNames[TechniqueIndex]}");
-        Inspector.AddButton("colormgmt", "cycle", "Cycle Tonemapping", () =>
-            TechniqueIndex = (TechniqueIndex + 1) % TechniqueNames.Length);
+        Inspector.AddButton("colormgmt", "cycle", "Cycle Tonemapping", () => TechniqueIndex = (TechniqueIndex + 1) % TechniqueNames.Length);
     }
 
     public void SetInputSource(Func<Texture2D> source)
@@ -35,6 +35,7 @@ public class ColorManagement : core.System
     {
         if (OutputTexture != null)
             return OutputTexture;
+            
         return InputSource?.Invoke();
     }
 

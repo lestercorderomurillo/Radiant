@@ -11,6 +11,7 @@ namespace com.radiant.engine.bundle;
 
 public class Geometry : core.System
 {
+    public override RenderLayer RenderLayer => RenderLayer.World;
     public float SDFScale = 0.25f;
     public bool EnableSDF = false;
 
@@ -40,6 +41,9 @@ public class Geometry : core.System
     private enum DebugMode { None, Emissive, Absorption, SDF, JFADirection, JFARaw, MotionVectors }
     private DebugMode CurrentDebug = DebugMode.None;
     public bool IsDebugging => CurrentDebug != DebugMode.None;
+    public bool IsDebugHidingGameplay => CurrentDebug != DebugMode.None
+        && CurrentDebug != DebugMode.Emissive
+        && CurrentDebug != DebugMode.Absorption;
 
     // Z-layer config: Z values map directly to layers (Z=0 -> layer 0, etc.)
     // 65536 layers supports millions of entities with unique Z ordering

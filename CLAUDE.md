@@ -277,6 +277,7 @@ public abstract class System
     public Renderer Renderer;
     public GameTime GameTime;
     public bool Enabled = true;
+    public virtual RenderLayer RenderLayer => RenderLayer.Gameplay; // Render/LateRender sort order
 
     public virtual void Initialize() {}   // Called once after ECS.Initialize()
     public virtual void Update() {}       // Called every frame
@@ -298,6 +299,27 @@ public class MySystem : System { ... }
 ```
 
 Topological sort (Kahn's algorithm) runs at `ECS.Initialize()`.
+
+### RenderLayer — Render Order Control
+
+`LateRender()` uses a separate render-sorted system list: sorted by `RenderLayer` first, then topological index within each layer. `Update()`/`FixedUpdate()`/`Render()` still use pure topological order. (`Render()` keeps topological order because it has GPU pipeline dependencies — systems switch render targets, and reordering would cause backbuffer content loss on MonoGame WindowsDX.)
+
+```csharp
+public enum RenderLayer : byte { World = 0, Gameplay = 1, Overlay = 2, UI = 3 }
+```
+
+Override in your system class (default is `Gameplay`):
+
+```csharp
+public override RenderLayer RenderLayer => RenderLayer.World;
+```
+
+| Layer | Systems |
+|-------|---------|
+| **World** | Geometry, HRCGI, RCGI, ColorManagement, Bilinear, UDR1, UDR2, UDR3 |
+| **Gameplay** | *(default)* PacmanGhostAI, PacmanPlayer, RainbowGhostAI, PacmanMazeBuilder, MouseLight, PaintBrush, Tileset, WorldGen, PerlinNoise |
+| **Overlay** | GizmosRenderer, PerformanceMonitor |
+| **UI** | Inspector |
 
 ### SystemGroup — Mutually Exclusive Systems
 
@@ -601,6 +623,10 @@ Collects all entity shapes each frame and produces the textures that feed GI:
 4. **SDF generation** — Jump Flooding Algorithm (JFA) on absorption → SDFTexture (HalfVector2)
 5. **Motion vectors** — Per-entity velocity encoded as color → MotionVectorTexture (HalfVector2)
 6. **Texture draws** — Material.Texture entities drawn via SpriteBatch (separate from instanced shapes)
+
+Debug mode properties:
+- `IsDebugging` — true when any debug visualization is active
+- `IsDebugHidingGameplay` — true for debug modes that replace gameplay visuals (SDF, JFA, MotionVectors). False for Emissive/Absorption debug (gameplay eyes still render). Used by PacmanGhostAI, RainbowGhostAI, PacmanPlayer to hide eyes in non-gameplay debug views.
 
 ### HRCGI System (HRCGI.cs)
 
