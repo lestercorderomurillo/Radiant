@@ -22,7 +22,12 @@ public class PacmanGhostAI : core.System
 
     private const float RespawnDelay = 3f;
     private const float EatenSpeedMultiplier = 2.5f;
+    private const float FrightenedSpeedMultiplier = 0.3f;
+    private const float FrightenedExtraDuration = 3f;
+    private const float FrightenedBlinkThreshold = 1.5f;
+    private const float FrightenedBlinkRate = 8f;
     private static readonly Color FrightenedColor = new Color(30, 30, 200);
+    private static readonly Color FrightenedBlinkColor = new Color(100, 150, 255);
 
     private int[] GhostIds;
     private PacmanMazeBuilder Maze;
@@ -173,7 +178,7 @@ public class PacmanGhostAI : core.System
         if (CurrentMode != PacmanGhostMode.Frightened)
             PreFrightenedMode = CurrentMode;
         CurrentMode = PacmanGhostMode.Frightened;
-        FrightenedTimer = duration;
+        FrightenedTimer = duration + FrightenedExtraDuration;
 
         // Change body color of active ghosts to dark blue
         for (int i = 0; i < GhostIds.Length; i++)
@@ -207,7 +212,7 @@ public class PacmanGhostAI : core.System
         UpdateMode(dt);
 
         float step = GhostSpeed * dt;
-        float frightenedStep = step * 0.5f;
+        float frightenedStep = step * FrightenedSpeedMultiplier;
 
         for (int i = 0; i < GhostIds.Length; i++)
         {
@@ -397,6 +402,17 @@ public class PacmanGhostAI : core.System
                 CurrentMode = PreFrightenedMode;
                 RestoreGhostColors();
                 ReverseAll();
+            }
+            else if (FrightenedTimer <= FrightenedBlinkThreshold)
+            {
+                bool blinkOn = MathF.Sin(FrightenedTimer * FrightenedBlinkRate * MathF.PI) > 0f;
+                var blinkColor = blinkOn ? FrightenedBlinkColor : FrightenedColor;
+                for (int i = 0; i < GhostIds.Length; i++)
+                {
+                    if (Eaten[i] || RespawnTimer[i] > 0f || !ExitedHouse[i]) continue;
+                    ref var material = ref Scene.ECS.GetComponent<Material>(GhostIds[i]);
+                    material.Emissive = blinkColor;
+                }
             }
             return;
         }

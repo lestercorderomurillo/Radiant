@@ -28,7 +28,12 @@ public class RainbowGhostAI : core.System
     private const float HueCycleSpeed = 0.35f;
     private const float RespawnDelay = 3f;
     private const float EatenSpeedMultiplier = 2.5f;
+    private const float FrightenedSpeedMultiplier = 0.3f;
+    private const float FrightenedExtraDuration = 3f;
+    private const float FrightenedBlinkThreshold = 1.5f;
+    private const float FrightenedBlinkRate = 8f;
     private static readonly Color FrightenedColor = new Color(30, 30, 200);
+    private static readonly Color FrightenedBlinkColor = new Color(100, 150, 255);
 
     // Pac-Man direction priority: Up, Left, Down, Right
     private static readonly int[] DXs = [0, -1, 0, 1];
@@ -139,7 +144,7 @@ public class RainbowGhostAI : core.System
     public void SetFrightened(float duration)
     {
         if (!Initialized) return;
-        FrightenedTimer = duration;
+        FrightenedTimer = duration + FrightenedExtraDuration;
 
         // Change body colors to dark blue (skip eaten main)
         if (!MainEaten && MainExitedHouse)
@@ -188,6 +193,21 @@ public class RainbowGhostAI : core.System
                     UpdateMainColor();
                 for (int i = 0; i < CloneCount; i++)
                     UpdateCloneColor(i);
+            }
+            else if (FrightenedTimer <= FrightenedBlinkThreshold)
+            {
+                bool blinkOn = MathF.Sin(FrightenedTimer * FrightenedBlinkRate * MathF.PI) > 0f;
+                var blinkColor = blinkOn ? FrightenedBlinkColor : FrightenedColor;
+                if (!MainEaten && MainRespawnTimer <= 0f && MainExitedHouse)
+                {
+                    ref var mainMat = ref Scene.ECS.GetComponent<Material>(MainId);
+                    mainMat.Emissive = blinkColor;
+                }
+                for (int i = 0; i < CloneCount; i++)
+                {
+                    ref var cloneMat = ref Scene.ECS.GetComponent<Material>(CloneIds[i]);
+                    cloneMat.Emissive = blinkColor;
+                }
             }
         }
 
@@ -473,7 +493,7 @@ public class RainbowGhostAI : core.System
         else if (EyeIndex == 0 && !MainExitedHouse && !IsReleased())
             step *= 0.5f;
         else if (IsFrightened)
-            step *= 0.5f;
+            step *= FrightenedSpeedMultiplier;
 
         ref var transform = ref Scene.ECS.GetComponent<Transform>(EntityId);
         var pos = LogicalPositions[EyeIndex];
