@@ -187,13 +187,13 @@ Queries match all archetypes containing the requested components and distribute 
 
 ```csharp
 // 1-component query
-ECS.ForEach<Transform>((threadId, entity, ref transform) =>
+ECS.Query<Transform>((threadId, entity, ref transform) =>
 {
     transform.Position.X += 1f;
 });
 
 // 2-component query
-ECS.ForEach<Transform, Material>((threadId, entity, ref transform, ref material) =>
+ECS.Query<Transform, Material>((threadId, entity, ref transform, ref material) =>
 {
     material.Emissive = new Color(transform.Position.X / 3840f, 0, 0, 255);
 });

@@ -379,11 +379,11 @@ public class ECS : IGameObject
     }
 
     // Query delegates
-    public delegate void ForEachAction<T1>(int threadIndex, int entity, ref T1 c1) where T1 : struct;
-    public delegate void ForEachAction<T1, T2>(int threadIndex, int entity, ref T1 c1, ref T2 c2) where T1 : struct where T2 : struct;
-    public delegate void ForEachAction<T1, T2, T3>(int threadIndex, int entity, ref T1 c1, ref T2 c2, ref T3 c3) where T1 : struct where T2 : struct where T3 : struct;
+    public delegate void QueryAction<T1>(int threadIndex, int entity, ref T1 c1) where T1 : struct;
+    public delegate void QueryAction<T1, T2>(int threadIndex, int entity, ref T1 c1, ref T2 c2) where T1 : struct where T2 : struct;
+    public delegate void QueryAction<T1, T2, T3>(int threadIndex, int entity, ref T1 c1, ref T2 c2, ref T3 c3) where T1 : struct where T2 : struct where T3 : struct;
 
-    public void ForEach<T1>(ForEachAction<T1> action) where T1 : struct, Component
+    public void Query<T1>(QueryAction<T1> action) where T1 : struct, Component
     {
         ulong sig = 1UL << GetTypeId(typeof(T1));
 
@@ -435,7 +435,7 @@ public class ECS : IGameObject
         });
     }
 
-    public void ForEach<T1, T2>(ForEachAction<T1, T2> action)
+    public void Query<T1, T2>(QueryAction<T1, T2> action)
         where T1 : struct, Component
         where T2 : struct, Component
     {
@@ -494,7 +494,7 @@ public class ECS : IGameObject
     // Cached archetype query results
     private readonly List<Archetype> QueryMatchCache = new();
 
-    public void Query<T1, T2, T3>(ForEachAction<T1, T2, T3> action)
+    public void Query<T1, T2, T3>(QueryAction<T1, T2, T3> action)
         where T1 : struct, Component
         where T2 : struct, Component
         where T3 : struct, Component
