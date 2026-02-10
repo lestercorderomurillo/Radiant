@@ -84,7 +84,7 @@ public class PacmanPlayer : core.System
     {
         Maze = Scene.ECS.GetSystem<PacmanMazeBuilder>();
         Geometry = Scene.ECS.GetSystem<Geometry>();
-        HudFont = Renderer.GetFont("fonts/BaseFont");
+        HudFont = Renderer.GetFont("fonts/HudFont");
         PlayerEyesTexture = Renderer.GetTexture("Eyes");
         MouthTexture = CreateMouthTexture(RTSize);
         CircleTex = Renderer.GetCircleTexture(RTSize);
@@ -271,14 +271,14 @@ public class PacmanPlayer : core.System
         var SeparatorSize = HudFont.MeasureString(Separator);
         var TotalSize = HudFont.MeasureString(Total);
 
-        float IconSize = 20f;
-        float Gap = 10f;
+        float IconSize = 40f;
+        float Gap = 14f;
         float TextWidth = CollectedSize.X + SeparatorSize.X + TotalSize.X;
         float FullWidth = IconSize + Gap + TextWidth;
         float TextHeight = CollectedSize.Y;
 
-        float Padding = 12f;
-        float X = Renderer.VirtualWidth - FullWidth - 25f;
+        float Padding = 18f;
+        float X = Renderer.VirtualWidth - FullWidth - 30f;
         float Y = 20f;
 
         var BgRect = new Rectangle(
@@ -287,7 +287,7 @@ public class PacmanPlayer : core.System
 
         Renderer.BeginDraw(SpriteSortMode.Deferred, BlendState.AlphaBlend, transform: Scale);
 
-        Renderer.DrawSprite(Renderer.GetSolidTexture(Color.White), BgRect, new Color(0, 0, 0, 160));
+        Renderer.DrawSprite(Renderer.GetSolidTexture(Color.White), BgRect, new Color(0, 0, 0, 180));
 
         // Coin icon
         var CoinTex = Renderer.GetCircleTexture((int)IconSize);
@@ -300,9 +300,9 @@ public class PacmanPlayer : core.System
         float TextX = X + IconSize + Gap;
         Renderer.DrawString(HudFont, Collected, new Vector2(TextX, Y), CoinColor);
         TextX += CollectedSize.X;
-        Renderer.DrawString(HudFont, Separator, new Vector2(TextX, Y), new Color(150, 150, 150));
+        Renderer.DrawString(HudFont, Separator, new Vector2(TextX, Y), new Color(200, 200, 200));
         TextX += SeparatorSize.X;
-        Renderer.DrawString(HudFont, Total, new Vector2(TextX, Y), new Color(200, 200, 200));
+        Renderer.DrawString(HudFont, Total, new Vector2(TextX, Y), new Color(255, 255, 255));
 
         Renderer.EndDraw();
     }
