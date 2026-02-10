@@ -310,9 +310,9 @@ public class PacmanMazeBuilder : core.System
         ref var rect = ref ecs.GetComponent<Rectangle2D>(id);
         ref var material = ref ecs.GetComponent<Material>(id);
 
-        transform.Position = new Vector3(position, 0f);
+        transform.Position = new Vector3(position.X - 1f, position.Y - 1f, 0f);
         transform.Rotation = Vector3.UnitX;
-        rect.Size = size;
+        rect.Size = new Vector2(size.X + 2f, size.Y + 2f);
 
         material.Albedo = Color.Black;
         material.Emissive = emissive;

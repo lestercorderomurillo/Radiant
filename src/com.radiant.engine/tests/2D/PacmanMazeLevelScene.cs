@@ -16,12 +16,8 @@ public class PacmanMazeLevelScene : Scene
     private PacmanGhostAI GhostAI;
     private RainbowGhostAI RainbowAI;
     private PacmanPlayer PlayerSystem;
-    private Color BaseWallLight;
     private Color BaseCoinColor;
-    private float CoinPulseSpeed;
-    private float CoinPulseMin;
-    private float CoinPulseMax;
-    private float PulseTime;
+    private float CoinWaveTime;
     private int CurrentLevel;
 
     private static readonly string[] PacmanLayout =
@@ -72,13 +68,9 @@ public class PacmanMazeLevelScene : Scene
         new PacmanLevelConfig
         {
             Layout = PacmanLayout,
-
-            WallColor = new Color((byte)0, (byte)0, (byte)40, (byte)255),
-            WallLight = new Color((byte)120, (byte)80, (byte)255, (byte)255),
-            WallThickness = 4f,
-
-            CoinColor = new Color(165, 130, 15),
-
+            WallAlbedo = new Color((byte)0, (byte)0, (byte)40, (byte)255),
+            WallEmissive = new Color((byte)100, (byte)55, (byte)200, (byte)200),
+            CoinColor = new Color(225, 180, 35),
             Ghosts =
             [
                 new() { Type = PacmanGhostType.Blinky, ReleaseAfter = 4f },
@@ -92,6 +84,10 @@ public class PacmanMazeLevelScene : Scene
         new PacmanLevelConfig
         {
             Procedural = true,
+            MazeSeed = 2482,
+            WallAlbedo = new Color((byte)0, (byte)0, (byte)80, (byte)255),
+            WallEmissive = new Color((byte)80, (byte)120, (byte)255, (byte)255),
+            CoinColor = new Color(80, 255, 200),
             Ghosts =
             [
                 new() { Type = PacmanGhostType.Pinky,  ReleaseAfter = 4f },
@@ -99,21 +95,15 @@ public class PacmanMazeLevelScene : Scene
                 new() { Type = PacmanGhostType.Shadow, ReleaseAfter = 24f },
             ],
             PlayerStartCell = (14, 23),
-
-            MazeSeed = 2482,
-
-            // oceanic colors, fast pulse
-            WallColor = new Color((byte)0, (byte)0, (byte)80, (byte)255),
-            WallLight = new Color((byte)80, (byte)120, (byte)255, (byte)255),
-            CoinColor = new Color(80, 255, 200),
-            CoinPulseSpeed = 1.5f,
-            CoinPulseMin = 0.3f,
-            CoinPulseMax = 0.6f,
         },
         // Level 3: Rainbow, Clyde, Inky, Blinky (seeded)
         new PacmanLevelConfig
         {
             Procedural = true,
+            MazeSeed = 1344,
+            WallAlbedo = new Color((byte)80, (byte)0, (byte)0, (byte)255),
+            WallEmissive = new Color((byte)212, (byte)80, (byte)80, (byte)255),
+            CoinColor = new Color(255, 255, 255),
             Ghosts =
             [
                 new() { Type = PacmanGhostType.Rainbow, ReleaseAfter = 4f },
@@ -122,21 +112,15 @@ public class PacmanMazeLevelScene : Scene
                 new() { Type = PacmanGhostType.Blinky,  ReleaseAtCoinPercent = 0.50f },
             ],
             PlayerStartCell = (14, 23),
-
-            MazeSeed = 1344,
-
-            // light coral walls, white glowy coins, slow pulse, not so bright cap
-            WallColor = new Color((byte)80, (byte)0, (byte)0, (byte)255),
-            WallLight = new Color((byte)212, (byte)80, (byte)80, (byte)255),
-            CoinColor = new Color(255, 255, 255),
-            CoinPulseSpeed = 0.5f,
-            CoinPulseMin = 0.5f,
-            CoinPulseMax = 0.6f,
         },
         // Level 4: Dinky, Clyde, Blinky (seeded)
         new PacmanLevelConfig
         {
             Procedural = true,
+            MazeSeed = 1235,
+            WallAlbedo = new Color((byte)0, (byte)40, (byte)0, (byte)255),
+            WallEmissive = new Color((byte)80, (byte)128, (byte)80, (byte)255),
+            CoinColor = new Color(120, 255, 120),
             Ghosts =
             [
                 new() { Type = PacmanGhostType.Dinky, ReleaseAfter = 4f },
@@ -144,21 +128,15 @@ public class PacmanMazeLevelScene : Scene
                 new() { Type = PacmanGhostType.Blinky, ReleaseAfter = 4f },
             ],
             PlayerStartCell = (14, 23),
-
-            MazeSeed = 1235,
-
-            // jungle colors, slowe steady pulse
-            WallColor = new Color((byte)0, (byte)40, (byte)0, (byte)255),
-            WallLight = new Color((byte)80, (byte)128, (byte)80, (byte)255),
-            CoinColor = new Color(120, 255, 120),
-            CoinPulseSpeed = 0.8f,
-            CoinPulseMin = 0.3f,
-            CoinPulseMax = 0.35f,
         },
         // Level 5: Shadow, Pinky, Rainbow, Clyde (procedural)
         new PacmanLevelConfig
         {
             Procedural = true,
+            MazeSeed = 7131,
+            WallAlbedo = new Color((byte)0, (byte)0, (byte)0, (byte)255),
+            WallEmissive = new Color((byte)0, (byte)0, (byte)0, (byte)255),
+            CoinColor = new Color(255, 255, 255),
             Ghosts =
             [
                 new() { Type = PacmanGhostType.Shadow,  ReleaseAfter = 4f },
@@ -167,22 +145,14 @@ public class PacmanMazeLevelScene : Scene
                 new() { Type = PacmanGhostType.Clyde,   ReleaseAtCoinPercent = 0.30f },
             ],
             PlayerStartCell = (14, 23),
-
-            // dark color, no light on walls, bright coins with fast pulse
-            WallColor = new Color((byte)0, (byte)0, (byte)0, (byte)255),
-            WallLight = new Color((byte)0, (byte)0, (byte)0, (byte)255),
-
-            MazeSeed = 7131,
-
-            CoinColor = new Color(255, 255, 255),
-            CoinPulseSpeed = 2.0f,
-            CoinPulseMin = 0.3f,
-            CoinPulseMax = 0.35f,
         },
         // Level 6: Shadow x3 (procedural)
         new PacmanLevelConfig
         {
             Procedural = true,
+            WallAlbedo = new Color((byte)10, (byte)0, (byte)0, (byte)255),
+            WallEmissive = new Color((byte)40, (byte)0, (byte)0, (byte)255),
+            CoinColor = new Color(255, 60, 60),
             Ghosts =
             [
                 new() { Type = PacmanGhostType.Shadow, ReleaseAfter = 1f },
@@ -190,10 +160,6 @@ public class PacmanMazeLevelScene : Scene
                 new() { Type = PacmanGhostType.Shadow, ReleaseAfter = 13f },
             ],
             PlayerStartCell = (14, 23),
-
-            CoinColor = new Color(255, 60, 60),
-            CoinPulseSpeed = 3.0f,
-            CoinPulseMin = 0.4f,
         },
     ];
 
@@ -283,10 +249,8 @@ public class PacmanMazeLevelScene : Scene
             ? PacmanMazeGenerator.Generate(index + config.MazeSeed)
             : config.Layout;
         Maze.CellSize = 70f * Scale;
-        Maze.WallThickness = config.WallThickness * Scale;
-        Maze.WallColor = config.WallColor;
-        BaseWallLight = config.WallLight;
-        Maze.WallLight = config.WallLight;
+        Maze.WallColor = config.WallAlbedo;
+        Maze.WallLight = config.WallEmissive;
         Maze.GhostHouse = config.GhostHouse;
         Maze.NoUpTiles = config.NoUpTiles;
         Maze.BuildMaze();
@@ -294,9 +258,6 @@ public class PacmanMazeLevelScene : Scene
         // Coins
         Maze.SpawnCoins(config.CoinRadius * Scale, config.CoinColor, 1f);
         BaseCoinColor = config.CoinColor;
-        CoinPulseSpeed = config.CoinPulseSpeed;
-        CoinPulseMin = config.CoinPulseMin;
-        CoinPulseMax = config.CoinPulseMax;
 
         var ghostTexture = Renderer.GetTexture("Ghost");
         var eyesTexture = Renderer.GetTexture("Eyes");
@@ -325,10 +286,10 @@ public class PacmanMazeLevelScene : Scene
                 ri++;
             }
 
-            var ghostIds = Maze.SpawnAtCells(startCells, colors, 30f * Scale, 65530f, ghostTexture);
+            var ghostIds = Maze.SpawnAtCells(startCells, colors, 28.5f * Scale, 65530f, ghostTexture);
             GhostAI.BodyTexture = ghostTexture;
             GhostAI.EyesTexture = eyesTexture;
-            GhostAI.BodyRadius = 30f * Scale;
+            GhostAI.BodyRadius = 28.5f * Scale;
             GhostAI.GhostSpeed = config.GhostSpeed * Scale;
             GhostAI.Track(ghostIds, startCells, regularEntries);
         }
@@ -341,13 +302,13 @@ public class PacmanMazeLevelScene : Scene
                 ?? DefaultGhostHouseCells[rainbowIndex % DefaultGhostHouseCells.Length];
             var rainbowCenter = Maze.CellCenter(rainbowCell.x, rainbowCell.y);
             var rainbowColor = LightFactory.HueToRGB(0f);
-            int rainbowId = LightFactory.CreateLight(ECS, rainbowCenter, 30f * Scale,
+            int rainbowId = LightFactory.CreateLight(ECS, rainbowCenter, 28.5f * Scale,
                 Color.Transparent, rainbowColor, 65530f, ghostTexture);
             ECS.AddComponent<MotionTrackable>(rainbowId);
 
             RainbowAI.BodyTexture = ghostTexture;
             RainbowAI.EyesTexture = eyesTexture;
-            RainbowAI.BodyRadius = 30f * Scale;
+            RainbowAI.BodyRadius = 28.5f * Scale;
             RainbowAI.GhostSpeed = config.RainbowSpeed * Scale;
             RainbowAI.Track(rainbowId, rainbowCell, rainbowEntry.ReleaseAfter, rainbowEntry.ReleaseAtCoinPercent);
         }
@@ -356,7 +317,7 @@ public class PacmanMazeLevelScene : Scene
         var playerCell = config.PlayerStartCell;
         var playerColor = new Color(255, 210, 30);
         var playerCenter = Maze.CellCenter(playerCell.x, playerCell.y);
-        int playerId = LightFactory.CreateLight(ECS, playerCenter, 30f * Scale,
+        int playerId = LightFactory.CreateLight(ECS, playerCenter, 28.5f * Scale,
             playerColor, playerColor, 65530f);
         ECS.AddComponent<MotionTrackable>(playerId);
 
@@ -376,34 +337,22 @@ public class PacmanMazeLevelScene : Scene
             return;
         }
 
-        // Pulse wall borders
-        PulseTime += (float)GameTime.ElapsedGameTime.TotalSeconds;
-        float t = 0.5f + 0.5f * MathF.Sin(PulseTime * 0.6f);
-        t = t * t * (3f - 2f * t); // smoothstep
-        float pulse = 0.45f + 0.10f * t; // range [0.35 .. 0.55]
-        var ids = Maze.BorderIds;
-        for (int i = 0; i < ids.Count; i++)
+        // Subtle sine wave across coins based on X position
+        CoinWaveTime += (float)GameTime.ElapsedGameTime.TotalSeconds;
+        foreach (var (cell, coinId) in Maze.CoinCells)
         {
-            ref var mat = ref ECS.GetComponent<Material>(ids[i]);
-            mat.Emissive = new Color(
-                (byte)(BaseWallLight.R * pulse),
-                (byte)(BaseWallLight.G * pulse),
-                (byte)(BaseWallLight.B * pulse),
-                BaseWallLight.A);
-        }
-
-        // Pulse coins
-        float coinT = 0.5f + 0.5f * MathF.Sin(PulseTime * CoinPulseSpeed);
-        coinT = coinT * coinT * (3f - 2f * coinT);
-        float coinPulse = CoinPulseMin + (CoinPulseMax - CoinPulseMin) * coinT;
-        foreach (var coinId in Maze.CoinCells.Values)
-        {
+            float phase = CoinWaveTime * 1.8f - cell.Item1 * 0.5f;
+            float wave = 0.85f + 0.15f * MathF.Sin(phase);
             ref var coinMat = ref ECS.GetComponent<Material>(coinId);
             coinMat.Emissive = new Color(
-                (byte)(BaseCoinColor.R * coinPulse),
-                (byte)(BaseCoinColor.G * coinPulse),
-                (byte)(BaseCoinColor.B * coinPulse),
+                (byte)(BaseCoinColor.R * wave),
+                (byte)(BaseCoinColor.G * wave),
+                (byte)(BaseCoinColor.B * wave),
                 BaseCoinColor.A);
+
+            ref var coinTransform = ref ECS.GetComponent<Transform>(coinId);
+            float baseY = Maze.CellCenter(cell.Item1, cell.Item2).Y;
+            coinTransform.Position.Y = baseY + 4.5f * MathF.Sin(phase);
         }
 
         Inspector.SetLabel("scene", "level", $"Level: {CurrentLevel + 1}/{Levels.Length}");
