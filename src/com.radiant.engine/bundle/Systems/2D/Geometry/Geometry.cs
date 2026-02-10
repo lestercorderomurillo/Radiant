@@ -594,8 +594,8 @@ public class Geometry : core.System
         {
             foreach (var (position, size, velocity, isCircle, radius) in buf.MotionShapesByThread[threadIndex])
             {
-                float normalizedVelocityX = (velocity.X / 10f) * 0.5f + 0.5f;
-                float normalizedVelocityY = (velocity.Y / 10f) * 0.5f + 0.5f;
+                float normalizedVelocityX = velocity.X / 10f * 0.5f + 0.5f;
+                float normalizedVelocityY = velocity.Y / 10f * 0.5f + 0.5f;
                 Color motionColor = new Color(normalizedVelocityX, normalizedVelocityY, 0f, 1f);
 
                 if (isCircle)

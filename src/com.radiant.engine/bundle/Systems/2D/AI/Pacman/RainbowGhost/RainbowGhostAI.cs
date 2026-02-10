@@ -397,7 +397,7 @@ public class RainbowGhostAI : core.System
         applyMove:
         if (dist > 0.01f)
         {
-            var move = (diff / dist) * MathF.Min(step, dist);
+            var move = diff / dist * MathF.Min(step, dist);
             pos += move;
         }
 

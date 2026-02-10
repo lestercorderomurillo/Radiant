@@ -335,8 +335,8 @@ public static class PacmanMazeGenerator
                 if (C2 != null)
                 {
                     var Q2 = C2.Connect;
-                    if (((C.X == 0 || !Q[Lt]) && !Q[Up] && !Q[Dn]) &&
-                        ((C2.X == CellCols - 1 || !Q2[Rt]) && !Q2[Up] && !Q2[Dn]))
+                    if ((C.X == 0 || !Q[Lt]) && !Q[Up] && !Q[Dn] &&
+                        (C2.X == CellCols - 1 || !Q2[Rt]) && !Q2[Up] && !Q2[Dn])
                         C.IsRaiseHeightCandidate = C2.IsRaiseHeightCandidate = true;
                 }
 
@@ -523,7 +523,7 @@ public static class PacmanMazeGenerator
                     (!C.Connect[Dn] || !C.Next[Dn].Connect[Dn]))
                 {
                     if ((C.Next[Lt] == null || !C.Next[Lt].Connect[Up]) &&
-                        (C.Next[Rt] != null && !C.Next[Rt].Connect[Up]))
+                        C.Next[Rt] != null && !C.Next[Rt].Connect[Up])
                     {
                         if (!(C.Next[Dn] != null && C.Next[Dn].Connect[Rt] &&
                               C.Next[Dn].Next[Rt] != null && C.Next[Dn].Next[Rt].Connect[Rt]))
@@ -543,7 +543,7 @@ public static class PacmanMazeGenerator
                     (!C.Connect[Up] || !C.Next[Up].Connect[Up]))
                 {
                     if ((C.Next[Lt] == null || !C.Next[Lt].Connect[Dn]) &&
-                        (C.Next[Rt] != null && !C.Next[Rt].Connect[Dn]))
+                        C.Next[Rt] != null && !C.Next[Rt].Connect[Dn])
                     {
                         if (!(C.Next[Up] != null && C.Next[Up].Connect[Rt] &&
                               C.Next[Up].Next[Rt] != null && C.Next[Up].Next[Rt].Connect[Rt]))

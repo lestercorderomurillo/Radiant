@@ -9,7 +9,7 @@ public class PacmanMazeBuilder : core.System
 {
     public string[] Layout { get; set; }
     public float CellSize { get; set; } = 70f;
-    public float WallThickness { get; set; } = 14f;
+    public float WallThickness { get; set; } = 6f;
     public float WallMargin { get; set; } = 20f;
     public Color WallColor { get; set; } = new Color((byte)0, (byte)0, (byte)0, (byte)255);
     public Color WallLight { get; set; } = new Color(100, 180, 255);

@@ -224,7 +224,7 @@ public class PacmanGhostAI : core.System
 
             if (dist > 0.01f)
             {
-                var move = (diff / dist) * MathF.Min(currentStep, dist);
+                var move = diff / dist * MathF.Min(currentStep, dist);
                 pos += move;
             }
 

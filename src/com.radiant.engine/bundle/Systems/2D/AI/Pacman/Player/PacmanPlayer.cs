@@ -44,7 +44,9 @@ public class PacmanPlayer : core.System
     (int dx, int dy) FacingDir = (1, 0);
     bool MouthOpen;
     float MouthRotation;
-    static readonly Color EyeColor = Color.Black;
+    static readonly Color EyeColor = new Color(30, 15, 5);
+    float CollectFlash;
+    float BaseRadius;
 
     public void Track(int entityId, (int x, int y) startCell, float z)
     {
@@ -67,6 +69,8 @@ public class PacmanPlayer : core.System
         MouthTimer = 0f;
         MouthOpen = true;
         MouthRotation = 0f;
+        CollectFlash = 0f;
+        BaseRadius = Scene.ECS.GetComponent<Circle2D>(entityId).Radius;
 
         // Set the RT as entity texture — Geometry texture path handles emissive/absorption
         ref var Mat = ref Scene.ECS.GetComponent<Material>(EntityId);
@@ -124,7 +128,10 @@ public class PacmanPlayer : core.System
             if (Cell != PrevCell)
             {
                 if (Maze.TryCollectCoin(Cell.x, Cell.y))
+                {
                     CoinsCollected++;
+                    CollectFlash = 1f;
+                }
                 PrevCell = Cell;
             }
 
@@ -152,12 +159,20 @@ public class PacmanPlayer : core.System
 
         if (dist > 0.01f)
         {
-            var move = (diff / dist) * MathF.Min(step, dist);
+            var move = diff / dist * MathF.Min(step, dist);
             pos += move;
         }
 
         transform.Position = new Vector3(pos, Z);
         WorldPosition = pos;
+
+        // Coin collect: radius bump
+        if (CollectFlash > 0f)
+            CollectFlash = MathF.Max(0f, CollectFlash - dt * 4f);
+            
+        ref var circle = ref Scene.ECS.GetComponent<Circle2D>(EntityId);
+
+        circle.Radius = BaseRadius * (1f + CollectFlash * 0.18f);
 
         // Mouth animation and facing direction
         if (CurrentDir != (0, 0))
