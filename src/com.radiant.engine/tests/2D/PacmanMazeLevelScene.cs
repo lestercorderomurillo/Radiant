@@ -327,13 +327,15 @@ public class PacmanMazeLevelScene : Scene
             RainbowAI.Track(rainbowId, rainbowCell, rainbowRelease);
         }
 
-        // Player
+        // Player — golden yellow ball (no ghost texture)
         var playerCell = config.PlayerStartCell;
-        var playerCells = new[] { playerCell };
-        var playerColors = new[] { Color.White };
-        var playerIds = Maze.SpawnAtCells(playerCells, playerColors, 30f, 65530f, ghostTexture);
+        var playerColor = new Color(255, 220, 50);
+        var playerCenter = Maze.CellCenter(playerCell.x, playerCell.y);
+        int playerId = LightFactory.CreateLight(ECS, playerCenter, 30f,
+            playerColor, playerColor, 65530f);
+        ECS.AddComponent<MotionTrackable>(playerId);
 
-        PlayerSystem.Track(playerIds[0], playerCell, 65530f);
+        PlayerSystem.Track(playerId, playerCell, 65530f);
         PlayerSystem.CoinColor = config.CoinColor;
         GhostAI.Player = PlayerSystem;
         RainbowAI.Player = PlayerSystem;
