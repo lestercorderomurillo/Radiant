@@ -17,6 +17,7 @@ public class PacmanMazeLevelScene : Scene
     private RainbowGhostAI RainbowAI;
     private PacmanPlayer PlayerSystem;
     private Color BaseCoinColor;
+    private Color BasePowerPelletColor;
     private float CoinWaveTime;
     private int CurrentLevel;
 
@@ -268,6 +269,7 @@ public class PacmanMazeLevelScene : Scene
         if (pelletPositions.Length > 0)
             Maze.SpawnPowerPellets(pelletPositions, config.PowerPelletRadius * Scale, config.PowerPelletColor, 1f);
         BaseCoinColor = config.CoinColor;
+        BasePowerPelletColor = config.PowerPelletColor;
 
         var ghostTexture = Renderer.GetTexture("Ghost");
         var eyesTexture = Renderer.GetTexture("Eyes");
@@ -404,6 +406,41 @@ public class PacmanMazeLevelScene : Scene
             coinTransform.Position.Y = coinY;
             float scale = 1f + proximity * 0.6f;
             coinTransform.Scale = new Vector3(scale, scale, 1f);
+        }
+
+        foreach (var (cell, pelletId) in Maze.PowerPelletCells)
+        {
+            float phase = CoinWaveTime * 1.8f - cell.Item1 * 0.5f;
+
+            var basePos = Maze.CellCenter(cell.Item1, cell.Item2);
+            float pelletX = basePos.X;
+            float pelletY = basePos.Y + 4.5f * MathF.Sin(phase);
+
+            float dx = playerPos.X - pelletX;
+            float dy = playerPos.Y - pelletY;
+            float dist = MathF.Sqrt(dx * dx + dy * dy);
+            float proximity = 0f;
+            if (dist < attractRadius && dist > 0.1f)
+            {
+                proximity = 1f - dist / attractRadius;
+                float pull = proximity * attractStrength;
+                pelletX += dx * pull;
+                pelletY += dy * pull;
+            }
+
+            float bright = 1f + proximity * 0.6f;
+            ref var pelletMat = ref ECS.GetComponent<Material>(pelletId);
+            pelletMat.Emissive = new Color(
+                (byte)MathF.Min(BasePowerPelletColor.R * bright, 255f),
+                (byte)MathF.Min(BasePowerPelletColor.G * bright, 255f),
+                (byte)MathF.Min(BasePowerPelletColor.B * bright, 255f),
+                BasePowerPelletColor.A);
+
+            ref var pelletTransform = ref ECS.GetComponent<Transform>(pelletId);
+            pelletTransform.Position.X = pelletX;
+            pelletTransform.Position.Y = pelletY;
+            float pelletScale = 1f + proximity * 0.6f;
+            pelletTransform.Scale = new Vector3(pelletScale, pelletScale, 1f);
         }
 
         Inspector.SetLabel("scene", "level", $"Level: {CurrentLevel + 1}/{Levels.Length}");
