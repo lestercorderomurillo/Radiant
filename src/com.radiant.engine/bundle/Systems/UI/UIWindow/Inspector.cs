@@ -28,6 +28,7 @@ public class Inspector : core.System
 
     // Input state
     private MouseState PrevMouse;
+    private KeyboardState PrevKeyState;
     private bool Dragging;
     private string DragWindowId;
     private Vector2 DragOffset;
@@ -35,6 +36,9 @@ public class Inspector : core.System
     private string SliderWindowId;
     private string SliderWidgetId;
     private bool MouseOverUI;
+    private bool GlobalVisible = true;
+
+    public static event Action WindowsRestored;
 
     // Layout constants
     private const int DefaultWindowWidth = 340;
@@ -313,6 +317,7 @@ public class Inspector : core.System
     {
         Font = Renderer.GetFont("fonts/BaseFont");
         PrevMouse = Mouse.GetState();
+        PrevKeyState = Keyboard.GetState();
     }
 
     public override void Update()
@@ -322,6 +327,23 @@ public class Inspector : core.System
             AutoPositionAll();
             LayoutDone = true;
         }
+
+        // F1 toggles all windows
+        var Keyboard = Microsoft.Xna.Framework.Input.Keyboard.GetState();
+        if (Keyboard.IsKeyDown(Keys.F1) && PrevKeyState.IsKeyUp(Keys.F1))
+        {
+            GlobalVisible = !GlobalVisible;
+            if (GlobalVisible)
+            {
+                foreach (var Window in Windows.Values)
+                    Window.Visible = true;
+                WindowsRestored?.Invoke();
+            }
+        }
+        PrevKeyState = Keyboard;
+
+        if (!GlobalVisible)
+            return;
 
         var CurrentMouse = Mouse.GetState();
         var VirtualMouse = ScreenToVirtual(new Vector2(CurrentMouse.X, CurrentMouse.Y));
@@ -549,7 +571,7 @@ public class Inspector : core.System
 
     public override void LateRender()
     {
-        if (RenderOrder.Count == 0) return;
+        if (RenderOrder.Count == 0 || !GlobalVisible) return;
 
         ComputeAllLayouts();
 

@@ -1,6 +1,5 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using Microsoft.Xna.Framework.Input;
 using com.radiant.engine.runtime;
 using System;
 using System.Collections.Generic;
@@ -21,23 +20,15 @@ public class GizmosRenderer : core.System
     private const float TextPadding = 4f;
     private Color TextBackgroundColor = new(0, 0, 0, 180);
 
-    private KeyboardState PrevKeyState;
+    public void ToggleGizmos() => Enabled = !Enabled;
 
     public override void Initialize()
     {
         BaseFont = Renderer.GetFont("fonts/BaseFont");
-        PrevKeyState = Keyboard.GetState();
     }
 
     public override void Update()
     {
-        var keyboard = Keyboard.GetState();
-
-        if (keyboard.IsKeyDown(Keys.F1) && PrevKeyState.IsKeyUp(Keys.F1))
-            Enabled = !Enabled;
-
-        PrevKeyState = keyboard;
-
         ClearGizmoQueues();
     }
 

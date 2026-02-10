@@ -327,7 +327,7 @@ public class MyScene : Scene {
 ## Debug Controls
 | Key | Action |
 |-----|--------|
-| F1 | Toggle gizmos visual overlay (lines, circles, arcs, rects) |
+| F1 | Toggle all Inspector windows (restore closed on show) |
 | Arrow keys | Move player + collect coins (PacmanMazeLevelScene) |
 | ESC | Exit |
 

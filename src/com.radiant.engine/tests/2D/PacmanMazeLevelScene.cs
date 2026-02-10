@@ -11,6 +11,7 @@ public class PacmanMazeLevelScene : Scene
     private SystemGroup GI;
     private ColorManagement ColorMgmt;
     private SystemGroup UDR;
+    private GizmosRenderer Gizmos;
     private PacmanMazeBuilder Maze;
     private PacmanGhostAI GhostAI;
     private RainbowGhostAI RainbowAI;
@@ -196,7 +197,7 @@ public class PacmanMazeLevelScene : Scene
         ECS.AddSystem<PacmanGhostAI>();
         ECS.AddSystem<RainbowGhostAI>();
 
-        ECS.AddSystem<GizmosRenderer>();
+        Gizmos = ECS.AddSystem<GizmosRenderer>();
 
         base.SetupECS();
     }
@@ -230,7 +231,9 @@ public class PacmanMazeLevelScene : Scene
             UpdateUDRInput();
             UpdateWindowVisibility();
         });
+        Inspector.AddButton("scene", "toggleGizmos", "Toggle Gizmos", () => Gizmos.ToggleGizmos());
 
+        Inspector.WindowsRestored += UpdateWindowVisibility;
         UpdateWindowVisibility();
 
         base.SetupScene();

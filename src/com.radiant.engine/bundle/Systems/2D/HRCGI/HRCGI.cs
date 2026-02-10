@@ -53,9 +53,6 @@ public class HRCGI : core.System
         new Vector2(0, 0)
     ];
 
-    private int DebugIndex = 0;
-    private int DebugTextureCount;
-
     // Solid textures for default values
     private Texture2D BlackTexture;
     private Texture2D WhiteTexture;
@@ -73,13 +70,11 @@ public class HRCGI : core.System
         CalculateCascadeSizes();
         CreateRenderTargets();
 
-        DebugTextureCount = 1 + CascadeCount * 4 + FrustumCount * 2 + 2;
+
         Renderer.RenderScaleChanged += OnRenderScaleChanged;
 
         Inspector.CreateWindow("hrcgi", "HRCGI");
         Inspector.AddLabel("hrcgi", "info", "...");
-        Inspector.AddButton("hrcgi", "cycleDebug", "Cycle Debug Texture", () =>
-            DebugIndex = (DebugIndex + 1) % DebugTextureCount);
         Inspector.AddButton("hrcgi", "cycleQuality", "Cycle Quality", () =>
         {
             ProbeScaleIndex = (ProbeScaleIndex + 1) % ProbeScales.Length;
@@ -99,7 +94,7 @@ public class HRCGI : core.System
         WorldSize = new Vector2(newSize, newSize);
         CalculateCascadeSizes();
         CreateRenderTargets();
-        DebugTextureCount = 1 + CascadeCount * 4 + FrustumCount * 2 + 2;
+
     }
 
     private void CalculateCascadeSizes()
@@ -265,63 +260,7 @@ public class HRCGI : core.System
 
     public override void Render()
     {
-        Texture2D texture = GetDebugTexture();
-
-        if (DebugIndex == 0)
-        {
-            Renderer.Blit(texture, BlendState.AlphaBlend, SamplerState.PointClamp);
-        }
-        else
-        {
-            var vb = Renderer.ViewportBounds;
-            float scale = MathF.Min(
-                (float)vb.Width / texture.Width,
-                (float)vb.Height / texture.Height
-            );
-            int drawWidth = (int)(texture.Width * scale);
-            int drawHeight = (int)(texture.Height * scale);
-
-            Renderer.BeginDraw(SpriteSortMode.Immediate, BlendState.AlphaBlend, SamplerState.PointClamp);
-            Renderer.DrawSprite(texture, new Rectangle(0, 0, drawWidth, drawHeight), Color.White);
-            Renderer.EndDraw();
-        }
-    }
-
-    private Texture2D GetDebugTexture()
-    {
-        if (DebugIndex == 0) return FinalTexture;
-
-        int textureIndex = DebugIndex - 1;
-
-        // Vrays (radiance + transmittance pairs)
-        if (textureIndex < CascadeCount * 2)
-        {
-            int cascade = textureIndex / 2;
-            int type = textureIndex % 2;
-            return type == 0 ? VraysRadiance[cascade] : VraysTransmittance[cascade];
-        }
-        textureIndex -= CascadeCount * 2;
-
-        // Merge (radiance + transmittance pairs)
-        if (textureIndex < CascadeCount * 2)
-        {
-            int cascade = textureIndex / 2;
-            int type = textureIndex % 2;
-            return type == 0 ? MergeRadiance[cascade] : MergeTransmittance[cascade];
-        }
-        textureIndex -= CascadeCount * 2;
-
-        // Frustum outputs
-        if (textureIndex < FrustumCount * 2)
-        {
-            int frustum = textureIndex / 2;
-            int type = textureIndex % 2;
-            return type == 0 ? FrustumRadiance[frustum] : FrustumTransmittance[frustum];
-        }
-        textureIndex -= FrustumCount * 2;
-
-        if (textureIndex == 0) return Geometry.EmissiveTexture;
-        return Geometry.AbsorptionTexture;
+        Renderer.Blit(FinalTexture, BlendState.AlphaBlend, SamplerState.PointClamp);
     }
 
     public RenderTarget2D GetOutput() => FinalTexture;
@@ -336,7 +275,7 @@ public class HRCGI : core.System
         WorldSize = new Vector2(newSize, newSize);
         CalculateCascadeSizes();
         CreateRenderTargets();
-        DebugTextureCount = 1 + CascadeCount * 4 + FrustumCount * 2 + 2;
+
     }
 
     private void DisposeRenderTargets()
