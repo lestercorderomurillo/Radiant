@@ -5,24 +5,18 @@ using Microsoft.Xna.Framework.Graphics;
 
 namespace com.radiant.engine.core;
 
-/// <summary>
-/// Attribute to specify that a system must run after another system.
-/// </summary>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true)]
 public class RunAfterAttribute : Attribute
 {
-    public Type SystemType { get; }
-    public RunAfterAttribute(Type systemType) => SystemType = systemType;
+    public Type[] SystemTypes { get; }
+    public RunAfterAttribute(params Type[] systemTypes) => SystemTypes = systemTypes;
 }
 
-/// <summary>
-/// Attribute to specify that a system must run before another system.
-/// </summary>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true)]
 public class RunBeforeAttribute : Attribute
 {
-    public Type SystemType { get; }
-    public RunBeforeAttribute(Type systemType) => SystemType = systemType;
+    public Type[] SystemTypes { get; }
+    public RunBeforeAttribute(params Type[] systemTypes) => SystemTypes = systemTypes;
 }
 
 /// <summary>

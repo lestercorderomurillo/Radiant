@@ -5,12 +5,8 @@ using Microsoft.Xna.Framework.Graphics;
 
 namespace com.radiant.engine.bundle;
 
-[RunAfter(typeof(HRCGI))]
-[RunAfter(typeof(RCGI))]
-[RunBefore(typeof(Bilinear))]
-[RunBefore(typeof(UDR1))]
-[RunBefore(typeof(UDR2))]
-[RunBefore(typeof(UDR3))]
+[RunAfter(typeof(HRCGI), typeof(RCGI))]
+[RunBefore(typeof(Bilinear), typeof(UDR1), typeof(UDR2), typeof(UDR3))]
 public class ColorManagement : core.System
 {
     public override RenderLayer RenderLayer => RenderLayer.World;

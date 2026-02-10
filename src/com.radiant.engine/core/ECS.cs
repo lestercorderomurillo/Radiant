@@ -112,20 +112,22 @@ public class ECS : IGameObject
             foreach (var attr in type.GetCustomAttributes(typeof(RunAfterAttribute), true))
             {
                 var runAfter = (RunAfterAttribute)attr;
-                if (typeToIndex.TryGetValue(runAfter.SystemType, out int beforeIdx))
-                {
-                    outgoing[beforeIdx].Add(i);
-                    inDegree[i]++;
-                }
+                foreach (var dep in runAfter.SystemTypes)
+                    if (typeToIndex.TryGetValue(dep, out int beforeIdx))
+                    {
+                        outgoing[beforeIdx].Add(i);
+                        inDegree[i]++;
+                    }
             }
             foreach (var attr in type.GetCustomAttributes(typeof(RunBeforeAttribute), true))
             {
                 var runBefore = (RunBeforeAttribute)attr;
-                if (typeToIndex.TryGetValue(runBefore.SystemType, out int afterIdx))
-                {
-                    outgoing[i].Add(afterIdx);
-                    inDegree[afterIdx]++;
-                }
+                foreach (var dep in runBefore.SystemTypes)
+                    if (typeToIndex.TryGetValue(dep, out int afterIdx))
+                    {
+                        outgoing[i].Add(afterIdx);
+                        inDegree[afterIdx]++;
+                    }
             }
         }
 

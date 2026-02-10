@@ -291,10 +291,18 @@ public abstract class System
 
 ### Ordering Attributes
 
+Accepts `params Type[]` — pass one or multiple system types per attribute. `AllowMultiple = true` so you can also use separate attributes.
+
 ```csharp
-[RunAfter(typeof(Geometry))]      // This system runs after Geometry
-[RunBefore(typeof(GizmosRenderer))] // This system runs before GizmosRenderer
+// Multiple types in one attribute (preferred when listing dependencies)
+[RunAfter(typeof(HRCGI), typeof(RCGI))]
+[RunBefore(typeof(Bilinear), typeof(UDR1), typeof(UDR2), typeof(UDR3))]
 [Pausable]                         // Skipped when ECS.Paused = true
+public class ColorManagement : System { ... }
+
+// Single type per attribute also works
+[RunAfter(typeof(Geometry))]
+[RunBefore(typeof(GizmosRenderer))]
 public class MySystem : System { ... }
 ```
 
