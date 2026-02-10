@@ -71,6 +71,8 @@ public class PacmanMazeLevelScene : Scene
             WallAlbedo = new Color((byte)0, (byte)0, (byte)40, (byte)255),
             WallEmissive = new Color((byte)90, (byte)45, (byte)160, (byte)170),
             CoinColor = new Color(225, 180, 35),
+            PowerPelletCells = [(1, 3), (26, 3), (1, 23), (26, 23)],
+            FrightenedDuration = 6f,
             Ghosts =
             [
                 new() { Type = PacmanGhostType.Blinky, ReleaseAfter = 4f },
@@ -88,6 +90,7 @@ public class PacmanMazeLevelScene : Scene
             WallAlbedo = new Color((byte)0, (byte)0, (byte)80, (byte)255),
             WallEmissive = new Color((byte)80, (byte)120, (byte)255, (byte)255),
             CoinColor = new Color(80, 255, 200),
+            FrightenedDuration = 5f,
             Ghosts =
             [
                 new() { Type = PacmanGhostType.Pinky,  ReleaseAfter = 4f },
@@ -104,6 +107,7 @@ public class PacmanMazeLevelScene : Scene
             WallAlbedo = new Color((byte)80, (byte)0, (byte)0, (byte)255),
             WallEmissive = new Color((byte)212, (byte)80, (byte)80, (byte)255),
             CoinColor = new Color(255, 255, 255),
+            FrightenedDuration = 5f,
             Ghosts =
             [
                 new() { Type = PacmanGhostType.Rainbow, ReleaseAfter = 4f },
@@ -121,6 +125,7 @@ public class PacmanMazeLevelScene : Scene
             WallAlbedo = new Color((byte)0, (byte)40, (byte)0, (byte)255),
             WallEmissive = new Color((byte)80, (byte)128, (byte)80, (byte)255),
             CoinColor = new Color(120, 255, 120),
+            FrightenedDuration = 7f,
             Ghosts =
             [
                 new() { Type = PacmanGhostType.Dinky, ReleaseAfter = 4f },
@@ -137,6 +142,7 @@ public class PacmanMazeLevelScene : Scene
             WallAlbedo = new Color((byte)0, (byte)0, (byte)0, (byte)255),
             WallEmissive = new Color((byte)0, (byte)0, (byte)0, (byte)255),
             CoinColor = new Color(255, 255, 255),
+            FrightenedDuration = 4f,
             Ghosts =
             [
                 new() { Type = PacmanGhostType.Shadow,  ReleaseAfter = 4f },
@@ -153,6 +159,7 @@ public class PacmanMazeLevelScene : Scene
             WallAlbedo = new Color((byte)10, (byte)0, (byte)0, (byte)255),
             WallEmissive = new Color((byte)40, (byte)0, (byte)0, (byte)255),
             CoinColor = new Color(255, 60, 60),
+            FrightenedDuration = 3f,
             Ghosts =
             [
                 new() { Type = PacmanGhostType.Shadow, ReleaseAfter = 1f },
@@ -255,8 +262,11 @@ public class PacmanMazeLevelScene : Scene
         Maze.NoUpTiles = config.NoUpTiles;
         Maze.BuildMaze();
 
-        // Coins
+        // Coins + power pellets
         Maze.SpawnCoins(config.CoinRadius * Scale, config.CoinColor, 1f);
+        var pelletPositions = config.PowerPelletCells ?? Maze.FindCornerPelletPositions();
+        if (pelletPositions.Length > 0)
+            Maze.SpawnPowerPellets(pelletPositions, config.PowerPelletRadius * Scale, config.PowerPelletColor, 1f);
         BaseCoinColor = config.CoinColor;
 
         var ghostTexture = Renderer.GetTexture("Ghost");
@@ -325,6 +335,9 @@ public class PacmanMazeLevelScene : Scene
         PlayerSystem.Speed = config.GhostSpeed * Scale;
         PlayerSystem.Track(playerId, playerCell, 65530f);
         PlayerSystem.CoinColor = config.CoinColor;
+        PlayerSystem.GhostAI = GhostAI;
+        PlayerSystem.RainbowAI = RainbowAI;
+        PlayerSystem.FrightenedDuration = config.FrightenedDuration;
         GhostAI.Player = PlayerSystem;
         RainbowAI.Player = PlayerSystem;
     }

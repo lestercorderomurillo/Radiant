@@ -26,6 +26,9 @@ public class RainbowGhostAI : core.System
     private const float TrioDuration = 7f;
     private static readonly float[] MergeSpeedMults = [1.8f, 1.5f, 1.3f];
     private const float HueCycleSpeed = 0.35f;
+    private const float RespawnDelay = 3f;
+    private const float EatenSpeedMultiplier = 2.5f;
+    private static readonly Color FrightenedColor = new Color(30, 30, 200);
 
     // Pac-Man direction priority: Up, Left, Down, Right
     private static readonly int[] DXs = [0, -1, 0, 1];
@@ -58,6 +61,11 @@ public class RainbowGhostAI : core.System
     // Ghost house exit
     private bool MainExitedHouse;
 
+    // Frightened + eaten state
+    private float FrightenedTimer;
+    private bool MainEaten;
+    private float MainRespawnTimer;
+
     // State machine
     private RainbowPhase Phase = RainbowPhase.Solo;
     private float PhaseTimer;
@@ -70,6 +78,8 @@ public class RainbowGhostAI : core.System
     private (int x, int y)[] WanderTargetTiles = new (int, int)[1 + MaxClones];
     // Assigned corner per entity for spread-out behavior
     private (int x, int y)[] CornerTargets = new (int, int)[1 + MaxClones];
+
+    public bool IsFrightened => FrightenedTimer > 0f;
 
     public override void Initialize()
     {
@@ -85,6 +95,9 @@ public class RainbowGhostAI : core.System
         MainDir = (1, 0);
         MainHue = 0f;
         MainExitedHouse = false;
+        MainEaten = false;
+        MainRespawnTimer = 0f;
+        FrightenedTimer = 0f;
         CloneCount = 0;
         Phase = RainbowPhase.Solo;
         PhaseTimer = 0f;
@@ -119,6 +132,27 @@ public class RainbowGhostAI : core.System
         Initialized = false;
     }
 
+    /// <summary>Trigger frightened mode (rainbow ghost and clones move randomly at half speed).</summary>
+    public void SetFrightened(float duration)
+    {
+        if (!Initialized) return;
+        FrightenedTimer = duration;
+
+        // Change body colors to dark blue (skip eaten main)
+        if (!MainEaten && MainExitedHouse)
+        {
+            ref var mat = ref Scene.ECS.GetComponent<Material>(MainId);
+            mat.Albedo = Color.Transparent;
+            mat.Emissive = FrightenedColor;
+        }
+        for (int i = 0; i < CloneCount; i++)
+        {
+            ref var mat = ref Scene.ECS.GetComponent<Material>(CloneIds[i]);
+            mat.Albedo = Color.Transparent;
+            mat.Emissive = FrightenedColor;
+        }
+    }
+
     public override void Update()
     {
         if (!Initialized) return;
@@ -126,15 +160,41 @@ public class RainbowGhostAI : core.System
         float dt = (float)GameTime.ElapsedGameTime.TotalSeconds;
 
         // Advance hue even before release (ghost glows in house)
-        MainHue = (MainHue + HueCycleSpeed * dt) % 1f;
+        if (!MainEaten && MainRespawnTimer <= 0f)
+            MainHue = (MainHue + HueCycleSpeed * dt) % 1f;
 
         // Shift position history for eye sync (2-frame delay)
         ShiftEyeHistory();
 
-        // Update colors
-        UpdateMainColor();
-        for (int i = 0; i < CloneCount; i++)
-            UpdateCloneColor(i);
+        // Update colors (skip if frightened or eaten)
+        if (!IsFrightened && !MainEaten && MainRespawnTimer <= 0f)
+        {
+            UpdateMainColor();
+            for (int i = 0; i < CloneCount; i++)
+                UpdateCloneColor(i);
+        }
+
+        // Frightened timer countdown
+        if (FrightenedTimer > 0f)
+        {
+            FrightenedTimer -= dt;
+            if (FrightenedTimer <= 0f)
+            {
+                // Restore colors
+                if (!MainEaten && MainRespawnTimer <= 0f)
+                    UpdateMainColor();
+                for (int i = 0; i < CloneCount; i++)
+                    UpdateCloneColor(i);
+            }
+        }
+
+        // Respawn timer countdown (main ghost in house)
+        if (MainRespawnTimer > 0f)
+        {
+            MainRespawnTimer -= dt;
+            if (MainRespawnTimer <= 0f)
+                RespawnMain();
+        }
 
         // Freeze all movement until player moves
         if (Player == null || !Player.HasMoved) return;
@@ -143,6 +203,20 @@ public class RainbowGhostAI : core.System
 
         // Before release: wander in house
         if (!IsReleased())
+        {
+            MoveEntity(ref MainCell, ref MainTarget, ref MainDir, MainId, dt, 0);
+            return;
+        }
+
+        // Eaten main ghost: navigate to house
+        if (MainEaten)
+        {
+            MoveEntity(ref MainCell, ref MainTarget, ref MainDir, MainId, dt, 0);
+            return;
+        }
+
+        // Respawning in house: house wander
+        if (MainRespawnTimer > 0f)
         {
             MoveEntity(ref MainCell, ref MainTarget, ref MainDir, MainId, dt, 0);
             return;
@@ -225,13 +299,21 @@ public class RainbowGhostAI : core.System
 
             if (EyesTexture != null)
             {
+                Color eyeColor;
+                if (i == 0 && MainEaten)
+                    eyeColor = Color.White;
+                else if (IsFrightened)
+                    eyeColor = Color.White;
+                else
+                    eyeColor = Color.Black;
+
                 Renderer.DrawTexture(EyesTexture,
                     new Rectangle(
                         (int)((cx - eyeR) * sx),
                         (int)((cy - eyeR) * sy),
                         (int)(eyeD * sx),
                         (int)(eyeD * sy)),
-                    Color.Black);
+                    eyeColor);
             }
         }
 
@@ -243,6 +325,37 @@ public class RainbowGhostAI : core.System
         if (!Initialized) return;
         for (int i = CloneCount - 1; i >= 0; i--)
             DestroyClone(i);
+    }
+
+    // ── Frightened + Eaten ─────────────────────────────────────────────
+
+    private void EatEntity(int eyeIndex)
+    {
+        if (eyeIndex == 0)
+        {
+            // Main ghost eaten — destroy all clones, navigate to house
+            for (int i = CloneCount - 1; i >= 0; i--)
+                DestroyClone(i);
+            MainEaten = true;
+            ref var mat = ref Scene.ECS.GetComponent<Material>(MainId);
+            mat.Albedo = Color.Transparent;
+            mat.Emissive = Color.Transparent;
+        }
+        else
+        {
+            // Clone eaten — just destroy the clone
+            DestroyClone(eyeIndex - 1);
+        }
+    }
+
+    private void RespawnMain()
+    {
+        MainEaten = false;
+        MainRespawnTimer = 0f;
+        MainExitedHouse = false;
+        Phase = RainbowPhase.Solo;
+        PhaseTimer = 0f;
+        UpdateMainColor();
     }
 
     // ── Clone Lifecycle ────────────────────────────────────────────────
@@ -257,7 +370,7 @@ public class RainbowGhostAI : core.System
         var pos = new Vector2(sourceT.Position.X, sourceT.Position.Y);
 
         CloneHues[idx] = MainHue;
-        var color = LightFactory.HueToRGB(MainHue);
+        var color = IsFrightened ? FrightenedColor : LightFactory.HueToRGB(MainHue);
         int id = LightFactory.CreateLight(Scene.ECS, pos, BodyRadius,
             Color.Transparent, color, GhostZ, BodyTexture);
         Scene.ECS.AddComponent<MotionTrackable>(id);
@@ -353,8 +466,13 @@ public class RainbowGhostAI : core.System
         ref (int dx, int dy) Dir, int EntityId, float dt, int EyeIndex)
     {
         float step = GhostSpeed * dt;
-        if (EyeIndex == 0 && !MainExitedHouse && !IsReleased())
+        if (EyeIndex == 0 && MainEaten)
+            step = GhostSpeed * dt * EatenSpeedMultiplier;
+        else if (EyeIndex == 0 && !MainExitedHouse && !IsReleased())
             step *= 0.5f;
+        else if (IsFrightened)
+            step *= 0.5f;
+
         ref var transform = ref Scene.ECS.GetComponent<Transform>(EntityId);
         var pos = new Vector2(transform.Position.X, transform.Position.Y);
         var target = Maze.CellCenter(Target.x, Target.y);
@@ -369,10 +487,18 @@ public class RainbowGhostAI : core.System
             pos = Maze.CellCenter(Cell.x, Cell.y);
 
             // Check house exit (main ghost only — clones always spawn outside)
-            if (EyeIndex == 0 && !MainExitedHouse)
+            if (EyeIndex == 0 && !MainExitedHouse && !MainEaten)
             {
                 if (!Maze.InGhostHouse(Cell.x, Cell.y) && !Maze.IsGhostDoor(Cell.x, Cell.y))
+                {
                     MainExitedHouse = true;
+                    if (IsFrightened)
+                    {
+                        ref var mat = ref Scene.ECS.GetComponent<Material>(MainId);
+                        mat.Albedo = Color.Transparent;
+                        mat.Emissive = FrightenedColor;
+                    }
+                }
                 else
                 {
                     if (IsReleased())
@@ -386,7 +512,31 @@ public class RainbowGhostAI : core.System
                 }
             }
 
-            PickDirection(ref Cell, ref Target, ref Dir, EyeIndex);
+            // Eaten main ghost pathfinding
+            if (EyeIndex == 0 && MainEaten)
+            {
+                PickEatenPath(ref Cell, ref Target, ref Dir);
+                target = Maze.CellCenter(Target.x, Target.y);
+                diff = target - pos;
+                dist = diff.Length();
+                goto applyMove;
+            }
+
+            // Respawning in house
+            if (EyeIndex == 0 && MainRespawnTimer > 0f)
+            {
+                PickHouseWander(ref Cell, ref Target, ref Dir);
+                target = Maze.CellCenter(Target.x, Target.y);
+                diff = target - pos;
+                dist = diff.Length();
+                goto applyMove;
+            }
+
+            // Frightened: random movement
+            if (IsFrightened)
+                PickRandom(ref Cell, ref Target, ref Dir);
+            else
+                PickDirection(ref Cell, ref Target, ref Dir, EyeIndex);
 
             target = Maze.CellCenter(Target.x, Target.y);
             diff = target - pos;
@@ -403,14 +553,129 @@ public class RainbowGhostAI : core.System
         transform.Position = new Vector3(pos, GhostZ);
         EyeDirs[EyeIndex] = Dir;
 
-        // Collision with player
-        if (Player != null && !Player.PlayerCaught && MainExitedHouse)
+        // Collision with player (skip for eaten or respawning)
+        if (Player != null && !Player.PlayerCaught && MainExitedHouse
+            && !MainEaten && MainRespawnTimer <= 0f)
         {
             float dx = pos.X - Player.WorldPosition.X;
             float dy = pos.Y - Player.WorldPosition.Y;
             if (dx * dx + dy * dy < BodyRadius * BodyRadius)
-                Player.PlayerCaught = true;
+            {
+                if (IsFrightened)
+                    EatEntity(EyeIndex);
+                else
+                    Player.PlayerCaught = true;
+            }
         }
+    }
+
+    /// <summary>Eaten main ghost pathfinding: navigate toward ghost house door, then enter and respawn.</summary>
+    private void PickEatenPath(ref (int x, int y) Cell, ref (int x, int y) Target,
+        ref (int dx, int dy) Dir)
+    {
+        var (cx, cy) = Cell;
+        var (pdx, pdy) = Dir;
+
+        // Inside the house — start respawning with wander
+        if (Maze.InGhostHouse(cx, cy))
+        {
+            MainEaten = false;
+            MainRespawnTimer = RespawnDelay;
+            MainExitedHouse = false;
+
+            // Show dim body while waiting
+            ref var material = ref Scene.ECS.GetComponent<Material>(MainId);
+            material.Albedo = Color.Transparent;
+            material.Emissive = new Color((byte)60, (byte)60, (byte)60, (byte)255);
+
+            PickHouseWander(ref Cell, ref Target, ref Dir);
+            return;
+        }
+
+        // At ghost door — go straight down into the house
+        if (Maze.IsGhostDoor(cx, cy))
+        {
+            Dir = (0, 1);
+            Target = (cx, cy + 1);
+            return;
+        }
+
+        // Navigate toward house door
+        int targetX = Maze.HouseDoorLeft;
+        int targetY = Maze.HouseDoorY;
+
+        Span<(int dx, int dy)> options = stackalloc (int, int)[4];
+        int count = 0;
+
+        for (int d = 0; d < 4; d++)
+        {
+            int ndx = DXs[d], ndy = DYs[d];
+            if (!Maze.CanMove(cx, cy, ndx, ndy)) continue;
+            if (ndx == -pdx && ndy == -pdy) continue;
+            options[count++] = (ndx, ndy);
+        }
+
+        if (count == 0)
+        {
+            Dir = (-pdx, -pdy);
+            Target = (cx - pdx, cy - pdy);
+            return;
+        }
+
+        if (count == 1)
+        {
+            var only = options[0];
+            Dir = only;
+            Target = (cx + only.dx, cy + only.dy);
+            return;
+        }
+
+        float bestDist = float.MaxValue;
+        (int dx, int dy) bestDir = options[0];
+
+        for (int j = 0; j < count; j++)
+        {
+            float dx2 = cx + options[j].dx - targetX;
+            float dy2 = cy + options[j].dy - targetY;
+            float dist = dx2 * dx2 + dy2 * dy2;
+            if (dist < bestDist)
+            {
+                bestDist = dist;
+                bestDir = options[j];
+            }
+        }
+
+        Dir = bestDir;
+        Target = (cx + bestDir.dx, cy + bestDir.dy);
+    }
+
+    /// <summary>Frightened mode: random direction at each intersection.</summary>
+    private void PickRandom(ref (int x, int y) Cell, ref (int x, int y) Target,
+        ref (int dx, int dy) Dir)
+    {
+        var (cx, cy) = Cell;
+        var (pdx, pdy) = Dir;
+
+        Span<(int dx, int dy)> options = stackalloc (int, int)[4];
+        int count = 0;
+
+        for (int d = 0; d < 4; d++)
+        {
+            if (!CanMove(cx, cy, DXs[d], DYs[d])) continue;
+            if (DXs[d] == -pdx && DYs[d] == -pdy) continue;
+            options[count++] = (DXs[d], DYs[d]);
+        }
+
+        if (count == 0)
+        {
+            Dir = (-pdx, -pdy);
+            Target = (cx - pdx, cy - pdy);
+            return;
+        }
+
+        var pick = options[Rng.Next(count)];
+        Dir = pick;
+        Target = (cx + pick.dx, cy + pick.dy);
     }
 
     private void PickHouseExit(ref (int x, int y) Cell, ref (int x, int y) Target,
@@ -576,6 +841,7 @@ public class RainbowGhostAI : core.System
     private bool CanMove(int cx, int cy, int dx, int dy)
     {
         if (!Maze.CanMove(cx, cy, dx, dy)) return false;
+        if (MainEaten) return true; // eaten ghost can pass through door
         int nx = Maze.WrapX(cx + dx), ny = cy + dy;
         if (Maze.InGhostHouse(nx, ny)) return false;
         if (Maze.IsGhostDoor(nx, ny)) return false;
@@ -584,6 +850,7 @@ public class RainbowGhostAI : core.System
 
     private bool IsReleased()
     {
+        if (MainRespawnTimer > 0f) return false;
         if (ReleaseTime > 0 && ElapsedTime >= ReleaseTime) return true;
         if (ReleaseAtCoinPercent > 0 && Player != null && Player.CoinsTotal > 0)
         {

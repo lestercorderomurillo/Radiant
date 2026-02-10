@@ -18,6 +18,9 @@ public class PacmanPlayer : core.System
     public Color CoinColor { get; set; } = new Color(255, 220, 50);
     public bool PlayerCaught { get; set; }
     public bool HasMoved { get; private set; }
+    public PacmanGhostAI GhostAI { get; set; }
+    public RainbowGhostAI RainbowAI { get; set; }
+    public float FrightenedDuration { get; set; } = 6f;
 
     PacmanMazeBuilder Maze;
     Geometry Geometry;
@@ -124,7 +127,7 @@ public class PacmanPlayer : core.System
             Cell = (Maze.WrapX(raw.x), raw.y);
             pos = Maze.CellCenter(Cell.x, Cell.y);
 
-            // Collect coin at new cell
+            // Collect coin or power pellet at new cell
             if (Cell != PrevCell)
             {
                 if (Maze.TryCollectCoin(Cell.x, Cell.y))
@@ -132,6 +135,14 @@ public class PacmanPlayer : core.System
                     CoinsCollected++;
                     CollectFlash = 1f;
                 }
+
+                if (Maze.TryCollectPowerPellet(Cell.x, Cell.y))
+                {
+                    GhostAI?.SetFrightened(FrightenedDuration);
+                    RainbowAI?.SetFrightened(FrightenedDuration);
+                    CollectFlash = 1f;
+                }
+
                 PrevCell = Cell;
             }
 
@@ -172,7 +183,7 @@ public class PacmanPlayer : core.System
             
         ref var circle = ref Scene.ECS.GetComponent<Circle2D>(EntityId);
 
-        circle.Radius = BaseRadius * (1f + CollectFlash * 0.18f);
+        circle.Radius = BaseRadius * (1f + CollectFlash * 0.20f);
 
         // Mouth animation and facing direction
         if (CurrentDir != (0, 0))

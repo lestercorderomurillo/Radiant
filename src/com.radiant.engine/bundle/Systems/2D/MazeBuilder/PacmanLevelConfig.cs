@@ -23,6 +23,11 @@ public class PacmanLevelConfig
     public float CoinRadius { get; set; } = 6f;
     public Color CoinColor { get; set; } = new Color(165, 130, 15);
 
+    public float PowerPelletRadius { get; set; } = 16f;
+    public Color PowerPelletColor { get; set; } = new Color((byte)255, (byte)255, (byte)255, (byte)255);
+    public float FrightenedDuration { get; set; } = 6f;
+    public (int x, int y)[] PowerPelletCells { get; set; }
+
     public GhostEntry[] Ghosts { get; set; } = [];
     public float GhostSpeed { get; set; } = 200f;
 

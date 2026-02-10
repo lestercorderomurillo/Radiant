@@ -106,13 +106,13 @@ radiant/
 │   │       │   ├── MouseLight/MouseLight.cs
 │   │       │   ├── PaintBrush/PaintBrush.cs
 │   │       │   ├── MazeBuilder/
-│   │       │   │   ├── PacmanMazeBuilder.cs                 # Maze layout + coin tracking
+│   │       │   │   ├── PacmanMazeBuilder.cs                 # Maze layout + coin/power pellet tracking
 │   │       │   │   ├── PacmanMazeGenerator.cs               # Procedural maze generation
 │   │       │   │   └── PacmanLevelConfig.cs                 # Per-level config + GhostEntry struct
 │   │       │   └── AI/Pacman/
-│   │       │       ├── GhostAI/PacmanGhostAI.cs             # Ghost AI (scatter/chase/frightened)
-│   │       │       ├── Player/PacmanPlayer.cs               # Arrow-key player + coins + HUD
-│   │       │       └── RainbowGhost/RainbowGhostAI.cs       # Rainbow ghost (clone/merge)
+│   │       │       ├── GhostAI/PacmanGhostAI.cs             # Ghost AI (scatter/chase/frightened/eaten)
+│   │       │       ├── Player/PacmanPlayer.cs               # Arrow-key player + coins + power pellets + HUD
+│   │       │       └── RainbowGhost/RainbowGhostAI.cs       # Rainbow ghost (clone/merge/frightened/eaten)
 │   │       ├── 3D/Tileset3D/Tileset3D.cs                    # 3D tilemap (placeholder, empty)
 │   │       ├── FX/
 │   │       │   ├── ColorManagement/ColorManagement.cs       # Tonemapping post-process

@@ -19,6 +19,7 @@ public class PacmanMazeBuilder : core.System
     public List<int> BorderIds { get; private set; } = new();
     public List<int> WallIds { get; private set; } = new();
     public Dictionary<(int, int), int> CoinCells { get; private set; } = new();
+    public Dictionary<(int, int), int> PowerPelletCells { get; private set; } = new();
 
     // Ghost house bounds (grid coordinates, inclusive). (-1,-1,-1,-1) = none.
     public (int left, int top, int right, int bottom) GhostHouse { get; set; } = (-1, -1, -1, -1);
@@ -137,6 +138,68 @@ public class PacmanMazeBuilder : core.System
         foreach (var id in CoinCells.Values)
             ecs.DestroyEntity(id);
         CoinCells.Clear();
+        foreach (var id in PowerPelletCells.Values)
+            ecs.DestroyEntity(id);
+        PowerPelletCells.Clear();
+    }
+
+    public void SpawnPowerPellets((int x, int y)[] positions, float radius, Color color, float z)
+    {
+        var ecs = Scene.ECS;
+        PowerPelletCells.Clear();
+
+        for (int i = 0; i < positions.Length; i++)
+        {
+            var (x, y) = positions[i];
+
+            // Remove coin at this position if any
+            if (CoinCells.Remove((x, y), out int coinId))
+                ecs.DestroyEntity(coinId);
+
+            int pelletId = LightFactory.CreateLight(ecs, CellCenter(x, y), radius, color, color, z);
+            PowerPelletCells[(x, y)] = pelletId;
+        }
+    }
+
+    public bool TryCollectPowerPellet(int cx, int cy)
+    {
+        if (!PowerPelletCells.Remove((cx, cy), out int entityId)) return false;
+        Scene.ECS.DestroyEntity(entityId);
+        return true;
+    }
+
+    public (int x, int y)[] FindCornerPelletPositions()
+    {
+        var corners = new (int tx, int ty)[]
+        {
+            (1, 1),
+            (Cols - 2, 1),
+            (1, Rows - 2),
+            (Cols - 2, Rows - 2)
+        };
+
+        var result = new (int x, int y)[4];
+        for (int c = 0; c < 4; c++)
+        {
+            float bestDist = float.MaxValue;
+            result[c] = (Cols / 2, Rows / 2);
+
+            for (int y = 0; y < Rows; y++)
+                for (int x = 0; x < Cols; x++)
+                {
+                    if (IsWall(x, y) || InGhostHouse(x, y) || IsGhostDoor(x, y)) continue;
+                    float dx = x - corners[c].tx;
+                    float dy = y - corners[c].ty;
+                    float dist = dx * dx + dy * dy;
+                    if (dist < bestDist)
+                    {
+                        bestDist = dist;
+                        result[c] = (x, y);
+                    }
+                }
+        }
+
+        return result;
     }
 
     public int[] SpawnAtCells((int x, int y)[] cells, Color[] colors, float radius, float z,

@@ -20,6 +20,10 @@ public class PacmanGhostAI : core.System
     public float DefaultReleaseInterval { get; set; } = 0.5f;
     public PacmanPlayer Player { get; set; }
 
+    private const float RespawnDelay = 3f;
+    private const float EatenSpeedMultiplier = 2.5f;
+    private static readonly Color FrightenedColor = new Color(30, 30, 200);
+
     private int[] GhostIds;
     private PacmanMazeBuilder Maze;
     private Geometry Geometry;
@@ -29,6 +33,8 @@ public class PacmanGhostAI : core.System
     private GhostEntry[] GhostEntries;
     private (int x, int y)[] ChaseTargets;
     private bool[] ExitedHouse;
+    private bool[] Eaten;
+    private float[] RespawnTimer;
     private Color[] GhostColors;
     private Vector2[] EyePositions;      // 2-frame delayed positions (matches Geometry's rendered body)
     private Vector2[] PrevPositions;     // 1-frame delayed (intermediate)
@@ -105,6 +111,8 @@ public class PacmanGhostAI : core.System
         GhostDirs = new (int, int)[count];
         ChaseTargets = new (int, int)[count];
         ExitedHouse = new bool[count];
+        Eaten = new bool[count];
+        RespawnTimer = new float[count];
         GhostColors = new Color[count];
         EyePositions = new Vector2[count];
         PrevPositions = new Vector2[count];
@@ -116,6 +124,8 @@ public class PacmanGhostAI : core.System
             GhostDirs[i] = (1, 0);
             ChaseTargets[i] = PickRandomWalkable();
             ExitedHouse[i] = false;
+            Eaten[i] = false;
+            RespawnTimer[i] = 0f;
 
             // GI emission via Geometry texture draw, eyes overlay via LateRender
             GhostColors[i] = PersonalityColor(entries[i].Type);
@@ -156,10 +166,21 @@ public class PacmanGhostAI : core.System
     /// <summary>Trigger frightened mode (all ghosts reverse and move randomly at half speed).</summary>
     public void SetFrightened(float duration)
     {
+        if (GhostIds == null) return;
         if (CurrentMode != PacmanGhostMode.Frightened)
             PreFrightenedMode = CurrentMode;
         CurrentMode = PacmanGhostMode.Frightened;
         FrightenedTimer = duration;
+
+        // Change body color of active ghosts to dark blue
+        for (int i = 0; i < GhostIds.Length; i++)
+        {
+            if (Eaten[i] || RespawnTimer[i] > 0f || !ExitedHouse[i]) continue;
+            ref var material = ref Scene.ECS.GetComponent<Material>(GhostIds[i]);
+            material.Albedo = Color.Transparent;
+            material.Emissive = FrightenedColor;
+        }
+
         ReverseAll();
     }
 
@@ -187,13 +208,28 @@ public class PacmanGhostAI : core.System
 
         for (int i = 0; i < GhostIds.Length; i++)
         {
-            float currentStep = !ExitedHouse[i] && !IsReleased(i)
-                ? step * 0.5f
-                : (CurrentMode == PacmanGhostMode.Frightened && ExitedHouse[i])
-                    ? frightenedStep : step;
+            // Respawn timer countdown (ghost waiting in house)
+            if (RespawnTimer[i] > 0f)
+            {
+                RespawnTimer[i] -= dt;
+                if (RespawnTimer[i] <= 0f)
+                    RespawnGhost(i);
+            }
+
+            // Speed calculation
+            float currentStep;
+            if (Eaten[i])
+                currentStep = step * EatenSpeedMultiplier;
+            else if (!ExitedHouse[i] && !IsReleased(i))
+                currentStep = step * 0.5f;
+            else if (CurrentMode == PacmanGhostMode.Frightened && ExitedHouse[i])
+                currentStep = frightenedStep;
+            else
+                currentStep = step;
 
             // Shadow: 1.25x base, ramps to 1.5x when approaching, normal speed when very close
-            if (GhostEntries[i].Type == PacmanGhostType.Shadow && ExitedHouse[i] && CurrentMode != PacmanGhostMode.Frightened)
+            if (GhostEntries[i].Type == PacmanGhostType.Shadow && ExitedHouse[i]
+                && !Eaten[i] && CurrentMode != PacmanGhostMode.Frightened)
             {
                 var (scx, scy) = GhostCells[i];
                 var (stx, sty) = Player != null ? Player.Cell : ChaseTargets[i];
@@ -230,13 +266,19 @@ public class PacmanGhostAI : core.System
 
             transform.Position = new Vector3(pos, GhostZ);
 
-            // Collision with player
-            if (ExitedHouse[i] && Player != null && !Player.PlayerCaught)
+            // Collision with player (skip for eaten or respawning ghosts)
+            if (ExitedHouse[i] && !Eaten[i] && RespawnTimer[i] <= 0f
+                && Player != null && !Player.PlayerCaught)
             {
                 float dx = pos.X - Player.WorldPosition.X;
                 float dy = pos.Y - Player.WorldPosition.Y;
                 if (dx * dx + dy * dy < BodyRadius * BodyRadius)
-                    Player.PlayerCaught = true;
+                {
+                    if (CurrentMode == PacmanGhostMode.Frightened)
+                        EatGhost(i);
+                    else
+                        Player.PlayerCaught = true;
+                }
             }
         }
     }
@@ -263,7 +305,14 @@ public class PacmanGhostAI : core.System
 
             if (EyesTexture != null)
             {
-                var eyeColor = GhostEntries[i].Type == PacmanGhostType.Shadow ? Color.White : Color.Black;
+                Color eyeColor;
+                if (Eaten[i])
+                    eyeColor = Color.White;
+                else if (CurrentMode == PacmanGhostMode.Frightened && ExitedHouse[i] && RespawnTimer[i] <= 0f)
+                    eyeColor = Color.White;
+                else
+                    eyeColor = GhostEntries[i].Type == PacmanGhostType.Shadow ? Color.White : Color.Black;
+
                 Renderer.DrawTexture(EyesTexture,
                     new Rectangle(
                         (int)((cx - eyeR) * sx),
@@ -277,6 +326,57 @@ public class PacmanGhostAI : core.System
         Renderer.Commit();
     }
 
+    private void EatGhost(int i)
+    {
+        Eaten[i] = true;
+        ref var material = ref Scene.ECS.GetComponent<Material>(GhostIds[i]);
+        material.Albedo = Color.Transparent;
+        material.Emissive = Color.Transparent;
+    }
+
+    private void RespawnGhost(int i)
+    {
+        RespawnTimer[i] = 0f;
+        ExitedHouse[i] = false;
+
+        // Restore appearance based on current mode
+        ref var material = ref Scene.ECS.GetComponent<Material>(GhostIds[i]);
+        if (CurrentMode == PacmanGhostMode.Frightened)
+        {
+            material.Albedo = Color.Transparent;
+            material.Emissive = FrightenedColor;
+        }
+        else if (GhostEntries[i].Type == PacmanGhostType.Shadow)
+        {
+            material.Albedo = GhostColors[i];
+            material.Emissive = Color.Black;
+        }
+        else
+        {
+            material.Albedo = Color.Transparent;
+            material.Emissive = GhostColors[i];
+        }
+    }
+
+    private void RestoreGhostColors()
+    {
+        for (int i = 0; i < GhostIds.Length; i++)
+        {
+            if (Eaten[i] || RespawnTimer[i] > 0f) continue;
+            ref var material = ref Scene.ECS.GetComponent<Material>(GhostIds[i]);
+            if (GhostEntries[i].Type == PacmanGhostType.Shadow)
+            {
+                material.Albedo = GhostColors[i];
+                material.Emissive = Color.Black;
+            }
+            else
+            {
+                material.Albedo = Color.Transparent;
+                material.Emissive = GhostColors[i];
+            }
+        }
+    }
+
     private void UpdateMode(float dt)
     {
         if (CurrentMode == PacmanGhostMode.Frightened)
@@ -285,6 +385,7 @@ public class PacmanGhostAI : core.System
             if (FrightenedTimer <= 0f)
             {
                 CurrentMode = PreFrightenedMode;
+                RestoreGhostColors();
                 ReverseAll();
             }
             return;
@@ -316,6 +417,7 @@ public class PacmanGhostAI : core.System
         for (int i = 0; i < GhostIds.Length; i++)
         {
             if (!ExitedHouse[i]) continue;
+            if (Eaten[i]) continue;
 
             var (pdx, pdy) = GhostDirs[i];
             if (pdx == 0 && pdy == 0) continue;
@@ -334,9 +436,10 @@ public class PacmanGhostAI : core.System
         if (ExitedHouse[gi])
         {
             int nx = Maze.WrapX(cx + dx), ny = cy + dy;
-            if (Maze.IsGhostDoor(nx, ny)) return false;
+            // Eaten ghosts can pass through ghost door (returning to house)
+            if (Maze.IsGhostDoor(nx, ny) && !Eaten[gi]) return false;
             // Shadow: won't use teleport tunnels
-            if (GhostEntries[gi].Type == PacmanGhostType.Shadow && nx != cx + dx) return false;
+            if (GhostEntries[gi].Type == PacmanGhostType.Shadow && !Eaten[gi] && nx != cx + dx) return false;
         }
         return true;
     }
@@ -413,7 +516,16 @@ public class PacmanGhostAI : core.System
         if (!ExitedHouse[i])
         {
             if (!Maze.InGhostHouse(cx, cy) && !Maze.IsGhostDoor(cx, cy))
+            {
                 ExitedHouse[i] = true;
+                // Apply frightened color if entering during frightened mode
+                if (CurrentMode == PacmanGhostMode.Frightened)
+                {
+                    ref var material = ref Scene.ECS.GetComponent<Material>(GhostIds[i]);
+                    material.Albedo = Color.Transparent;
+                    material.Emissive = FrightenedColor;
+                }
+            }
             else
             {
                 if (IsReleased(i))
@@ -422,6 +534,13 @@ public class PacmanGhostAI : core.System
                     PickHouseWander(i);
                 return;
             }
+        }
+
+        // Eaten ghost: navigate toward ghost house
+        if (Eaten[i])
+        {
+            PickEatenPath(i);
+            return;
         }
 
         // Frightened mode: random turns at intersections
@@ -472,6 +591,88 @@ public class PacmanGhostAI : core.System
             float dy2 = cy + options[j].dy - targetTile.y;
             float dist = dx2 * dx2 + dy2 * dy2;
 
+            if (dist < bestDist)
+            {
+                bestDist = dist;
+                bestDir = options[j];
+            }
+        }
+
+        GhostDirs[i] = bestDir;
+        GhostTargets[i] = (cx + bestDir.dx, cy + bestDir.dy);
+    }
+
+    /// <summary>Eaten ghost pathfinding: navigate toward ghost house door, then enter and start respawn.</summary>
+    private void PickEatenPath(int i)
+    {
+        var (cx, cy) = GhostCells[i];
+        var (pdx, pdy) = GhostDirs[i];
+
+        // Inside the house — start respawning with wander
+        if (Maze.InGhostHouse(cx, cy))
+        {
+            Eaten[i] = false;
+            RespawnTimer[i] = RespawnDelay;
+            ExitedHouse[i] = false;
+
+            // Show dim body while waiting to respawn
+            ref var material = ref Scene.ECS.GetComponent<Material>(GhostIds[i]);
+            material.Albedo = Color.Transparent;
+            material.Emissive = new Color(
+                (byte)(GhostColors[i].R / 3),
+                (byte)(GhostColors[i].G / 3),
+                (byte)(GhostColors[i].B / 3),
+                (byte)(GhostColors[i].A));
+
+            PickHouseWander(i);
+            return;
+        }
+
+        // At ghost door — go straight down into the house
+        if (Maze.IsGhostDoor(cx, cy))
+        {
+            GhostDirs[i] = (0, 1);
+            GhostTargets[i] = (cx, cy + 1);
+            return;
+        }
+
+        // Navigate toward house door using target-tile pathfinding
+        int targetX = Maze.HouseDoorLeft;
+        int targetY = Maze.HouseDoorY;
+
+        Span<(int dx, int dy)> options = stackalloc (int, int)[4];
+        int count = 0;
+
+        for (int d = 0; d < 4; d++)
+        {
+            if (!CanGhostMove(i, cx, cy, DXs[d], DYs[d])) continue;
+            if (DXs[d] == -pdx && DYs[d] == -pdy) continue;
+            options[count++] = (DXs[d], DYs[d]);
+        }
+
+        if (count == 0)
+        {
+            GhostDirs[i] = (-pdx, -pdy);
+            GhostTargets[i] = (cx - pdx, cy - pdy);
+            return;
+        }
+
+        if (count == 1)
+        {
+            var only = options[0];
+            GhostDirs[i] = only;
+            GhostTargets[i] = (cx + only.dx, cy + only.dy);
+            return;
+        }
+
+        float bestDist = float.MaxValue;
+        (int dx, int dy) bestDir = options[0];
+
+        for (int j = 0; j < count; j++)
+        {
+            float dx2 = cx + options[j].dx - targetX;
+            float dy2 = cy + options[j].dy - targetY;
+            float dist = dx2 * dx2 + dy2 * dy2;
             if (dist < bestDist)
             {
                 bestDist = dist;
@@ -570,6 +771,7 @@ public class PacmanGhostAI : core.System
 
     private bool IsReleased(int i)
     {
+        if (RespawnTimer[i] > 0f) return false;
         ref var entry = ref GhostEntries[i];
         if (entry.ReleaseAfter > 0 && ElapsedTime >= entry.ReleaseAfter) return true;
         if (entry.ReleaseAtCoinPercent > 0 && Player != null && Player.CoinsTotal > 0)
