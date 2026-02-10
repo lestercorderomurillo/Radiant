@@ -351,6 +351,13 @@ public class PacmanMazeLevelScene : Scene
             return;
         }
 
+        // All coins collected — next level
+        if (PlayerSystem.CoinsTotal > 0 && PlayerSystem.CoinsCollected >= PlayerSystem.CoinsTotal)
+        {
+            LoadLevel((CurrentLevel + 1) % Levels.Length);
+            return;
+        }
+
         // Coin wave + attraction to player
         CoinWaveTime += (float)GameTime.ElapsedGameTime.TotalSeconds;
         var playerPos = PlayerSystem.WorldPosition;

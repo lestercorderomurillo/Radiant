@@ -57,6 +57,7 @@ public class RainbowGhostAI : core.System
     private Vector2[] EyePositions;      // 2-frame delayed
     private Vector2[] PrevPositions;     // 1-frame delayed
     private (int dx, int dy)[] EyeDirs;  // direction for eye offset
+    private Vector2[] LogicalPositions;  // Un-wobbled positions
 
     // Ghost house exit
     private bool MainExitedHouse;
@@ -111,12 +112,14 @@ public class RainbowGhostAI : core.System
         EyePositions = new Vector2[total];
         PrevPositions = new Vector2[total];
         EyeDirs = new (int, int)[total];
+        LogicalPositions = new Vector2[total];
 
         ref var t = ref Scene.ECS.GetComponent<Transform>(MainId);
         var pos = new Vector2(t.Position.X, t.Position.Y);
         EyePositions[0] = pos;
         PrevPositions[0] = pos;
         EyeDirs[0] = (0, 0);
+        LogicalPositions[0] = pos;
 
         WanderTargetTiles[0] = PickRandomWalkable();
 
@@ -364,10 +367,7 @@ public class RainbowGhostAI : core.System
     {
         int idx = CloneCount;
         var sourceCell = sourceEyeIndex == 0 ? MainCell : CloneCells[sourceEyeIndex - 1];
-        int sourceId = sourceEyeIndex == 0 ? MainId : CloneIds[sourceEyeIndex - 1];
-
-        ref var sourceT = ref Scene.ECS.GetComponent<Transform>(sourceId);
-        var pos = new Vector2(sourceT.Position.X, sourceT.Position.Y);
+        var pos = LogicalPositions[sourceEyeIndex];
 
         CloneHues[idx] = MainHue;
         var color = IsFrightened ? FrightenedColor : LightFactory.HueToRGB(MainHue);
@@ -396,6 +396,7 @@ public class RainbowGhostAI : core.System
         EyePositions[1 + idx] = pos;
         PrevPositions[1 + idx] = pos;
         EyeDirs[1 + idx] = CloneDirs[idx];
+        LogicalPositions[1 + idx] = pos;
 
         WanderTargetTiles[1 + idx] = PickRandomWalkable();
         // Assign a different corner to each entity
@@ -454,6 +455,7 @@ public class RainbowGhostAI : core.System
             EyePositions[1 + index] = EyePositions[1 + last];
             PrevPositions[1 + index] = PrevPositions[1 + last];
             EyeDirs[1 + index] = EyeDirs[1 + last];
+            LogicalPositions[1 + index] = LogicalPositions[1 + last];
             WanderTargetTiles[1 + index] = WanderTargetTiles[1 + last];
         }
 
@@ -474,7 +476,7 @@ public class RainbowGhostAI : core.System
             step *= 0.5f;
 
         ref var transform = ref Scene.ECS.GetComponent<Transform>(EntityId);
-        var pos = new Vector2(transform.Position.X, transform.Position.Y);
+        var pos = LogicalPositions[EyeIndex];
         var target = Maze.CellCenter(Target.x, Target.y);
 
         var diff = target - pos;
@@ -550,7 +552,13 @@ public class RainbowGhostAI : core.System
             pos += move;
         }
 
-        transform.Position = new Vector3(pos, GhostZ);
+        LogicalPositions[EyeIndex] = pos;
+
+        // Sine wobble perpendicular to movement direction
+        float wobble = MathF.Sin(ElapsedTime * 5f + EyeIndex * 2.5f) * 4f;
+        transform.Position = new Vector3(
+            pos.X + (Dir.dy != 0 ? wobble : 0f),
+            pos.Y + (Dir.dx != 0 ? wobble : 0f), GhostZ);
         EyeDirs[EyeIndex] = Dir;
 
         // Collision with player (skip for eaten or respawning)

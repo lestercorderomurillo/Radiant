@@ -38,6 +38,7 @@ public class PacmanGhostAI : core.System
     private Color[] GhostColors;
     private Vector2[] EyePositions;      // 2-frame delayed positions (matches Geometry's rendered body)
     private Vector2[] PrevPositions;     // 1-frame delayed (intermediate)
+    private Vector2[] Positions;         // Un-wobbled logical positions
     private float ElapsedTime;
     private Random Rng = new();
 
@@ -116,6 +117,7 @@ public class PacmanGhostAI : core.System
         GhostColors = new Color[count];
         EyePositions = new Vector2[count];
         PrevPositions = new Vector2[count];
+        Positions = new Vector2[count];
 
         for (int i = 0; i < count; i++)
         {
@@ -146,6 +148,7 @@ public class PacmanGhostAI : core.System
             var pos = new Vector2(transform.Position.X, transform.Position.Y);
             EyePositions[i] = pos;
             PrevPositions[i] = pos;
+            Positions[i] = pos;
         }
 
         ElapsedTime = 0f;
@@ -239,7 +242,7 @@ public class PacmanGhostAI : core.System
             }
 
             ref var transform = ref Scene.ECS.GetComponent<Transform>(GhostIds[i]);
-            var pos = new Vector2(transform.Position.X, transform.Position.Y);
+            var pos = Positions[i];
             var target = Maze.CellCenter(GhostTargets[i].x, GhostTargets[i].y);
 
             var diff = target - pos;
@@ -264,7 +267,14 @@ public class PacmanGhostAI : core.System
                 pos += move;
             }
 
-            transform.Position = new Vector3(pos, GhostZ);
+            Positions[i] = pos;
+
+            // Sine wobble perpendicular to movement direction
+            var (dirX, dirY) = GhostDirs[i];
+            float wobble = MathF.Sin(ElapsedTime * 5f + i * 2.5f) * 4f;
+            transform.Position = new Vector3(
+                pos.X + (dirY != 0 ? wobble : 0f),
+                pos.Y + (dirX != 0 ? wobble : 0f), GhostZ);
 
             // Collision with player (skip for eaten or respawning ghosts)
             if (ExitedHouse[i] && !Eaten[i] && RespawnTimer[i] <= 0f
