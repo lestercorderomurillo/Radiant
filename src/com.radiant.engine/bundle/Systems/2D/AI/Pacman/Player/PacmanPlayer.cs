@@ -29,6 +29,14 @@ public class PacmanPlayer : core.System
     (int dx, int dy) CurrentDir;
     (int dx, int dy) BufferedDir;
 
+    // Mouth + eyes overlay
+    Texture2D MouthTexture;
+    Texture2D PlayerEyesTexture;
+    float MouthTimer;
+    Vector2 RenderPosition;
+    Vector2 PrevRenderPos;
+    (int dx, int dy) FacingDir = (1, 0);
+
     public void Track(int entityId, (int x, int y) startCell, float z)
     {
         EntityId = entityId;
@@ -43,6 +51,10 @@ public class PacmanPlayer : core.System
         PrevCell = (-1, -1);
         CoinsCollected = 0;
         CoinsTotal = Maze.CoinCells.Count;
+        RenderPosition = WorldPosition;
+        PrevRenderPos = WorldPosition;
+        FacingDir = (1, 0);
+        MouthTimer = 0f;
     }
 
     public void Clear()
@@ -58,11 +70,17 @@ public class PacmanPlayer : core.System
     {
         Maze = Scene.ECS.GetSystem<PacmanMazeBuilder>();
         HudFont = Renderer.GetFont("fonts/BaseFont");
+        PlayerEyesTexture = Renderer.GetTexture("Eyes");
+        MouthTexture = CreateMouthTexture(64);
     }
 
     public override void Update()
     {
         if (Maze == null || !Tracked) return;
+
+        // Shift position history (2-frame delay to sync with Geometry double-buffer)
+        RenderPosition = PrevRenderPos;
+        PrevRenderPos = WorldPosition;
 
         var kb = Keyboard.GetState();
         ReadInput(kb);
@@ -121,57 +139,158 @@ public class PacmanPlayer : core.System
 
         transform.Position = new Vector3(pos, Z);
         WorldPosition = pos;
+
+        // Mouth animation and facing direction
+        if (CurrentDir != (0, 0))
+        {
+            FacingDir = CurrentDir;
+            MouthTimer += dt * 24f;
+        }
     }
 
     public override void LateRender()
     {
-        if (!Tracked || HudFont == null) return;
+        if (!Tracked) return;
 
-        var scale = Matrix.CreateScale(
+        DrawMouthAndEyes();
+        DrawHUD();
+    }
+
+    void DrawMouthAndEyes()
+    {
+        float Sx = Renderer.ScreenWidth / Renderer.VirtualSize.X;
+        float Sy = Renderer.ScreenHeight / Renderer.VirtualSize.Y;
+        float BodyR = 30f;
+        float Pcx = RenderPosition.X;
+        float Pcy = RenderPosition.Y;
+
+        Renderer.BeginDraw(SpriteSortMode.Deferred, BlendState.AlphaBlend);
+
+        // Animated mouth wedge
+        float Phase = (MathF.Sin(MouthTimer) + 1f) / 2f;
+        bool ShowMouth = CurrentDir == (0, 0) || Phase > 0.3f;
+
+        if (ShowMouth && MouthTexture != null)
+        {
+            float Rot = (FacingDir.dx, FacingDir.dy) switch
+            {
+                (1, 0) => 0f,
+                (0, 1) => MathF.PI / 2f,
+                (-1, 0) => MathF.PI,
+                (0, -1) => -MathF.PI / 2f,
+                _ => 0f
+            };
+
+            float MouthOffX = 31f;
+            float MouthOffY = 31f;
+
+            var Dest = new Rectangle(
+                (int)((Pcx + MouthOffX - BodyR) * Sx),
+                (int)((Pcy + MouthOffY - BodyR) * Sy),
+                (int)(BodyR * 2f * Sx),
+                (int)(BodyR * 2f * Sy));
+
+            var Origin = new Vector2(MouthTexture.Width / 2f, MouthTexture.Height / 2f);
+            var Source = new Rectangle(0, 0, MouthTexture.Width, MouthTexture.Height);
+
+            Renderer.DrawSprite(MouthTexture, Dest, Source, Color.White, Rot, Origin);
+        }
+
+        // Eyes — when facing left/right, show only one eye (mirror-cut)
+        if (PlayerEyesTexture != null)
+        {
+            float EyeR = 20f;
+            float EyeD = EyeR * 2f;
+            float EyeUpNudge = FacingDir.dy == -1 ? 12f : 0f;
+            float Ecx = Pcx + FacingDir.dx * 4f;
+            float Ecy = Pcy + FacingDir.dy * 4f + EyeUpNudge;
+            int TexW = PlayerEyesTexture.Width;
+            int TexH = PlayerEyesTexture.Height;
+
+            if (FacingDir.dx == 1) // Right → show left eye only
+            {
+                var Src = new Rectangle(0, 0, TexW / 2, TexH);
+                var Dst = new Rectangle(
+                    (int)((Ecx - EyeR) * Sx),
+                    (int)((Ecy - EyeR) * Sy),
+                    (int)(EyeR * Sx),
+                    (int)(EyeD * Sy));
+                Renderer.DrawSprite(PlayerEyesTexture, Dst, Src, Color.Black, 0f, Vector2.Zero);
+            }
+            else if (FacingDir.dx == -1) // Left → show right eye only
+            {
+                var Src = new Rectangle(TexW / 2, 0, TexW / 2, TexH);
+                var Dst = new Rectangle(
+                    (int)(Ecx * Sx),
+                    (int)((Ecy - EyeR) * Sy),
+                    (int)(EyeR * Sx),
+                    (int)(EyeD * Sy));
+                Renderer.DrawSprite(PlayerEyesTexture, Dst, Src, Color.Black, 0f, Vector2.Zero);
+            }
+            else // Up/Down → show both eyes
+            {
+                Renderer.DrawSprite(PlayerEyesTexture,
+                    new Rectangle(
+                        (int)((Ecx - EyeR) * Sx),
+                        (int)((Ecy - EyeR) * Sy),
+                        (int)(EyeD * Sx),
+                        (int)(EyeD * Sy)),
+                    Color.Black);
+            }
+        }
+
+        Renderer.EndDraw();
+    }
+
+    void DrawHUD()
+    {
+        if (HudFont == null) return;
+
+        var Scale = Matrix.CreateScale(
             (float)Renderer.ScreenWidth / Renderer.VirtualWidth,
             (float)Renderer.ScreenHeight / Renderer.VirtualHeight,
             1f);
 
-        string collected = CoinsCollected.ToString();
-        string separator = " / ";
-        string total = CoinsTotal.ToString();
+        string Collected = CoinsCollected.ToString();
+        string Separator = " / ";
+        string Total = CoinsTotal.ToString();
 
-        var collectedSize = HudFont.MeasureString(collected);
-        var separatorSize = HudFont.MeasureString(separator);
-        var totalSize = HudFont.MeasureString(total);
+        var CollectedSize = HudFont.MeasureString(Collected);
+        var SeparatorSize = HudFont.MeasureString(Separator);
+        var TotalSize = HudFont.MeasureString(Total);
 
-        float iconSize = 20f;
-        float gap = 10f;
-        float textWidth = collectedSize.X + separatorSize.X + totalSize.X;
-        float fullWidth = iconSize + gap + textWidth;
-        float textHeight = collectedSize.Y;
+        float IconSize = 20f;
+        float Gap = 10f;
+        float TextWidth = CollectedSize.X + SeparatorSize.X + TotalSize.X;
+        float FullWidth = IconSize + Gap + TextWidth;
+        float TextHeight = CollectedSize.Y;
 
-        float padding = 12f;
-        float x = Renderer.VirtualWidth - fullWidth - 25f;
-        float y = 20f;
+        float Padding = 12f;
+        float X = Renderer.VirtualWidth - FullWidth - 25f;
+        float Y = 20f;
 
-        var bgRect = new Rectangle(
-            (int)(x - padding), (int)(y - padding * 0.6f),
-            (int)(fullWidth + padding * 2f), (int)(textHeight + padding * 1.2f));
+        var BgRect = new Rectangle(
+            (int)(X - Padding), (int)(Y - Padding * 0.6f),
+            (int)(FullWidth + Padding * 2f), (int)(TextHeight + Padding * 1.2f));
 
-        Renderer.BeginDraw(SpriteSortMode.Deferred, BlendState.AlphaBlend, transform: scale);
+        Renderer.BeginDraw(SpriteSortMode.Deferred, BlendState.AlphaBlend, transform: Scale);
 
-        Renderer.DrawSprite(Renderer.GetSolidTexture(Color.White), bgRect, new Color(0, 0, 0, 160));
+        Renderer.DrawSprite(Renderer.GetSolidTexture(Color.White), BgRect, new Color(0, 0, 0, 160));
 
         // Coin icon
-        var coinTex = Renderer.GetCircleTexture((int)iconSize);
-        var iconRect = new Rectangle(
-            (int)x, (int)(y + (textHeight - iconSize) / 2f),
-            (int)iconSize, (int)iconSize);
-        Renderer.DrawSprite(coinTex, iconRect, CoinColor);
+        var CoinTex = Renderer.GetCircleTexture((int)IconSize);
+        var IconRect = new Rectangle(
+            (int)X, (int)(Y + (TextHeight - IconSize) / 2f),
+            (int)IconSize, (int)IconSize);
+        Renderer.DrawSprite(CoinTex, IconRect, CoinColor);
 
         // Text
-        float textX = x + iconSize + gap;
-        Renderer.DrawString(HudFont, collected, new Vector2(textX, y), CoinColor);
-        textX += collectedSize.X;
-        Renderer.DrawString(HudFont, separator, new Vector2(textX, y), new Color(150, 150, 150));
-        textX += separatorSize.X;
-        Renderer.DrawString(HudFont, total, new Vector2(textX, y), new Color(200, 200, 200));
+        float TextX = X + IconSize + Gap;
+        Renderer.DrawString(HudFont, Collected, new Vector2(TextX, Y), CoinColor);
+        TextX += CollectedSize.X;
+        Renderer.DrawString(HudFont, Separator, new Vector2(TextX, Y), new Color(150, 150, 150));
+        TextX += SeparatorSize.X;
+        Renderer.DrawString(HudFont, Total, new Vector2(TextX, Y), new Color(200, 200, 200));
 
         Renderer.EndDraw();
     }
@@ -205,5 +324,40 @@ public class PacmanPlayer : core.System
         {
             BufferedDir = desired;
         }
+    }
+
+    Texture2D CreateMouthTexture(int Size)
+    {
+        var Tex = Renderer.CreateTexture(Size, Size, SurfaceFormat.Color);
+        var Pixels = new Color[Size * Size];
+        float Half = Size / 2f;
+        float MaxAngle = MathF.PI * 0.28f; // ~50° total opening
+
+        for (int Y = 0; Y < Size; Y++)
+        {
+            for (int X = 0; X < Size; X++)
+            {
+                float Dx = X - Half;
+                float Dy = Y - Half;
+                float Dist = MathF.Sqrt(Dx * Dx + Dy * Dy);
+
+                if (Dist < Half && Dist > 0.5f)
+                {
+                    float Angle = MathF.Abs(MathF.Atan2(Dy, Dx));
+                    if (Angle < MaxAngle)
+                    {
+                        float EdgeDist = Half - Dist;
+                        float CircleFade = MathF.Min(EdgeDist / 1.5f, 1f);
+                        float AngleDist = MaxAngle - Angle;
+                        float AngleFade = MathF.Min(AngleDist / 0.05f, 1f);
+                        byte A = (byte)(CircleFade * AngleFade * 255);
+                        Pixels[Y * Size + X] = new Color((byte)0, (byte)0, (byte)0, A);
+                    }
+                }
+            }
+        }
+
+        Tex.SetData(Pixels);
+        return Tex;
     }
 }
