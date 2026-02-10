@@ -36,7 +36,7 @@ public class Inspector : core.System
     private string SliderWindowId;
     private string SliderWidgetId;
     private bool MouseOverUI;
-    private bool GlobalVisible = true;
+    private bool GlobalVisible = false;
 
     public static event Action WindowsRestored;
 

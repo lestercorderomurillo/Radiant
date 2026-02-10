@@ -31,7 +31,7 @@ public class PacmanPlayer : core.System
     (int dx, int dy) BufferedDir;
 
     // Mouth + eyes overlay
-    const int RTSize = 64;
+    const int RTSize = 128;
     RenderTarget2D PlayerRT;
     Texture2D CircleTex;
     Texture2D MouthTexture;
@@ -340,7 +340,7 @@ public class PacmanPlayer : core.System
         var Pixels = new Color[Size * Size];
         float Half = Size / 2f;
         float OriginX = Half - 4f; // wedge starts a bit behind center
-        float MaxAngle = MathF.PI * 0.22f; // ~40° total opening, tighter mouth
+        float Slope = MathF.Tan(MathF.PI * 0.22f); // ~40° total opening
 
         for (int Y = 0; Y < Size; Y++)
         {
@@ -348,14 +348,10 @@ public class PacmanPlayer : core.System
             {
                 float Dx = X - OriginX;
                 float Dy = Y - Half;
-                float Dist = MathF.Sqrt(Dx * Dx + Dy * Dy);
 
-                if (Dist > 0.5f)
-                {
-                    float Angle = MathF.Abs(MathF.Atan2(Dy, Dx));
-                    if (Angle < MaxAngle)
-                        Pixels[Y * Size + X] = new Color((byte)0, (byte)0, (byte)0, (byte)255);
-                }
+                // Pure linear test: straight edges guaranteed
+                if (Dx > 0f && MathF.Abs(Dy) < Slope * Dx)
+                    Pixels[Y * Size + X] = new Color((byte)0, (byte)0, (byte)0, (byte)255);
             }
         }
 
