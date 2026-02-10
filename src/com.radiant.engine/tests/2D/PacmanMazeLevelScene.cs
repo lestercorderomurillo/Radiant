@@ -69,7 +69,7 @@ public class PacmanMazeLevelScene : Scene
         {
             Layout = PacmanLayout,
             WallAlbedo = new Color((byte)0, (byte)0, (byte)40, (byte)255),
-            WallEmissive = new Color((byte)100, (byte)55, (byte)200, (byte)200),
+            WallEmissive = new Color((byte)90, (byte)45, (byte)160, (byte)170),
             CoinColor = new Color(225, 180, 35),
             Ghosts =
             [
@@ -316,9 +316,10 @@ public class PacmanMazeLevelScene : Scene
         // Player — golden yellow ball (no ghost texture)
         var playerCell = config.PlayerStartCell;
         var playerColor = new Color(255, 210, 30);
+        var playerEmissive = new Color((byte)255, (byte)220, (byte)50, (byte)255);
         var playerCenter = Maze.CellCenter(playerCell.x, playerCell.y);
         int playerId = LightFactory.CreateLight(ECS, playerCenter, 28.5f * Scale,
-            playerColor, playerColor, 65530f);
+            playerColor, playerEmissive, 65530f);
         ECS.AddComponent<MotionTrackable>(playerId);
 
         PlayerSystem.Speed = config.GhostSpeed * Scale;
@@ -337,22 +338,52 @@ public class PacmanMazeLevelScene : Scene
             return;
         }
 
-        // Subtle sine wave across coins based on X position
+        // Coin wave + attraction to player
         CoinWaveTime += (float)GameTime.ElapsedGameTime.TotalSeconds;
+        var playerPos = PlayerSystem.WorldPosition;
+        const float attractRadius = 200f;
+        const float attractStrength = 0.25f;
+        const float glowRadius = 300f;
+
         foreach (var (cell, coinId) in Maze.CoinCells)
         {
             float phase = CoinWaveTime * 1.8f - cell.Item1 * 0.5f;
-            float wave = 0.85f + 0.15f * MathF.Sin(phase);
+            float sinVal = MathF.Sin(phase);
+            float wave = 0.85f + 0.15f * sinVal;
+
+            var basePos = Maze.CellCenter(cell.Item1, cell.Item2);
+            float coinX = basePos.X;
+            float coinY = basePos.Y + 4.5f * MathF.Sin(phase);
+
+            float dx = playerPos.X - coinX;
+            float dy = playerPos.Y - coinY;
+            float dist = MathF.Sqrt(dx * dx + dy * dy);
+            float proximity = 0f;
+            if (dist < attractRadius && dist > 0.1f)
+            {
+                proximity = 1f - dist / attractRadius;
+                float pull = proximity * attractStrength;
+                coinX += dx * pull;
+                coinY += dy * pull;
+            }
+
+            // Near player: smooth override from wave to full brightness
+            float glow = dist < glowRadius ? 1f - dist / glowRadius : 0f;
+            glow *= glow; // smooth falloff
+            float bright = wave * (1f - glow) + 1.0f * glow + proximity * 0.6f;
+            byte alpha = (byte)(BaseCoinColor.A * ((0.9f + 0.1f * sinVal) * (1f - glow) + glow));
             ref var coinMat = ref ECS.GetComponent<Material>(coinId);
             coinMat.Emissive = new Color(
-                (byte)(BaseCoinColor.R * wave),
-                (byte)(BaseCoinColor.G * wave),
-                (byte)(BaseCoinColor.B * wave),
-                BaseCoinColor.A);
+                (byte)MathF.Min(BaseCoinColor.R * bright, 255f),
+                (byte)MathF.Min(BaseCoinColor.G * bright, 255f),
+                (byte)MathF.Min(BaseCoinColor.B * bright, 255f),
+                alpha);
 
             ref var coinTransform = ref ECS.GetComponent<Transform>(coinId);
-            float baseY = Maze.CellCenter(cell.Item1, cell.Item2).Y;
-            coinTransform.Position.Y = baseY + 4.5f * MathF.Sin(phase);
+            coinTransform.Position.X = coinX;
+            coinTransform.Position.Y = coinY;
+            float scale = 1f + proximity * 0.6f;
+            coinTransform.Scale = new Vector3(scale, scale, 1f);
         }
 
         Inspector.SetLabel("scene", "level", $"Level: {CurrentLevel + 1}/{Levels.Length}");
