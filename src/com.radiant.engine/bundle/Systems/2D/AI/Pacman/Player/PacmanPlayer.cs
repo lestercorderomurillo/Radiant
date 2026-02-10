@@ -17,6 +17,7 @@ public class PacmanPlayer : core.System
     public int CoinsTotal { get; private set; }
     public Color CoinColor { get; set; } = new Color(255, 220, 50);
     public bool PlayerCaught { get; set; }
+    public bool HasMoved { get; private set; }
 
     PacmanMazeBuilder Maze;
     Geometry Geometry;
@@ -43,7 +44,7 @@ public class PacmanPlayer : core.System
     (int dx, int dy) FacingDir = (1, 0);
     bool MouthOpen;
     float MouthRotation;
-    static readonly Color EyeColor = new Color(255, 245, 200);
+    static readonly Color EyeColor = Color.Black;
 
     public void Track(int entityId, (int x, int y) startCell, float z)
     {
@@ -56,6 +57,7 @@ public class PacmanPlayer : core.System
         WorldPosition = Maze.CellCenter(startCell.x, startCell.y);
         Tracked = true;
         PlayerCaught = false;
+        HasMoved = false;
         PrevCell = (-1, -1);
         CoinsCollected = 0;
         CoinsTotal = Maze.CoinCells.Count;
@@ -319,6 +321,8 @@ public class PacmanPlayer : core.System
         else if (kb.IsKeyDown(Keys.Right)) desired = (1, 0);
 
         if (desired == (0, 0)) return;
+
+        if (!HasMoved) HasMoved = true;
 
         // If we can turn immediately from current cell, do it
         if (Maze.CanMove(Cell.x, Cell.y, desired.dx, desired.dy))

@@ -79,16 +79,25 @@ public class PacmanMazeLevelScene : Scene
 
             CoinColor = new Color(165, 130, 15),
 
-            Ghosts = [PacmanGhostType.Blinky, PacmanGhostType.Pinky, PacmanGhostType.Inky, PacmanGhostType.Clyde],
-            GhostReleaseTimes = [4f, 8f, 12f, 16f],
+            Ghosts =
+            [
+                new() { Type = PacmanGhostType.Blinky, ReleaseAfter = 4f },
+                new() { Type = PacmanGhostType.Pinky,  ReleaseAfter = 8f },
+                new() { Type = PacmanGhostType.Inky,   ReleaseAfter = 12f },
+                new() { Type = PacmanGhostType.Clyde,  ReleaseAfter = 16f },
+            ],
             PlayerStartCell = (14, 23),
         },
         // Level 2: Pinky, Blinky, Shadow (seeded)
         new PacmanLevelConfig
         {
             Procedural = true,
-            Ghosts = [PacmanGhostType.Pinky, PacmanGhostType.Blinky, PacmanGhostType.Shadow],
-            GhostReleaseTimes = [4f, 8f, 24f],
+            Ghosts =
+            [
+                new() { Type = PacmanGhostType.Pinky,  ReleaseAfter = 4f },
+                new() { Type = PacmanGhostType.Blinky, ReleaseAfter = 8f },
+                new() { Type = PacmanGhostType.Shadow, ReleaseAfter = 24f },
+            ],
             PlayerStartCell = (14, 23),
 
             MazeSeed = 2482,
@@ -105,8 +114,13 @@ public class PacmanMazeLevelScene : Scene
         new PacmanLevelConfig
         {
             Procedural = true,
-            Ghosts = [PacmanGhostType.Rainbow, PacmanGhostType.Clyde, PacmanGhostType.Inky, PacmanGhostType.Blinky],
-            GhostReleaseTimes = [4f, 8f, 12f, 16f],
+            Ghosts =
+            [
+                new() { Type = PacmanGhostType.Rainbow, ReleaseAfter = 4f },
+                new() { Type = PacmanGhostType.Clyde,   ReleaseAfter = 8f },
+                new() { Type = PacmanGhostType.Inky,    ReleaseAtCoinPercent = 0.25f },
+                new() { Type = PacmanGhostType.Blinky,  ReleaseAtCoinPercent = 0.50f },
+            ],
             PlayerStartCell = (14, 23),
 
             MazeSeed = 1344,
@@ -118,14 +132,17 @@ public class PacmanMazeLevelScene : Scene
             CoinPulseSpeed = 0.5f,
             CoinPulseMin = 0.5f,
             CoinPulseMax = 0.6f,
-
         },
         // Level 4: Dinky, Clyde, Blinky (seeded)
         new PacmanLevelConfig
         {
             Procedural = true,
-            Ghosts = [PacmanGhostType.Dinky, PacmanGhostType.Clyde, PacmanGhostType.Blinky],
-            GhostReleaseTimes = [4f, 4f, 4f],
+            Ghosts =
+            [
+                new() { Type = PacmanGhostType.Dinky, ReleaseAfter = 4f },
+                new() { Type = PacmanGhostType.Clyde, ReleaseAfter = 4f },
+                new() { Type = PacmanGhostType.Blinky, ReleaseAfter = 4f },
+            ],
             PlayerStartCell = (14, 23),
 
             MazeSeed = 1235,
@@ -137,14 +154,18 @@ public class PacmanMazeLevelScene : Scene
             CoinPulseSpeed = 0.8f,
             CoinPulseMin = 0.3f,
             CoinPulseMax = 0.35f,
-
         },
         // Level 5: Shadow, Pinky, Rainbow, Clyde (procedural)
         new PacmanLevelConfig
         {
             Procedural = true,
-            Ghosts = [PacmanGhostType.Shadow, PacmanGhostType.Pinky, PacmanGhostType.Rainbow, PacmanGhostType.Clyde],
-            GhostReleaseTimes = [4f, 8f, 16f, 24f],
+            Ghosts =
+            [
+                new() { Type = PacmanGhostType.Shadow,  ReleaseAfter = 4f },
+                new() { Type = PacmanGhostType.Pinky,   ReleaseAfter = 8f },
+                new() { Type = PacmanGhostType.Rainbow, ReleaseAfter = 16f },
+                new() { Type = PacmanGhostType.Clyde,   ReleaseAtCoinPercent = 0.30f },
+            ],
             PlayerStartCell = (14, 23),
 
             // dark color, no light on walls, bright coins with fast pulse
@@ -162,8 +183,12 @@ public class PacmanMazeLevelScene : Scene
         new PacmanLevelConfig
         {
             Procedural = true,
-            Ghosts = [PacmanGhostType.Shadow, PacmanGhostType.Shadow, PacmanGhostType.Shadow],
-            GhostReleaseTimes = [1f, 7f, 13f],
+            Ghosts =
+            [
+                new() { Type = PacmanGhostType.Shadow, ReleaseAfter = 1f },
+                new() { Type = PacmanGhostType.Shadow, ReleaseAfter = 7f },
+                new() { Type = PacmanGhostType.Shadow, ReleaseAfter = 13f },
+            ],
             PlayerStartCell = (14, 23),
 
             CoinColor = new Color(255, 60, 60),
@@ -253,7 +278,7 @@ public class PacmanMazeLevelScene : Scene
         var config = Levels[index];
 
         // Configure maze — use procedural generator or hardcoded layout
-        float Scale = 0.9f;
+        float Scale = 0.92f;
         Maze.Layout = config.Procedural
             ? PacmanMazeGenerator.Generate(index + config.MazeSeed)
             : config.Layout;
@@ -276,30 +301,27 @@ public class PacmanMazeLevelScene : Scene
         var ghostTexture = Renderer.GetTexture("Ghost");
         var eyesTexture = Renderer.GetTexture("Eyes");
 
-        // Partition ghosts by index: find rainbow position, build regular list
-        int rainbowIndex = Array.IndexOf(config.Ghosts, PacmanGhostType.Rainbow);
+        // Partition ghosts: find rainbow entry, build regular list
+        int rainbowIndex = -1;
+        for (int i = 0; i < config.Ghosts.Length; i++)
+            if (config.Ghosts[i].Type == PacmanGhostType.Rainbow) { rainbowIndex = i; break; }
         bool hasRainbow = rainbowIndex >= 0;
 
         // Build regular ghost arrays (skipping Rainbow entry)
         int regularCount = hasRainbow ? config.Ghosts.Length - 1 : config.Ghosts.Length;
         if (regularCount > 0)
         {
-            var regularTypes = new PacmanGhostType[regularCount];
+            var regularEntries = new GhostEntry[regularCount];
             var startCells = new (int x, int y)[regularCount];
             var colors = new Color[regularCount];
-            float[] regularReleaseTimes = config.GhostReleaseTimes != null
-                ? new float[regularCount] : null;
             int ri = 0;
             for (int i = 0; i < config.Ghosts.Length; i++)
             {
-                if (config.Ghosts[i] == PacmanGhostType.Rainbow) continue;
-                regularTypes[ri] = config.Ghosts[i];
-                startCells[ri] = config.GhostStartCells != null
-                    ? config.GhostStartCells[i]
-                    : DefaultGhostHouseCells[i % DefaultGhostHouseCells.Length];
-                colors[ri] = PacmanGhostAI.PersonalityColor(config.Ghosts[i]);
-                if (regularReleaseTimes != null)
-                    regularReleaseTimes[ri] = config.GhostReleaseTimes[i];
+                if (config.Ghosts[i].Type == PacmanGhostType.Rainbow) continue;
+                regularEntries[ri] = config.Ghosts[i];
+                startCells[ri] = config.Ghosts[i].StartCell
+                    ?? DefaultGhostHouseCells[i % DefaultGhostHouseCells.Length];
+                colors[ri] = PacmanGhostAI.PersonalityColor(config.Ghosts[i].Type);
                 ri++;
             }
 
@@ -308,28 +330,26 @@ public class PacmanMazeLevelScene : Scene
             GhostAI.EyesTexture = eyesTexture;
             GhostAI.BodyRadius = 30f * Scale;
             GhostAI.GhostSpeed = config.GhostSpeed * Scale;
-            GhostAI.Track(ghostIds, startCells, regularTypes, regularReleaseTimes);
+            GhostAI.Track(ghostIds, startCells, regularEntries);
         }
 
         // Rainbow ghost — start cell from its position in the Ghosts array
         if (hasRainbow)
         {
-            var rainbowCell = config.GhostStartCells != null
-                ? config.GhostStartCells[rainbowIndex]
-                : DefaultGhostHouseCells[rainbowIndex % DefaultGhostHouseCells.Length];
+            var rainbowEntry = config.Ghosts[rainbowIndex];
+            var rainbowCell = rainbowEntry.StartCell
+                ?? DefaultGhostHouseCells[rainbowIndex % DefaultGhostHouseCells.Length];
             var rainbowCenter = Maze.CellCenter(rainbowCell.x, rainbowCell.y);
             var rainbowColor = LightFactory.HueToRGB(0f);
             int rainbowId = LightFactory.CreateLight(ECS, rainbowCenter, 30f * Scale,
                 Color.Transparent, rainbowColor, 65530f, ghostTexture);
             ECS.AddComponent<MotionTrackable>(rainbowId);
 
-            float rainbowRelease = config.GhostReleaseTimes != null
-                ? config.GhostReleaseTimes[rainbowIndex] : 0f;
             RainbowAI.BodyTexture = ghostTexture;
             RainbowAI.EyesTexture = eyesTexture;
             RainbowAI.BodyRadius = 30f * Scale;
             RainbowAI.GhostSpeed = config.RainbowSpeed * Scale;
-            RainbowAI.Track(rainbowId, rainbowCell, rainbowRelease);
+            RainbowAI.Track(rainbowId, rainbowCell, rainbowEntry.ReleaseAfter, rainbowEntry.ReleaseAtCoinPercent);
         }
 
         // Player — golden yellow ball (no ghost texture)

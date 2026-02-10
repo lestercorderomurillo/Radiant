@@ -63,6 +63,7 @@ public class RainbowGhostAI : core.System
     private RainbowPhase Phase = RainbowPhase.Solo;
     private float PhaseTimer;
     private float ReleaseTime;
+    private float ReleaseAtCoinPercent;
     private float ElapsedTime;
     private bool Initialized;
 
@@ -77,7 +78,7 @@ public class RainbowGhostAI : core.System
         Geometry = Scene.ECS.GetSystem<Geometry>();
     }
 
-    public void Track(int entityId, (int x, int y) startCell, float releaseTime = 0f)
+    public void Track(int entityId, (int x, int y) startCell, float releaseTime = 0f, float releaseAtCoinPercent = 0f)
     {
         MainId = entityId;
         MainCell = startCell;
@@ -89,6 +90,7 @@ public class RainbowGhostAI : core.System
         Phase = RainbowPhase.Solo;
         PhaseTimer = 0f;
         ReleaseTime = releaseTime;
+        ReleaseAtCoinPercent = releaseAtCoinPercent;
         ElapsedTime = 0f;
         Initialized = true;
 
@@ -123,7 +125,6 @@ public class RainbowGhostAI : core.System
         if (!Initialized) return;
 
         float dt = (float)GameTime.ElapsedGameTime.TotalSeconds;
-        ElapsedTime += dt;
 
         // Advance hue even before release (ghost glows in house)
         MainHue = (MainHue + HueCycleSpeed * dt) % 1f;
@@ -136,8 +137,13 @@ public class RainbowGhostAI : core.System
         for (int i = 0; i < CloneCount; i++)
             UpdateCloneColor(i);
 
+        // Freeze all movement until player moves
+        if (Player == null || !Player.HasMoved) return;
+
+        ElapsedTime += dt;
+
         // Before release: wander in house
-        if (ElapsedTime < ReleaseTime)
+        if (!IsReleased())
         {
             MoveEntity(ref MainCell, ref MainTarget, ref MainDir, MainId, dt, 0);
             return;
@@ -348,7 +354,7 @@ public class RainbowGhostAI : core.System
         ref (int dx, int dy) Dir, int EntityId, float dt, int EyeIndex)
     {
         float step = GhostSpeed * dt;
-        if (EyeIndex == 0 && !MainExitedHouse && ElapsedTime < ReleaseTime)
+        if (EyeIndex == 0 && !MainExitedHouse && !IsReleased())
             step *= 0.5f;
         ref var transform = ref Scene.ECS.GetComponent<Transform>(EntityId);
         var pos = new Vector2(transform.Position.X, transform.Position.Y);
@@ -370,7 +376,7 @@ public class RainbowGhostAI : core.System
                     MainExitedHouse = true;
                 else
                 {
-                    if (ElapsedTime >= ReleaseTime)
+                    if (IsReleased())
                         PickHouseExit(ref Cell, ref Target, ref Dir);
                     else
                         PickHouseWander(ref Cell, ref Target, ref Dir);
@@ -575,6 +581,19 @@ public class RainbowGhostAI : core.System
         if (Maze.InGhostHouse(nx, ny)) return false;
         if (Maze.IsGhostDoor(nx, ny)) return false;
         return true;
+    }
+
+    private bool IsReleased()
+    {
+        if (ReleaseTime > 0 && ElapsedTime >= ReleaseTime) return true;
+        if (ReleaseAtCoinPercent > 0 && Player != null && Player.CoinsTotal > 0)
+        {
+            float coinPercent = (float)Player.CoinsCollected / Player.CoinsTotal;
+            if (coinPercent >= ReleaseAtCoinPercent) return true;
+        }
+        // Both zero = immediate release
+        if (ReleaseTime <= 0 && ReleaseAtCoinPercent <= 0) return true;
+        return false;
     }
 
     // ── Helpers ────────────────────────────────────────────────────────

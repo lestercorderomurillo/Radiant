@@ -2,6 +2,14 @@ using Microsoft.Xna.Framework;
 
 namespace com.radiant.engine.bundle;
 
+public struct GhostEntry
+{
+    public PacmanGhostType Type;
+    public (int x, int y)? StartCell;
+    public float ReleaseAfter;
+    public float ReleaseAtCoinPercent;
+}
+
 public class PacmanLevelConfig
 {
     public string[] Layout { get; set; }
@@ -19,10 +27,8 @@ public class PacmanLevelConfig
     public float CoinPulseMin { get; set; } = 0.6f;
     public float CoinPulseMax { get; set; } = 1.0f;
 
-    public PacmanGhostType[] Ghosts { get; set; } = [];
-    public (int x, int y)[] GhostStartCells { get; set; }
+    public GhostEntry[] Ghosts { get; set; } = [];
     public float GhostSpeed { get; set; } = 200f;
-    public float[] GhostReleaseTimes { get; set; }
 
     public float RainbowSpeed { get; set; } = 200f;
 

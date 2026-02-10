@@ -108,7 +108,7 @@ radiant/
 │   │       │   ├── MazeBuilder/
 │   │       │   │   ├── PacmanMazeBuilder.cs                 # Maze layout + coin tracking
 │   │       │   │   ├── PacmanMazeGenerator.cs               # Procedural maze generation
-│   │       │   │   └── PacmanLevelConfig.cs                 # Per-level configuration
+│   │       │   │   └── PacmanLevelConfig.cs                 # Per-level config + GhostEntry struct
 │   │       │   └── AI/Pacman/
 │   │       │       ├── GhostAI/PacmanGhostAI.cs             # Ghost AI (scatter/chase/frightened)
 │   │       │       ├── Player/PacmanPlayer.cs               # Arrow-key player + coins + HUD

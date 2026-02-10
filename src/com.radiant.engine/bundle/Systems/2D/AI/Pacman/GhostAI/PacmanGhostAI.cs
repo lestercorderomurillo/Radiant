@@ -26,10 +26,9 @@ public class PacmanGhostAI : core.System
     private (int x, int y)[] GhostCells;
     private (int x, int y)[] GhostTargets;
     private (int dx, int dy)[] GhostDirs;
-    private PacmanGhostType[] PacmanGhostTypes;
+    private GhostEntry[] GhostEntries;
     private (int x, int y)[] ChaseTargets;
     private bool[] ExitedHouse;
-    private float[] ReleaseTimes;
     private Color[] GhostColors;
     private Vector2[] EyePositions;      // 2-frame delayed positions (matches Geometry's rendered body)
     private Vector2[] PrevPositions;     // 1-frame delayed (intermediate)
@@ -96,17 +95,16 @@ public class PacmanGhostAI : core.System
         Geometry = Scene.ECS.GetSystem<Geometry>();
     }
 
-    public void Track(int[] entityIds, (int x, int y)[] startCells, PacmanGhostType[] types = null, float[] releaseTimes = null)
+    public void Track(int[] entityIds, (int x, int y)[] startCells, GhostEntry[] entries)
     {
         int count = entityIds.Length;
         GhostIds = entityIds;
+        GhostEntries = entries;
         GhostCells = new (int, int)[count];
         GhostTargets = new (int, int)[count];
         GhostDirs = new (int, int)[count];
-        PacmanGhostTypes = new PacmanGhostType[count];
         ChaseTargets = new (int, int)[count];
         ExitedHouse = new bool[count];
-        ReleaseTimes = new float[count];
         GhostColors = new Color[count];
         EyePositions = new Vector2[count];
         PrevPositions = new Vector2[count];
@@ -116,15 +114,13 @@ public class PacmanGhostAI : core.System
             GhostCells[i] = startCells[i];
             GhostTargets[i] = startCells[i];
             GhostDirs[i] = (1, 0);
-            PacmanGhostTypes[i] = types != null ? types[i] : (PacmanGhostType)(i % 6);
             ChaseTargets[i] = PickRandomWalkable();
             ExitedHouse[i] = false;
-            ReleaseTimes[i] = releaseTimes != null ? releaseTimes[i] : i * DefaultReleaseInterval;
 
             // GI emission via Geometry texture draw, eyes overlay via LateRender
-            GhostColors[i] = PersonalityColor(PacmanGhostTypes[i]);
+            GhostColors[i] = PersonalityColor(entries[i].Type);
             ref var mat = ref Scene.ECS.GetComponent<Material>(GhostIds[i]);
-            if (PacmanGhostTypes[i] == PacmanGhostType.Shadow)
+            if (entries[i].Type == PacmanGhostType.Shadow)
             {
                 mat.Albedo = GhostColors[i];
                 mat.Emissive = Color.Black;
@@ -136,8 +132,8 @@ public class PacmanGhostAI : core.System
             }
 
             // Initialize position history for eye sync
-            ref var t = ref Scene.ECS.GetComponent<Transform>(GhostIds[i]);
-            var pos = new Vector2(t.Position.X, t.Position.Y);
+            ref var transform = ref Scene.ECS.GetComponent<Transform>(GhostIds[i]);
+            var pos = new Vector2(transform.Position.X, transform.Position.Y);
             EyePositions[i] = pos;
             PrevPositions[i] = pos;
         }
@@ -180,6 +176,8 @@ public class PacmanGhostAI : core.System
             PrevPositions[i] = new Vector2(t.Position.X, t.Position.Y);
         }
 
+        if (Player == null || !Player.HasMoved) return;
+
         float dt = (float)GameTime.ElapsedGameTime.TotalSeconds;
         ElapsedTime += dt;
         UpdateMode(dt);
@@ -189,13 +187,13 @@ public class PacmanGhostAI : core.System
 
         for (int i = 0; i < GhostIds.Length; i++)
         {
-            float currentStep = !ExitedHouse[i] && ElapsedTime < ReleaseTimes[i]
+            float currentStep = !ExitedHouse[i] && !IsReleased(i)
                 ? step * 0.5f
                 : (CurrentMode == PacmanGhostMode.Frightened && ExitedHouse[i])
                     ? frightenedStep : step;
 
             // Shadow: 1.25x base, ramps to 1.5x when approaching, normal speed when very close
-            if (PacmanGhostTypes[i] == PacmanGhostType.Shadow && ExitedHouse[i] && CurrentMode != PacmanGhostMode.Frightened)
+            if (GhostEntries[i].Type == PacmanGhostType.Shadow && ExitedHouse[i] && CurrentMode != PacmanGhostMode.Frightened)
             {
                 var (scx, scy) = GhostCells[i];
                 var (stx, sty) = Player != null ? Player.Cell : ChaseTargets[i];
@@ -265,7 +263,7 @@ public class PacmanGhostAI : core.System
 
             if (EyesTexture != null)
             {
-                var eyeColor = PacmanGhostTypes[i] == PacmanGhostType.Shadow ? Color.White : Color.Black;
+                var eyeColor = GhostEntries[i].Type == PacmanGhostType.Shadow ? Color.White : Color.Black;
                 Renderer.DrawTexture(EyesTexture,
                     new Rectangle(
                         (int)((cx - eyeR) * sx),
@@ -338,7 +336,7 @@ public class PacmanGhostAI : core.System
             int nx = Maze.WrapX(cx + dx), ny = cy + dy;
             if (Maze.IsGhostDoor(nx, ny)) return false;
             // Shadow: won't use teleport tunnels
-            if (PacmanGhostTypes[gi] == PacmanGhostType.Shadow && nx != cx + dx) return false;
+            if (GhostEntries[gi].Type == PacmanGhostType.Shadow && nx != cx + dx) return false;
         }
         return true;
     }
@@ -346,7 +344,7 @@ public class PacmanGhostAI : core.System
     private (int x, int y) GetTargetTile(int i)
     {
         if (CurrentMode == PacmanGhostMode.Scatter)
-            return ScatterTarget(PacmanGhostTypes[i]);
+            return ScatterTarget(GhostEntries[i].Type);
 
         var (cx, cy) = GhostCells[i];
 
@@ -356,7 +354,7 @@ public class PacmanGhostAI : core.System
             var (px, py) = Player.Cell;
 
             // Clyde: retreats to scatter corner when close to player (< 8 tiles)
-            if (PacmanGhostTypes[i] == PacmanGhostType.Clyde)
+            if (GhostEntries[i].Type == PacmanGhostType.Clyde)
             {
                 float d = MathF.Sqrt((cx - px) * (cx - px) + (cy - py) * (cy - py));
                 if (d < 8f)
@@ -364,7 +362,7 @@ public class PacmanGhostAI : core.System
             }
 
             // Dinky: charges at player but chickens out within 10 tiles — flees to a random corner
-            if (PacmanGhostTypes[i] == PacmanGhostType.Dinky)
+            if (GhostEntries[i].Type == PacmanGhostType.Dinky)
             {
                 float d = MathF.Sqrt((cx - px) * (cx - px) + (cy - py) * (cy - py));
                 if (d < 10f)
@@ -377,21 +375,21 @@ public class PacmanGhostAI : core.System
         // Fallback: random walkable targets when no player
         var (tx, ty) = ChaseTargets[i];
 
-        if (PacmanGhostTypes[i] == PacmanGhostType.Clyde)
+        if (GhostEntries[i].Type == PacmanGhostType.Clyde)
         {
             float d = MathF.Sqrt((cx - tx) * (cx - tx) + (cy - ty) * (cy - ty));
             if (d < 8f)
                 return ScatterTarget(PacmanGhostType.Clyde);
         }
 
-        if (PacmanGhostTypes[i] == PacmanGhostType.Dinky)
+        if (GhostEntries[i].Type == PacmanGhostType.Dinky)
         {
             float d = MathF.Sqrt((cx - tx) * (cx - tx) + (cy - ty) * (cy - ty));
             if (d < 10f)
                 return RandomScatterCorner();
         }
 
-        if (PacmanGhostTypes[i] == PacmanGhostType.Shadow)
+        if (GhostEntries[i].Type == PacmanGhostType.Shadow)
         {
             float manhattan = MathF.Abs(cx - tx) + MathF.Abs(cy - ty);
             if (manhattan <= 1 || Maze.IsWall(tx, ty))
@@ -418,7 +416,7 @@ public class PacmanGhostAI : core.System
                 ExitedHouse[i] = true;
             else
             {
-                if (ElapsedTime >= ReleaseTimes[i])
+                if (IsReleased(i))
                     PickHouseExit(i);
                 else
                     PickHouseWander(i);
@@ -568,6 +566,20 @@ public class PacmanGhostAI : core.System
         var pick = options[Rng.Next(count)];
         GhostDirs[i] = pick;
         GhostTargets[i] = (cx + pick.dx, cy + pick.dy);
+    }
+
+    private bool IsReleased(int i)
+    {
+        ref var entry = ref GhostEntries[i];
+        if (entry.ReleaseAfter > 0 && ElapsedTime >= entry.ReleaseAfter) return true;
+        if (entry.ReleaseAtCoinPercent > 0 && Player != null && Player.CoinsTotal > 0)
+        {
+            float coinPercent = (float)Player.CoinsCollected / Player.CoinsTotal;
+            if (coinPercent >= entry.ReleaseAtCoinPercent) return true;
+        }
+        // Both zero = immediate release
+        if (entry.ReleaseAfter <= 0 && entry.ReleaseAtCoinPercent <= 0) return true;
+        return false;
     }
 
     private (int x, int y) PickRandomWalkable()
