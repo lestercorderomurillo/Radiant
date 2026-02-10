@@ -395,6 +395,15 @@ public class RainbowGhostAI : core.System
 
         transform.Position = new Vector3(pos, GhostZ);
         EyeDirs[EyeIndex] = Dir;
+
+        // Collision with player
+        if (Player != null && !Player.PlayerCaught && MainExitedHouse)
+        {
+            float dx = pos.X - Player.WorldPosition.X;
+            float dy = pos.Y - Player.WorldPosition.Y;
+            if (dx * dx + dy * dy < BodyRadius * BodyRadius)
+                Player.PlayerCaught = true;
+        }
     }
 
     private void PickHouseExit(ref (int x, int y) Cell, ref (int x, int y) Target,

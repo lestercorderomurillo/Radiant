@@ -230,6 +230,15 @@ public class PacmanGhostAI : core.System
             }
 
             transform.Position = new Vector3(pos, GhostZ);
+
+            // Collision with player
+            if (ExitedHouse[i] && Player != null && !Player.PlayerCaught)
+            {
+                float dx = pos.X - Player.WorldPosition.X;
+                float dy = pos.Y - Player.WorldPosition.Y;
+                if (dx * dx + dy * dy < BodyRadius * BodyRadius)
+                    Player.PlayerCaught = true;
+            }
         }
     }
 

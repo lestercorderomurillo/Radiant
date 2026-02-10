@@ -15,6 +15,7 @@ public class PacmanPlayer : core.System
     public int CoinsCollected { get; private set; }
     public int CoinsTotal { get; private set; }
     public Color CoinColor { get; set; } = new Color(255, 220, 50);
+    public bool PlayerCaught { get; set; }
 
     PacmanMazeBuilder Maze;
     int EntityId;
@@ -38,6 +39,7 @@ public class PacmanPlayer : core.System
         Z = z;
         WorldPosition = Maze.CellCenter(startCell.x, startCell.y);
         Tracked = true;
+        PlayerCaught = false;
         PrevCell = (-1, -1);
         CoinsCollected = 0;
         CoinsTotal = Maze.CoinCells.Count;

@@ -341,6 +341,13 @@ public class PacmanMazeLevelScene : Scene
 
     public override void Update()
     {
+        // Ghost caught player — reset level
+        if (PlayerSystem.PlayerCaught)
+        {
+            LoadLevel(CurrentLevel);
+            return;
+        }
+
         // Pulse wall borders
         PulseTime += (float)GameTime.ElapsedGameTime.TotalSeconds;
         float t = 0.5f + 0.5f * MathF.Sin(PulseTime * 0.6f);
