@@ -41,6 +41,7 @@ public class PacmanPlayer : core.System
     (int dx, int dy) FacingDir = (1, 0);
     bool MouthOpen;
     float MouthRotation;
+    static readonly Color EyeColor = new Color(255, 245, 200);
 
     public void Track(int entityId, (int x, int y) startCell, float z)
     {
@@ -207,18 +208,18 @@ public class PacmanPlayer : core.System
 
     void DrawEyes()
     {
-        if (PlayerEyesTexture == null) return;
+        // No eyes when facing up/down
+        if (PlayerEyesTexture == null || FacingDir.dy != 0) return;
 
         float Sx = Renderer.ScreenWidth / Renderer.VirtualSize.X;
         float Sy = Renderer.ScreenHeight / Renderer.VirtualSize.Y;
         float Pcx = RenderPosition.X;
         float Pcy = RenderPosition.Y;
 
-        float EyeR = 20f;
+        float EyeR = 23f;
         float EyeD = EyeR * 2f;
-        float EyeUpNudge = FacingDir.dy == -1 ? 12f : 0f;
         float Ecx = Pcx + FacingDir.dx * 4f;
-        float Ecy = Pcy + FacingDir.dy * 4f + EyeUpNudge;
+        float Ecy = Pcy + FacingDir.dy * 4f - 3f;
         int TexW = PlayerEyesTexture.Width;
         int TexH = PlayerEyesTexture.Height;
 
@@ -232,7 +233,7 @@ public class PacmanPlayer : core.System
                 (int)((Ecy - EyeR) * Sy),
                 (int)(EyeR * Sx),
                 (int)(EyeD * Sy));
-            Renderer.DrawSprite(PlayerEyesTexture, Dst, Src, Color.Black, 0f, Vector2.Zero);
+            Renderer.DrawSprite(PlayerEyesTexture, Dst, Src, EyeColor, 0f, Vector2.Zero);
         }
         else if (FacingDir.dx == -1) // Left → show right eye only
         {
@@ -242,17 +243,7 @@ public class PacmanPlayer : core.System
                 (int)((Ecy - EyeR) * Sy),
                 (int)(EyeR * Sx),
                 (int)(EyeD * Sy));
-            Renderer.DrawSprite(PlayerEyesTexture, Dst, Src, Color.Black, 0f, Vector2.Zero);
-        }
-        else // Up/Down → show both eyes
-        {
-            Renderer.DrawSprite(PlayerEyesTexture,
-                new Rectangle(
-                    (int)((Ecx - EyeR) * Sx),
-                    (int)((Ecy - EyeR) * Sy),
-                    (int)(EyeD * Sx),
-                    (int)(EyeD * Sy)),
-                Color.Black);
+            Renderer.DrawSprite(PlayerEyesTexture, Dst, Src, EyeColor, 0f, Vector2.Zero);
         }
 
         Renderer.EndDraw();
@@ -347,28 +338,22 @@ public class PacmanPlayer : core.System
         var Tex = Renderer.CreateTexture(Size, Size, SurfaceFormat.Color);
         var Pixels = new Color[Size * Size];
         float Half = Size / 2f;
-        float MaxAngle = MathF.PI * 0.28f; // ~50° total opening
+        float OriginX = Half - 4f; // wedge starts a bit behind center
+        float MaxAngle = MathF.PI * 0.22f; // ~40° total opening, tighter mouth
 
         for (int Y = 0; Y < Size; Y++)
         {
             for (int X = 0; X < Size; X++)
             {
-                float Dx = X - Half;
+                float Dx = X - OriginX;
                 float Dy = Y - Half;
                 float Dist = MathF.Sqrt(Dx * Dx + Dy * Dy);
 
-                if (Dist < Half && Dist > 0.5f)
+                if (Dist > 0.5f)
                 {
                     float Angle = MathF.Abs(MathF.Atan2(Dy, Dx));
                     if (Angle < MaxAngle)
-                    {
-                        float EdgeDist = Half - Dist;
-                        float CircleFade = MathF.Min(EdgeDist / 1.5f, 1f);
-                        float AngleDist = MaxAngle - Angle;
-                        float AngleFade = MathF.Min(AngleDist / 0.05f, 1f);
-                        byte A = (byte)(CircleFade * AngleFade * 255);
-                        Pixels[Y * Size + X] = new Color((byte)0, (byte)0, (byte)0, A);
-                    }
+                        Pixels[Y * Size + X] = new Color((byte)0, (byte)0, (byte)0, (byte)255);
                 }
             }
         }

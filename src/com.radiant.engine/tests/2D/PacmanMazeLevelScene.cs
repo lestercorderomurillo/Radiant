@@ -329,7 +329,7 @@ public class PacmanMazeLevelScene : Scene
 
         // Player — golden yellow ball (no ghost texture)
         var playerCell = config.PlayerStartCell;
-        var playerColor = new Color(255, 235, 80);
+        var playerColor = new Color(255, 210, 30);
         var playerCenter = Maze.CellCenter(playerCell.x, playerCell.y);
         int playerId = LightFactory.CreateLight(ECS, playerCenter, 30f,
             playerColor, playerColor, 65530f);
