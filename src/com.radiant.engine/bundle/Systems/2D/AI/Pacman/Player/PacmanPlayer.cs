@@ -30,12 +30,17 @@ public class PacmanPlayer : core.System
     (int dx, int dy) BufferedDir;
 
     // Mouth + eyes overlay
+    const int RTSize = 64;
+    RenderTarget2D PlayerRT;
+    Texture2D CircleTex;
     Texture2D MouthTexture;
     Texture2D PlayerEyesTexture;
     float MouthTimer;
     Vector2 RenderPosition;
     Vector2 PrevRenderPos;
     (int dx, int dy) FacingDir = (1, 0);
+    bool MouthOpen;
+    float MouthRotation;
 
     public void Track(int entityId, (int x, int y) startCell, float z)
     {
@@ -55,6 +60,12 @@ public class PacmanPlayer : core.System
         PrevRenderPos = WorldPosition;
         FacingDir = (1, 0);
         MouthTimer = 0f;
+        MouthOpen = true;
+        MouthRotation = 0f;
+
+        // Set the RT as entity texture — Geometry texture path handles emissive/absorption
+        ref var Mat = ref Scene.ECS.GetComponent<Material>(EntityId);
+        Mat.Texture = PlayerRT;
     }
 
     public void Clear()
@@ -71,7 +82,9 @@ public class PacmanPlayer : core.System
         Maze = Scene.ECS.GetSystem<PacmanMazeBuilder>();
         HudFont = Renderer.GetFont("fonts/BaseFont");
         PlayerEyesTexture = Renderer.GetTexture("Eyes");
-        MouthTexture = CreateMouthTexture(64);
+        MouthTexture = CreateMouthTexture(RTSize);
+        CircleTex = Renderer.GetCircleTexture(RTSize);
+        PlayerRT = Renderer.CreateRenderTarget(RTSize, RTSize);
     }
 
     public override void Update()
@@ -146,97 +159,100 @@ public class PacmanPlayer : core.System
             FacingDir = CurrentDir;
             MouthTimer += dt * 24f;
         }
+
+        float Phase = (MathF.Sin(MouthTimer) + 1f) / 2f;
+        MouthOpen = CurrentDir == (0, 0) || Phase > 0.3f;
+        MouthRotation = (FacingDir.dx, FacingDir.dy) switch
+        {
+            (1, 0) => 0f,
+            (0, 1) => MathF.PI / 2f,
+            (-1, 0) => MathF.PI,
+            (0, -1) => -MathF.PI / 2f,
+            _ => 0f
+        };
+    }
+
+    public override void Render()
+    {
+        if (!Tracked || PlayerRT == null) return;
+
+        // Render circle-with-mouth to the player RT (feeds into Geometry texture path → GI)
+        Renderer.PushTargets();
+        Renderer.SetTarget(PlayerRT);
+        Renderer.ClearBackBuffer(Color.Transparent);
+
+        // White circle — Material's EmissiveScaled/Absorption provide the color tint
+        Renderer.BeginDraw(SpriteSortMode.Immediate, BlendState.AlphaBlend);
+        Renderer.DrawSprite(CircleTex, new Rectangle(0, 0, RTSize, RTSize), Color.White);
+        Renderer.EndDraw();
+
+        // Cut out mouth wedge (origin = center of source, so dest must be offset to center pivot in RT)
+        if (MouthOpen)
+        {
+            int Half = RTSize / 2;
+            var Origin = new Vector2(Half, Half);
+            Renderer.BlitMask(MouthTexture, new Rectangle(Half, Half, RTSize, RTSize), MouthRotation, Origin);
+        }
+
+        Renderer.PopTargets();
     }
 
     public override void LateRender()
     {
         if (!Tracked) return;
 
-        DrawMouthAndEyes();
+        DrawEyes();
         DrawHUD();
     }
 
-    void DrawMouthAndEyes()
+    void DrawEyes()
     {
+        if (PlayerEyesTexture == null) return;
+
         float Sx = Renderer.ScreenWidth / Renderer.VirtualSize.X;
         float Sy = Renderer.ScreenHeight / Renderer.VirtualSize.Y;
-        float BodyR = 30f;
         float Pcx = RenderPosition.X;
         float Pcy = RenderPosition.Y;
 
+        float EyeR = 20f;
+        float EyeD = EyeR * 2f;
+        float EyeUpNudge = FacingDir.dy == -1 ? 12f : 0f;
+        float Ecx = Pcx + FacingDir.dx * 4f;
+        float Ecy = Pcy + FacingDir.dy * 4f + EyeUpNudge;
+        int TexW = PlayerEyesTexture.Width;
+        int TexH = PlayerEyesTexture.Height;
+
         Renderer.BeginDraw(SpriteSortMode.Deferred, BlendState.AlphaBlend);
 
-        // Animated mouth wedge
-        float Phase = (MathF.Sin(MouthTimer) + 1f) / 2f;
-        bool ShowMouth = CurrentDir == (0, 0) || Phase > 0.3f;
-
-        if (ShowMouth && MouthTexture != null)
+        if (FacingDir.dx == 1) // Right → show left eye only
         {
-            float Rot = (FacingDir.dx, FacingDir.dy) switch
-            {
-                (1, 0) => 0f,
-                (0, 1) => MathF.PI / 2f,
-                (-1, 0) => MathF.PI,
-                (0, -1) => -MathF.PI / 2f,
-                _ => 0f
-            };
-
-            float MouthOffX = 31f;
-            float MouthOffY = 31f;
-
-            var Dest = new Rectangle(
-                (int)((Pcx + MouthOffX - BodyR) * Sx),
-                (int)((Pcy + MouthOffY - BodyR) * Sy),
-                (int)(BodyR * 2f * Sx),
-                (int)(BodyR * 2f * Sy));
-
-            var Origin = new Vector2(MouthTexture.Width / 2f, MouthTexture.Height / 2f);
-            var Source = new Rectangle(0, 0, MouthTexture.Width, MouthTexture.Height);
-
-            Renderer.DrawSprite(MouthTexture, Dest, Source, Color.White, Rot, Origin);
+            var Src = new Rectangle(0, 0, TexW / 2, TexH);
+            var Dst = new Rectangle(
+                (int)((Ecx - EyeR) * Sx),
+                (int)((Ecy - EyeR) * Sy),
+                (int)(EyeR * Sx),
+                (int)(EyeD * Sy));
+            Renderer.DrawSprite(PlayerEyesTexture, Dst, Src, Color.Black, 0f, Vector2.Zero);
         }
-
-        // Eyes — when facing left/right, show only one eye (mirror-cut)
-        if (PlayerEyesTexture != null)
+        else if (FacingDir.dx == -1) // Left → show right eye only
         {
-            float EyeR = 20f;
-            float EyeD = EyeR * 2f;
-            float EyeUpNudge = FacingDir.dy == -1 ? 12f : 0f;
-            float Ecx = Pcx + FacingDir.dx * 4f;
-            float Ecy = Pcy + FacingDir.dy * 4f + EyeUpNudge;
-            int TexW = PlayerEyesTexture.Width;
-            int TexH = PlayerEyesTexture.Height;
-
-            if (FacingDir.dx == 1) // Right → show left eye only
-            {
-                var Src = new Rectangle(0, 0, TexW / 2, TexH);
-                var Dst = new Rectangle(
+            var Src = new Rectangle(TexW / 2, 0, TexW / 2, TexH);
+            var Dst = new Rectangle(
+                (int)(Ecx * Sx),
+                (int)((Ecy - EyeR) * Sy),
+                (int)(EyeR * Sx),
+                (int)(EyeD * Sy));
+            Renderer.DrawSprite(PlayerEyesTexture, Dst, Src, Color.Black, 0f, Vector2.Zero);
+        }
+        else // Up/Down → show both eyes
+        {
+            Renderer.DrawSprite(PlayerEyesTexture,
+                new Rectangle(
                     (int)((Ecx - EyeR) * Sx),
                     (int)((Ecy - EyeR) * Sy),
-                    (int)(EyeR * Sx),
-                    (int)(EyeD * Sy));
-                Renderer.DrawSprite(PlayerEyesTexture, Dst, Src, Color.Black, 0f, Vector2.Zero);
-            }
-            else if (FacingDir.dx == -1) // Left → show right eye only
-            {
-                var Src = new Rectangle(TexW / 2, 0, TexW / 2, TexH);
-                var Dst = new Rectangle(
-                    (int)(Ecx * Sx),
-                    (int)((Ecy - EyeR) * Sy),
-                    (int)(EyeR * Sx),
-                    (int)(EyeD * Sy));
-                Renderer.DrawSprite(PlayerEyesTexture, Dst, Src, Color.Black, 0f, Vector2.Zero);
-            }
-            else // Up/Down → show both eyes
-            {
-                Renderer.DrawSprite(PlayerEyesTexture,
-                    new Rectangle(
-                        (int)((Ecx - EyeR) * Sx),
-                        (int)((Ecy - EyeR) * Sy),
-                        (int)(EyeD * Sx),
-                        (int)(EyeD * Sy)),
-                    Color.Black);
-            }
+                    (int)(EyeD * Sx),
+                    (int)(EyeD * Sy)),
+                Color.Black);
         }
 
         Renderer.EndDraw();

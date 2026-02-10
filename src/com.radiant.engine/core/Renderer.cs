@@ -1819,6 +1819,26 @@ public class Renderer : IDisposable
         SpriteBatch.End();
     }
 
+    /// <summary>
+    /// Subtractive mask: erases pixels from the current render target where the mask has alpha.
+    /// Result = dest * (1 - mask.alpha). Supports rotation around origin (source-texture coords).
+    /// </summary>
+    public void BlitMask(Texture2D mask, Rectangle destination, float rotation = 0f, Vector2 origin = default)
+    {
+        CommitTextures();
+        SpriteBatch.Begin(SpriteSortMode.Immediate, MaskSubtract);
+        SpriteBatch.Draw(mask, destination, null, Color.White, rotation, origin, SpriteEffects.None, 0);
+        SpriteBatch.End();
+    }
+
+    private static readonly BlendState MaskSubtract = new BlendState
+    {
+        ColorSourceBlend = Blend.Zero,
+        ColorDestinationBlend = Blend.InverseSourceAlpha,
+        AlphaSourceBlend = Blend.Zero,
+        AlphaDestinationBlend = Blend.InverseSourceAlpha,
+    };
+
     #endregion
 
     #region IDisposable
