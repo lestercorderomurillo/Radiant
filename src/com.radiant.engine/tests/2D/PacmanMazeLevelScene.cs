@@ -232,6 +232,7 @@ public class PacmanMazeLevelScene : Scene
             UpdateWindowVisibility();
         });
         Inspector.AddButton("scene", "toggleGizmos", "Toggle Gizmos", () => Gizmos.ToggleGizmos());
+        Inspector.AddToggle("scene", "pause", "Pause", false, (paused) => ECS.Paused = paused);
 
         Inspector.WindowsRestored += UpdateWindowVisibility;
         UpdateWindowVisibility();

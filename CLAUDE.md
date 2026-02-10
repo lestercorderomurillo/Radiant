@@ -42,7 +42,7 @@ radiant/
 │   │   ├── Archetype.cs              # Dense component storage
 │   │   ├── Renderer.cs               # Fluent rendering API (~1716 lines)
 │   │   ├── Scene.cs                  # Scene lifecycle
-│   │   ├── System.cs                 # System base + RunAfter/RunBefore
+│   │   ├── System.cs                 # System base + RunAfter/RunBefore/Pausable
 │   │   ├── SystemGroup.cs            # Toggle between system variants
 │   │   ├── Shape.cs                  # GPU shape struct (24 bytes)
 │   │   ├── SpatialIndex.cs           # Grid spatial hashing (cell=64)
@@ -109,6 +109,7 @@ ref var t = ref ECS.AddComponent<Transform>(id); // returns ref for mutation
 ref var m = ref ECS.GetComponent<Material>(id);
 bool has = ECS.HasComponent<Circle2D>(id);
 ECS.DestroyEntity(id);                           // recycles ID via stack
+ECS.Paused = true;                               // skips Update/FixedUpdate for [Pausable] systems only
 ```
 
 ### Queries (Parallel)
@@ -246,6 +247,11 @@ Renderer.UploadToTexture(target, data[], count);
 ### Ping-Pong
 ```csharp
 Renderer.PingPong(rtA, rtB, passes, beforePass, afterPass, clearColor);
+```
+
+### Subtractive Mask
+```csharp
+Renderer.BlitMask(mask, destination, rotation, origin);  // erases current RT where mask has alpha: dest * (1 - mask.alpha)
 ```
 
 ### Deprecated (do NOT use)

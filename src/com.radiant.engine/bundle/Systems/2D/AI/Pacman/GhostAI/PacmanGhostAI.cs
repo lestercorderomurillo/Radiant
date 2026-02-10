@@ -9,6 +9,7 @@ namespace com.radiant.engine.bundle;
 public enum PacmanGhostType : byte { Blinky, Pinky, Inky, Clyde, Dinky, Shadow, Rainbow }
 public enum PacmanGhostMode : byte { Scatter, Chase, Frightened }
 
+[Pausable]
 public class PacmanGhostAI : core.System
 {
     public float GhostSpeed { get; set; } = 200f;

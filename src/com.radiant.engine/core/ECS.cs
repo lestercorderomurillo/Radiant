@@ -38,6 +38,7 @@ public class ECS : IGameObject
     private static readonly int CachedThreadCount = Environment.ProcessorCount;
 
     public int EntityCount => EntityCount_;
+    public bool Paused { get; set; }
     public Scene Scene { get; set; }
     public Renderer Renderer { get; private set; }
     public SpatialIndex Spatial { get; private set; }
@@ -153,6 +154,7 @@ public class ECS : IGameObject
         system.Renderer = Scene.Renderer;
         system.GameTime = Scene.GameTime;
         system.Enabled = enabled;
+        system.IsPausable = Attribute.IsDefined(typeof(T), typeof(PausableAttribute));
         Systems.Add(system);
         SystemCache[typeof(T)] = system;
         return system;
@@ -571,6 +573,7 @@ public class ECS : IGameObject
         for (int i = 0; i < Systems.Count; i++)
         {
             if (!Systems[i].Enabled) continue;
+            if (Paused && Systems[i].IsPausable) continue;
             Systems[i].GameTime = Scene.GameTime;
             Systems[i].Update();
         }
@@ -581,6 +584,7 @@ public class ECS : IGameObject
         for (int i = 0; i < Systems.Count; i++)
         {
             if (!Systems[i].Enabled) continue;
+            if (Paused && Systems[i].IsPausable) continue;
             Systems[i].GameTime = Scene.GameTime;
             Systems[i].FixedUpdate();
         }

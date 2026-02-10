@@ -6,6 +6,7 @@ using System;
 
 namespace com.radiant.engine.bundle;
 
+[Pausable]
 [RunAfter(typeof(PacmanMazeBuilder))]
 [RunBefore(typeof(PacmanGhostAI))]
 public class PacmanPlayer : core.System

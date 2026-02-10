@@ -25,6 +25,12 @@ public class RunBeforeAttribute : Attribute
     public RunBeforeAttribute(Type systemType) => SystemType = systemType;
 }
 
+/// <summary>
+/// Marks a system as pausable. Only systems with this attribute are skipped when ECS.Paused is true.
+/// </summary>
+[AttributeUsage(AttributeTargets.Class)]
+public class PausableAttribute : Attribute { }
+
 public abstract class System
 {
     public Scene Scene;
@@ -34,6 +40,7 @@ public abstract class System
     public Renderer Renderer;
 
     public bool Enabled = true;
+    internal bool IsPausable;
 
     public virtual void Initialize() {}
 
