@@ -173,7 +173,7 @@ public class PacmanMazeLevelScene : Scene
 
     public override void SetupECS()
     {
-        ECS.AddSystem<UISystem>();
+        ECS.AddSystem<Inspector>();
         ECS.AddSystem<PerformanceMonitor>();
         ECS.AddSystem<Geometry>();
 
@@ -212,19 +212,19 @@ public class PacmanMazeLevelScene : Scene
         UpdateUDRInput();
 
         // Scene control window
-        UISystem.CreateWindow("scene", "Scene", new Vector2(20, 820), new Vector2(340, 0));
-        UISystem.AddLabel("scene", "level", $"Level: 1/{Levels.Length}");
-        UISystem.AddLabel("scene", "gi", $"GI: {GI.ActiveName}");
-        UISystem.AddLabel("scene", "upscaler", $"Upscaler: {UDR.ActiveName}");
-        UISystem.AddButton("scene", "nextLevel", "Next Level", () => LoadLevel((CurrentLevel + 1) % Levels.Length));
-        UISystem.AddButton("scene", "spawnLights", "Spawn Lights", () => LightFactory.SpawnRandom(ECS, 100_000, Renderer.VirtualSize));
-        UISystem.AddButton("scene", "toggleGI", "Toggle GI", () =>
+        Inspector.CreateWindow("scene", "Scene");
+        Inspector.AddLabel("scene", "level", $"Level: 1/{Levels.Length}");
+        Inspector.AddLabel("scene", "gi", $"GI: {GI.ActiveName}");
+        Inspector.AddLabel("scene", "upscaler", $"Upscaler: {UDR.ActiveName}");
+        Inspector.AddButton("scene", "nextLevel", "Next Level", () => LoadLevel((CurrentLevel + 1) % Levels.Length));
+        Inspector.AddButton("scene", "spawnLights", "Spawn Lights", () => LightFactory.SpawnRandom(ECS, 100_000, Renderer.VirtualSize));
+        Inspector.AddButton("scene", "toggleGI", "Toggle GI", () =>
         {
             GI.Toggle();
             UpdateUDRInput();
             UpdateWindowVisibility();
         });
-        UISystem.AddButton("scene", "toggleUpscaler", "Toggle Upscaler", () =>
+        Inspector.AddButton("scene", "toggleUpscaler", "Toggle Upscaler", () =>
         {
             UDR.Toggle();
             UpdateUDRInput();
@@ -368,9 +368,9 @@ public class PacmanMazeLevelScene : Scene
                 BaseCoinColor.A);
         }
 
-        UISystem.SetLabel("scene", "level", $"Level: {CurrentLevel + 1}/{Levels.Length}");
-        UISystem.SetLabel("scene", "gi", $"GI: {GI.ActiveName}");
-        UISystem.SetLabel("scene", "upscaler", $"Upscaler: {UDR.ActiveName}");
+        Inspector.SetLabel("scene", "level", $"Level: {CurrentLevel + 1}/{Levels.Length}");
+        Inspector.SetLabel("scene", "gi", $"GI: {GI.ActiveName}");
+        Inspector.SetLabel("scene", "upscaler", $"Upscaler: {UDR.ActiveName}");
     }
 
     private void UpdateUDRInput()
@@ -400,13 +400,13 @@ public class PacmanMazeLevelScene : Scene
         // GI: show active, hide inactive
         if (GI.Active is HRCGI)
         {
-            UISystem.ShowWindow("hrcgi");
-            UISystem.HideWindow("rcgi");
+            Inspector.ShowWindow("hrcgi");
+            Inspector.HideWindow("rcgi");
         }
         else
         {
-            UISystem.HideWindow("hrcgi");
-            UISystem.ShowWindow("rcgi");
+            Inspector.HideWindow("hrcgi");
+            Inspector.ShowWindow("rcgi");
         }
 
         // UDR: show active, hide rest
@@ -423,9 +423,9 @@ public class PacmanMazeLevelScene : Scene
         foreach (var w in udrWindows)
         {
             if (w == activeWindow)
-                UISystem.ShowWindow(w);
+                Inspector.ShowWindow(w);
             else
-                UISystem.HideWindow(w);
+                Inspector.HideWindow(w);
         }
     }
 }

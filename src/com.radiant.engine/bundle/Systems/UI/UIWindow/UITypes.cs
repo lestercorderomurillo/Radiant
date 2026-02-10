@@ -36,6 +36,7 @@ public class WindowData
     public Vector2 Size;
     public bool Visible;
     public int ZOrder;
+    public int CreationIndex;
     public List<Widget> Widgets = new();
     public Dictionary<string, int> WidgetIndex = new();
     public Rectangle TitleBarBounds;

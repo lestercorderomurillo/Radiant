@@ -39,15 +39,15 @@ public class UDR2 : core.System
         if (Geometry != null)
             Geometry.EnableSDF = true;
 
-        UISystem.CreateWindow("udr2", "UDR2", new Vector2(380, 370), new Vector2(340, 0));
-        UISystem.AddLabel("udr2", "quality", "...");
-        UISystem.AddLabel("udr2", "input", "...");
-        UISystem.AddLabel("udr2", "output", "...");
-        UISystem.AddButton("udr2", "cycleQuality", "Cycle Quality", () => UDRQuality.Cycle());
-        UISystem.AddSlider("udr2", "sharpness", "Sharpness", 0f, 2f, Sharpness, V => Sharpness = V);
-        UISystem.AddSlider("udr2", "frames", "Frames to Accumulate", 1, 16, FramesToAccumulate, V => { FramesToAccumulate = (int)V; FrameIndex = 0; });
-        UISystem.AddToggle("udr2", "edgeCorr", "Detail Reconstruction", EdgeCorrection, V => EdgeCorrection = V);
-        UISystem.AddToggle("udr2", "debugRays", "Debug Rays", DebugRays, V => DebugRays = V);
+        Inspector.CreateWindow("udr2", "UDR2");
+        Inspector.AddLabel("udr2", "quality", "...");
+        Inspector.AddLabel("udr2", "input", "...");
+        Inspector.AddLabel("udr2", "output", "...");
+        Inspector.AddButton("udr2", "cycleQuality", "Cycle Quality", () => UDRQuality.Cycle());
+        Inspector.AddSlider("udr2", "sharpness", "Sharpness", 0f, 2f, Sharpness, V => Sharpness = V);
+        Inspector.AddSlider("udr2", "frames", "Frames to Accumulate", 1, 16, FramesToAccumulate, V => { FramesToAccumulate = (int)V; FrameIndex = 0; });
+        Inspector.AddToggle("udr2", "edgeCorr", "Detail Reconstruction", EdgeCorrection, V => EdgeCorrection = V);
+        Inspector.AddToggle("udr2", "debugRays", "Debug Rays", DebugRays, V => DebugRays = V);
     }
 
     public void SetInputSource(Func<Texture2D> source)
@@ -155,9 +155,9 @@ public class UDR2 : core.System
 
         FrameIndex++;
 
-        UISystem.SetLabel("udr2", "quality", $"Quality: {UDRQuality.Names[UDRQuality.Index]} ({UDRQuality.ScaleNormalized:P0})");
-        UISystem.SetLabel("udr2", "input", $"Input Size: {input.Width}x{input.Height}");
-        UISystem.SetLabel("udr2", "output", $"Output Size: {OutputSize.X}x{OutputSize.Y}");
+        Inspector.SetLabel("udr2", "quality", $"Quality: {UDRQuality.Names[UDRQuality.Index]} ({UDRQuality.ScaleNormalized:P0})");
+        Inspector.SetLabel("udr2", "input", $"Input Size: {input.Width}x{input.Height}");
+        Inspector.SetLabel("udr2", "output", $"Output Size: {OutputSize.X}x{OutputSize.Y}");
     }
 
     public override void Render()

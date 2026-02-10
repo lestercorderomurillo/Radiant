@@ -66,14 +66,14 @@ public class PerformanceMonitor : core.System
         InitializeGpuCounters();
         StartSamplerThread();
 
-        UISystem.CreateWindow("perf", "Performance", new Vector2(20, 20), new Vector2(340, 0));
-        UISystem.AddLabel("perf", "fps", "FPS: -");
-        UISystem.AddLabel("perf", "frame", "Frame: -");
-        UISystem.AddLabel("perf", "cpu", "CPU: -");
-        UISystem.AddLabel("perf", "gpu", "GPU: -");
-        UISystem.AddLabel("perf", "ram", "RAM: -");
-        UISystem.AddLabel("perf", "peak", "Peak: -");
-        UISystem.AddLabel("perf", "build", Window.BuildTag);
+        Inspector.CreateWindow("perf", "Performance");
+        Inspector.AddLabel("perf", "fps", "FPS: -");
+        Inspector.AddLabel("perf", "frame", "Frame: -");
+        Inspector.AddLabel("perf", "cpu", "CPU: -");
+        Inspector.AddLabel("perf", "gpu", "GPU: -");
+        Inspector.AddLabel("perf", "ram", "RAM: -");
+        Inspector.AddLabel("perf", "peak", "Peak: -");
+        Inspector.AddLabel("perf", "build", Window.BuildTag);
     }
 
     private void StartSamplerThread()
@@ -223,7 +223,7 @@ public class PerformanceMonitor : core.System
 
         // Reuse StringBuilders - zero allocation
         FpsBuilder.Clear().Append("FPS: ").Append(DisplayFps).Append('/').Append(TargetFps);
-        UISystem.SetLabel("perf", "fps", FpsBuilder.ToString());
+        Inspector.SetLabel("perf", "fps", FpsBuilder.ToString());
 
         FrameTimeBuilder.Clear()
             .Append("Frame: ")
@@ -231,19 +231,19 @@ public class PerformanceMonitor : core.System
             .Append("ms (target: ")
             .AppendFormat("{0:F2}", TargetMs)
             .Append("ms)");
-        UISystem.SetLabel("perf", "frame", FrameTimeBuilder.ToString());
+        Inspector.SetLabel("perf", "frame", FrameTimeBuilder.ToString());
 
         CpuBuilder.Clear().Append("CPU: ").AppendFormat("{0:F1}", CpuUsage).Append("% (").Append(CpuCoreCount).Append(" cores)");
-        UISystem.SetLabel("perf", "cpu", CpuBuilder.ToString());
+        Inspector.SetLabel("perf", "cpu", CpuBuilder.ToString());
 
         GpuBuilder.Clear().Append("GPU: ").AppendFormat("{0:F1}", GpuUsage).Append('%');
-        UISystem.SetLabel("perf", "gpu", GpuBuilder.ToString());
+        Inspector.SetLabel("perf", "gpu", GpuBuilder.ToString());
 
         RamBuilder.Clear().Append("RAM: ").AppendFormat("{0:F1}", MemoryMB).Append("MB");
-        UISystem.SetLabel("perf", "ram", RamBuilder.ToString());
+        Inspector.SetLabel("perf", "ram", RamBuilder.ToString());
 
         PeakBuilder.Clear().Append("Peak: ").AppendFormat("{0:F1}", PeakMemoryMB).Append("MB");
-        UISystem.SetLabel("perf", "peak", PeakBuilder.ToString());
+        Inspector.SetLabel("perf", "peak", PeakBuilder.ToString());
     }
 
     #region Public API

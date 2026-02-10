@@ -67,8 +67,8 @@ public class RCGI : core.System
         if (Geometry != null)
             Geometry.EnableSDF = true;
 
-        UISystem.CreateWindow("rcgi", "RCGI", new Vector2(380, 20), new Vector2(340, 0));
-        UISystem.AddLabel("rcgi", "info", "...");
+        Inspector.CreateWindow("rcgi", "RCGI");
+        Inspector.AddLabel("rcgi", "info", "...");
     }
 
     private void OnRenderScaleChanged(float newScale)
@@ -203,7 +203,7 @@ public class RCGI : core.System
 
         Renderer.PopTargets();
 
-        UISystem.SetLabel("rcgi", "info", $"Screen: {(int)ScreenSize.X}x{(int)ScreenSize.Y} | Cascades: {ActiveCascades}");
+        Inspector.SetLabel("rcgi", "info", $"Screen: {(int)ScreenSize.X}x{(int)ScreenSize.Y} | Cascades: {ActiveCascades}");
     }
 
     private void RenderCascade(int cascadeIndex, Texture2D emissive, Texture2D sdf)

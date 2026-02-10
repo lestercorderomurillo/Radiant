@@ -27,14 +27,14 @@ public class UDR1 : core.System
         ApplyRenderScale();
         UDRQuality.Changed += _ => ApplyRenderScale();
 
-        UISystem.CreateWindow("udr1", "UDR1", new Vector2(380, 370), new Vector2(340, 0));
-        UISystem.AddLabel("udr1", "quality", "...");
-        UISystem.AddLabel("udr1", "input", "...");
-        UISystem.AddLabel("udr1", "output", "...");
-        UISystem.AddButton("udr1", "cycleQuality", "Cycle Quality", () => UDRQuality.Cycle());
-        UISystem.AddSlider("udr1", "sharpness", "Sharpness", 0f, 2f, Sharpness, V => Sharpness = V);
-        UISystem.AddToggle("udr1", "edgeCorr", "Detail Reconstruction", EdgeCorrection, V => EdgeCorrection = V);
-        UISystem.AddToggle("udr1", "debugRays", "Debug Rays", DebugRays, V => DebugRays = V);
+        Inspector.CreateWindow("udr1", "UDR1");
+        Inspector.AddLabel("udr1", "quality", "...");
+        Inspector.AddLabel("udr1", "input", "...");
+        Inspector.AddLabel("udr1", "output", "...");
+        Inspector.AddButton("udr1", "cycleQuality", "Cycle Quality", () => UDRQuality.Cycle());
+        Inspector.AddSlider("udr1", "sharpness", "Sharpness", 0f, 2f, Sharpness, V => Sharpness = V);
+        Inspector.AddToggle("udr1", "edgeCorr", "Detail Reconstruction", EdgeCorrection, V => EdgeCorrection = V);
+        Inspector.AddToggle("udr1", "debugRays", "Debug Rays", DebugRays, V => DebugRays = V);
     }
 
     public void SetInputSource(Func<Texture2D> source)
@@ -102,9 +102,9 @@ public class UDR1 : core.System
             .Commit()
             .SetTarget(null);
 
-        UISystem.SetLabel("udr1", "quality", $"Quality: {UDRQuality.Names[UDRQuality.Index]} ({UDRQuality.ScaleNormalized:P0})");
-        UISystem.SetLabel("udr1", "input", $"Input Size: {input.Width}x{input.Height}");
-        UISystem.SetLabel("udr1", "output", $"Output Size: {OutputSize.X}x{OutputSize.Y}");
+        Inspector.SetLabel("udr1", "quality", $"Quality: {UDRQuality.Names[UDRQuality.Index]} ({UDRQuality.ScaleNormalized:P0})");
+        Inspector.SetLabel("udr1", "input", $"Input Size: {input.Width}x{input.Height}");
+        Inspector.SetLabel("udr1", "output", $"Output Size: {OutputSize.X}x{OutputSize.Y}");
     }
 
     public override void Render()

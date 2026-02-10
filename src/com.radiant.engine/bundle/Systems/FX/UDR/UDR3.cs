@@ -34,14 +34,14 @@ public class UDR3 : core.System
         UDRQuality.Changed += _ => ApplyRenderScale();
         FrameIndex = 0;
 
-        UISystem.CreateWindow("udr3", "UDR3", new Vector2(380, 370), new Vector2(340, 0));
-        UISystem.AddLabel("udr3", "quality", "...");
-        UISystem.AddLabel("udr3", "input", "...");
-        UISystem.AddLabel("udr3", "output", "...");
-        UISystem.AddLabel("udr3", "frames", "...");
-        UISystem.AddButton("udr3", "cycleQuality", "Cycle Quality", () => UDRQuality.Cycle());
-        UISystem.AddButton("udr3", "debugEdges", "Toggle Debug Edges", () => DebugEdges = (DebugEdges + 1) % 2);
-        UISystem.AddLabel("udr3", "debugInfo", "Debug Edges: OFF");
+        Inspector.CreateWindow("udr3", "UDR3");
+        Inspector.AddLabel("udr3", "quality", "...");
+        Inspector.AddLabel("udr3", "input", "...");
+        Inspector.AddLabel("udr3", "output", "...");
+        Inspector.AddLabel("udr3", "frames", "...");
+        Inspector.AddButton("udr3", "cycleQuality", "Cycle Quality", () => UDRQuality.Cycle());
+        Inspector.AddButton("udr3", "debugEdges", "Toggle Debug Edges", () => DebugEdges = (DebugEdges + 1) % 2);
+        Inspector.AddLabel("udr3", "debugInfo", "Debug Edges: OFF");
     }
 
     public void SetInputSource(Func<Texture2D> source)
@@ -166,11 +166,11 @@ public class UDR3 : core.System
             FrameIndex++;
 
         string[] debugNames = ["OFF", "Edge Mask"];
-        UISystem.SetLabel("udr3", "quality", $"Quality: {UDRQuality.Names[UDRQuality.Index]} ({UDRQuality.ScaleNormalized:P0})");
-        UISystem.SetLabel("udr3", "input", $"Input Size: {input.Width}x{input.Height}");
-        UISystem.SetLabel("udr3", "output", $"Output Size: {OutputSize.X}x{OutputSize.Y}");
-        UISystem.SetLabel("udr3", "frames", $"Frames to Accumulate: {FramesToAccumulate} (current: {effectiveFrames})");
-        UISystem.SetLabel("udr3", "debugInfo", $"Debug Edges: {debugNames[DebugEdges]}");
+        Inspector.SetLabel("udr3", "quality", $"Quality: {UDRQuality.Names[UDRQuality.Index]} ({UDRQuality.ScaleNormalized:P0})");
+        Inspector.SetLabel("udr3", "input", $"Input Size: {input.Width}x{input.Height}");
+        Inspector.SetLabel("udr3", "output", $"Output Size: {OutputSize.X}x{OutputSize.Y}");
+        Inspector.SetLabel("udr3", "frames", $"Frames to Accumulate: {FramesToAccumulate} (current: {effectiveFrames})");
+        Inspector.SetLabel("udr3", "debugInfo", $"Debug Edges: {debugNames[DebugEdges]}");
     }
 
     public override void Render()

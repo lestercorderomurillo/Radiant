@@ -76,11 +76,11 @@ public class HRCGI : core.System
         DebugTextureCount = 1 + CascadeCount * 4 + FrustumCount * 2 + 2;
         Renderer.RenderScaleChanged += OnRenderScaleChanged;
 
-        UISystem.CreateWindow("hrcgi", "HRCGI", new Vector2(380, 20), new Vector2(340, 0));
-        UISystem.AddLabel("hrcgi", "info", "...");
-        UISystem.AddButton("hrcgi", "cycleDebug", "Cycle Debug Texture", () =>
+        Inspector.CreateWindow("hrcgi", "HRCGI");
+        Inspector.AddLabel("hrcgi", "info", "...");
+        Inspector.AddButton("hrcgi", "cycleDebug", "Cycle Debug Texture", () =>
             DebugIndex = (DebugIndex + 1) % DebugTextureCount);
-        UISystem.AddButton("hrcgi", "cycleQuality", "Cycle Quality", () =>
+        Inspector.AddButton("hrcgi", "cycleQuality", "Cycle Quality", () =>
         {
             ProbeScaleIndex = (ProbeScaleIndex + 1) % ProbeScales.Length;
             DisposeRenderTargets();
@@ -174,7 +174,7 @@ public class HRCGI : core.System
 
         Renderer.PopTargets();
 
-        UISystem.SetLabel("hrcgi", "info", $"World: {(int)WorldSize.X} | Cascades: {CascadeCount} | Quality: {QualityNames[ProbeScaleIndex]}");
+        Inspector.SetLabel("hrcgi", "info", $"World: {(int)WorldSize.X} | Cascades: {CascadeCount} | Quality: {QualityNames[ProbeScaleIndex]}");
     }
 
     private void RenderFrustumSeed(int frustum, Texture2D emissive, Texture2D absorption)

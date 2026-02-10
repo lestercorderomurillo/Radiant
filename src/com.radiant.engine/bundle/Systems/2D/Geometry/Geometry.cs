@@ -155,20 +155,20 @@ public class Geometry : core.System
         WriteBuffer = 0;
         ReadBuffer = 1;
 
-        UISystem.CreateWindow("geometry", "Geometry", new Vector2(20, 400), new Vector2(340, 0));
-        UISystem.AddLabel("geometry", "debug", "Debug: None");
-        UISystem.AddButton("geometry", "cycleDebug", "Cycle Debug Mode", () =>
+        Inspector.CreateWindow("geometry", "Geometry");
+        Inspector.AddLabel("geometry", "debug", "Debug: None");
+        Inspector.AddButton("geometry", "cycleDebug", "Cycle Debug Mode", () =>
         {
             int count = Enum.GetValues<DebugMode>().Length;
             CurrentDebug = (DebugMode)(((int)CurrentDebug + 1) % count);
         });
-        UISystem.AddLabel("geometry", "emissive", "Emissive Objects: 0");
-        UISystem.AddLabel("geometry", "absorption", "Absorption Objects: 0");
-        UISystem.AddLabel("geometry", "buffers", "Buffers: -");
-        UISystem.AddLabel("geometry", "timing", "Timing: -");
-        UISystem.AddLabel("geometry", "gpu", "GPU: -");
-        UISystem.AddLabel("geometry", "sdf", "SDF: -");
-        UISystem.AddLabel("geometry", "jfa", "JFA: -");
+        Inspector.AddLabel("geometry", "emissive", "Emissive Objects: 0");
+        Inspector.AddLabel("geometry", "absorption", "Absorption Objects: 0");
+        Inspector.AddLabel("geometry", "buffers", "Buffers: -");
+        Inspector.AddLabel("geometry", "timing", "Timing: -");
+        Inspector.AddLabel("geometry", "gpu", "GPU: -");
+        Inspector.AddLabel("geometry", "sdf", "SDF: -");
+        Inspector.AddLabel("geometry", "jfa", "JFA: -");
     }
 
     private void InitializeJFA()
@@ -679,22 +679,22 @@ public class Geometry : core.System
 
     private void UpdateGizmos()
     {
-        UISystem.SetLabel("geometry", "debug", $"Debug: {CurrentDebug}");
-        UISystem.SetLabel("geometry", "emissive", $"Emissive Objects: {EmissiveCount}");
-        UISystem.SetLabel("geometry", "absorption", $"Absorption Objects: {AbsorptionCount}");
-        UISystem.SetLabel("geometry", "buffers", $"Buffers: {WorldBounds.X}x{WorldBounds.Y}");
-        UISystem.SetLabel("geometry", "timing", $"Collect: {CollectMs:F2}ms | Flatten: {FlattenMs:F2}ms | Render: {RenderMs:F2}ms");
-        UISystem.SetLabel("geometry", "gpu", $"GPU: SetData: {Renderer.LastSetDataMs:F2}ms | Draw: {Renderer.LastDrawMs:F2}ms");
+        Inspector.SetLabel("geometry", "debug", $"Debug: {CurrentDebug}");
+        Inspector.SetLabel("geometry", "emissive", $"Emissive Objects: {EmissiveCount}");
+        Inspector.SetLabel("geometry", "absorption", $"Absorption Objects: {AbsorptionCount}");
+        Inspector.SetLabel("geometry", "buffers", $"Buffers: {WorldBounds.X}x{WorldBounds.Y}");
+        Inspector.SetLabel("geometry", "timing", $"Collect: {CollectMs:F2}ms | Flatten: {FlattenMs:F2}ms | Render: {RenderMs:F2}ms");
+        Inspector.SetLabel("geometry", "gpu", $"GPU: SetData: {Renderer.LastSetDataMs:F2}ms | Draw: {Renderer.LastDrawMs:F2}ms");
 
         if (EnableSDF)
         {
-            UISystem.SetLabel("geometry", "sdf", $"SDF: {SDFBounds.X}x{SDFBounds.Y} ({SDFScale:P0})");
-            UISystem.SetLabel("geometry", "jfa", $"JFA Passes: {JFAPassCount}");
+            Inspector.SetLabel("geometry", "sdf", $"SDF: {SDFBounds.X}x{SDFBounds.Y} ({SDFScale:P0})");
+            Inspector.SetLabel("geometry", "jfa", $"JFA Passes: {JFAPassCount}");
         }
         else
         {
-            UISystem.SetLabel("geometry", "sdf", "SDF: Disabled");
-            UISystem.SetLabel("geometry", "jfa", "");
+            Inspector.SetLabel("geometry", "sdf", "SDF: Disabled");
+            Inspector.SetLabel("geometry", "jfa", "");
         }
     }
 

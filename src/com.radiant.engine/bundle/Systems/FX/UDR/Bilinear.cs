@@ -14,11 +14,11 @@ public class Bilinear : core.System
         ApplyRenderScale();
         UDRQuality.Changed += _ => ApplyRenderScale();
 
-        UISystem.CreateWindow("bilinear", "Bilinear", new Vector2(380, 370), new Vector2(340, 0));
-        UISystem.AddLabel("bilinear", "quality", "...");
-        UISystem.AddLabel("bilinear", "input", "...");
-        UISystem.AddLabel("bilinear", "output", "...");
-        UISystem.AddButton("bilinear", "cycleQuality", "Cycle Quality", () => UDRQuality.Cycle());
+        Inspector.CreateWindow("bilinear", "Bilinear");
+        Inspector.AddLabel("bilinear", "quality", "...");
+        Inspector.AddLabel("bilinear", "input", "...");
+        Inspector.AddLabel("bilinear", "output", "...");
+        Inspector.AddButton("bilinear", "cycleQuality", "Cycle Quality", () => UDRQuality.Cycle());
     }
 
     public void SetInputSource(Func<Texture2D> source)
@@ -42,9 +42,9 @@ public class Bilinear : core.System
 
         Renderer.SetTarget(null);
 
-        UISystem.SetLabel("bilinear", "quality", $"Quality: {UDRQuality.Names[UDRQuality.Index]} ({UDRQuality.ScaleNormalized:P0})");
-        UISystem.SetLabel("bilinear", "input", $"Input Size: {input.Width}x{input.Height}");
-        UISystem.SetLabel("bilinear", "output", $"Output Size: {Renderer.ScreenSize.X}x{Renderer.ScreenSize.Y}");
+        Inspector.SetLabel("bilinear", "quality", $"Quality: {UDRQuality.Names[UDRQuality.Index]} ({UDRQuality.ScaleNormalized:P0})");
+        Inspector.SetLabel("bilinear", "input", $"Input Size: {input.Width}x{input.Height}");
+        Inspector.SetLabel("bilinear", "output", $"Output Size: {Renderer.ScreenSize.X}x{Renderer.ScreenSize.Y}");
     }
 
     public override void Render()

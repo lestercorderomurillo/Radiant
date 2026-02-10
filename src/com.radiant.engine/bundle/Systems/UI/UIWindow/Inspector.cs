@@ -8,15 +8,23 @@ using Microsoft.Xna.Framework.Input;
 
 namespace com.radiant.engine.bundle;
 
+[RunAfter(typeof(Geometry))]
 [RunBefore(typeof(GizmosRenderer))]
-public class UISystem : core.System
+public class Inspector : core.System
 {
-    private static UISystem Instance;
+    private static Inspector Instance;
+
+    public Inspector()
+    {
+        Instance = this;
+    }
 
     private SpriteFont Font;
     private Dictionary<string, WindowData> Windows = new();
     private List<WindowData> RenderOrder = new();
     private int NextZOrder;
+    private int NextCreationIndex;
+    private bool LayoutDone;
 
     // Input state
     private MouseState PrevMouse;
@@ -29,11 +37,14 @@ public class UISystem : core.System
     private bool MouseOverUI;
 
     // Layout constants
+    private const int DefaultWindowWidth = 340;
     private const int TitleBarHeight = 40;
     private const int WidgetHeight = 36;
     private const int WidgetSpacing = 6;
     private const int Padding = 12;
     private const int CloseButtonSize = 28;
+    private const int AutoLayoutGap = 20;
+    private const int AutoLayoutMaxY = 1900;
     private const int SliderTrackHeight = 8;
     private const int SliderHandleSize = 16;
     private const int ToggleBoxSize = 22;
@@ -56,8 +67,8 @@ public class UISystem : core.System
 
     // --- Static API ---
 
-    public static void CreateWindow(string Id, string Title, Vector2 Position, Vector2 Size)
-        => Instance?.CreateWindowInternal(Id, Title, Position, Size);
+    public static void CreateWindow(string Id, string Title)
+        => Instance?.CreateWindowInternal(Id, Title);
 
     public static void DestroyWindow(string Id)
         => Instance?.DestroyWindowInternal(Id);
@@ -103,17 +114,18 @@ public class UISystem : core.System
 
     // --- Internal API ---
 
-    private void CreateWindowInternal(string Id, string Title, Vector2 Position, Vector2 Size)
+    private void CreateWindowInternal(string Id, string Title)
     {
         if (Windows.ContainsKey(Id)) return;
         var Window = new WindowData
         {
             Id = Id,
             Title = Title,
-            Position = Position,
-            Size = Size,
+            Position = Vector2.Zero,
+            Size = new Vector2(DefaultWindowWidth, 0),
             Visible = true,
-            ZOrder = NextZOrder++
+            ZOrder = NextZOrder++,
+            CreationIndex = NextCreationIndex++
         };
         Windows[Id] = Window;
         RenderOrder.Add(Window);
@@ -235,17 +247,82 @@ public class UISystem : core.System
         SortRenderOrder();
     }
 
+    // --- Auto Layout ---
+
+    private void AutoPositionAll()
+    {
+        var Ordered = new List<WindowData>(Windows.Values);
+        Ordered.Sort((A, B) => A.CreationIndex.CompareTo(B.CreationIndex));
+
+        float X = AutoLayoutGap;
+        float Y = AutoLayoutGap;
+        var PendingHidden = new List<WindowData>();
+
+        foreach (var Window in Ordered)
+        {
+            if (!Window.Visible)
+            {
+                PendingHidden.Add(Window);
+                continue;
+            }
+
+            int GroupHeight = ComputeWindowHeight(Window);
+            foreach (var Hidden in PendingHidden)
+                GroupHeight = Math.Max(GroupHeight, ComputeWindowHeight(Hidden));
+
+            if (Y + GroupHeight > AutoLayoutMaxY && Y > AutoLayoutGap)
+            {
+                X += DefaultWindowWidth + AutoLayoutGap;
+                Y = AutoLayoutGap;
+            }
+
+            Window.Position = new Vector2(X, Y);
+            foreach (var Hidden in PendingHidden)
+                Hidden.Position = new Vector2(X, Y);
+
+            PendingHidden.Clear();
+            Y += GroupHeight + AutoLayoutGap;
+        }
+
+        foreach (var Hidden in PendingHidden)
+            Hidden.Position = new Vector2(X, Y);
+    }
+
+    private int ComputeWindowHeight(WindowData Window)
+    {
+        int ContentWidth = (int)Window.Size.X - Padding * 2;
+        int Height = TitleBarHeight + WidgetSpacing;
+        for (int I = 0; I < Window.Widgets.Count; I++)
+        {
+            var W = Window.Widgets[I];
+            if (!W.Visible) continue;
+            int WidgetH = W.Type switch
+            {
+                WidgetType.Slider => WidgetHeight + 16,
+                WidgetType.Label => MeasureWrappedHeight(W.Text, ContentWidth),
+                _ => WidgetHeight
+            };
+            Height += WidgetH + WidgetSpacing;
+        }
+        return Height + Padding;
+    }
+
     // --- System Lifecycle ---
 
     public override void Initialize()
     {
-        Instance = this;
         Font = Renderer.GetFont("fonts/BaseFont");
         PrevMouse = Mouse.GetState();
     }
 
     public override void Update()
     {
+        if (!LayoutDone)
+        {
+            AutoPositionAll();
+            LayoutDone = true;
+        }
+
         var CurrentMouse = Mouse.GetState();
         var VirtualMouse = ScreenToVirtual(new Vector2(CurrentMouse.X, CurrentMouse.Y));
         var PrevVirtual = ScreenToVirtual(new Vector2(PrevMouse.X, PrevMouse.Y));
@@ -415,14 +492,20 @@ public class UISystem : core.System
         Window.CloseBounds = new Rectangle(X + W - CloseButtonSize - 6, Y + 6, CloseButtonSize, CloseButtonSize);
 
         // Widgets
+        int ContentWidth = W - Padding * 2;
         int WidgetY = Y + TitleBarHeight + WidgetSpacing;
         for (int I = 0; I < Window.Widgets.Count; I++)
         {
             var Widget = Window.Widgets[I];
             if (!Widget.Visible) continue;
 
-            int WidgetH = Widget.Type == WidgetType.Slider ? WidgetHeight + 16 : WidgetHeight;
-            Widget.Bounds = new Rectangle(X + Padding, WidgetY, W - Padding * 2, WidgetH);
+            int WidgetH = Widget.Type switch
+            {
+                WidgetType.Slider => WidgetHeight + 16,
+                WidgetType.Label => MeasureWrappedHeight(Widget.Text, ContentWidth),
+                _ => WidgetHeight
+            };
+            Widget.Bounds = new Rectangle(X + Padding, WidgetY, ContentWidth, WidgetH);
             Window.Widgets[I] = Widget;
             WidgetY += WidgetH + WidgetSpacing;
         }
@@ -430,6 +513,36 @@ public class UISystem : core.System
         // Auto-size height
         int TotalHeight = WidgetY - Y + Padding;
         Window.WindowBounds = new Rectangle(X, Y, W, TotalHeight);
+    }
+
+    private int MeasureWrappedHeight(string Text, int AvailableWidth)
+    {
+        int MaxWidth = AvailableWidth - 8;
+        if (Font.MeasureString(Text).X <= MaxWidth)
+            return WidgetHeight;
+
+        string[] Words = Text.Split(' ');
+        float SpaceWidth = Font.MeasureString(" ").X;
+        int Lines = 1;
+        float LineWidth = 0;
+
+        for (int I = 0; I < Words.Length; I++)
+        {
+            float WordWidth = Font.MeasureString(Words[I]).X;
+            float AddWidth = LineWidth == 0 ? WordWidth : SpaceWidth + WordWidth;
+
+            if (LineWidth + AddWidth > MaxWidth && LineWidth > 0)
+            {
+                Lines++;
+                LineWidth = WordWidth;
+            }
+            else
+            {
+                LineWidth += AddWidth;
+            }
+        }
+
+        return Lines * Font.LineSpacing + 8;
     }
 
     // --- Rendering ---
@@ -501,8 +614,36 @@ public class UISystem : core.System
 
     private void DrawLabel(Widget W, Vector2 Mouse)
     {
-        var TextPos = new Vector2(W.Bounds.X + 4, W.Bounds.Y + (W.Bounds.Height - Font.LineSpacing) / 2);
-        Renderer.DrawString(Font, W.Text, TextPos, LabelDim);
+        int MaxWidth = W.Bounds.Width - 8;
+        if (Font.MeasureString(W.Text).X <= MaxWidth)
+        {
+            var TextPos = new Vector2(W.Bounds.X + 4, W.Bounds.Y + (W.Bounds.Height - Font.LineSpacing) / 2);
+            Renderer.DrawString(Font, W.Text, TextPos, LabelDim);
+            return;
+        }
+
+        string[] Words = W.Text.Split(' ');
+        float SpaceWidth = Font.MeasureString(" ").X;
+        float Y = W.Bounds.Y + 4;
+        string CurrentLine = "";
+
+        for (int I = 0; I < Words.Length; I++)
+        {
+            string TestLine = CurrentLine.Length == 0 ? Words[I] : CurrentLine + " " + Words[I];
+            if (Font.MeasureString(TestLine).X > MaxWidth && CurrentLine.Length > 0)
+            {
+                Renderer.DrawString(Font, CurrentLine, new Vector2(W.Bounds.X + 4, Y), LabelDim);
+                Y += Font.LineSpacing;
+                CurrentLine = Words[I];
+            }
+            else
+            {
+                CurrentLine = TestLine;
+            }
+        }
+
+        if (CurrentLine.Length > 0)
+            Renderer.DrawString(Font, CurrentLine, new Vector2(W.Bounds.X + 4, Y), LabelDim);
     }
 
     private void DrawButton(Widget W, Vector2 Mouse)

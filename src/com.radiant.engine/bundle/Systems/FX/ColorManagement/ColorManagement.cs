@@ -20,9 +20,9 @@ public class ColorManagement : core.System
 
     public override void Initialize()
     {
-        UISystem.CreateWindow("colormgmt", "Color Management", new Vector2(380, 230), new Vector2(340, 0));
-        UISystem.AddLabel("colormgmt", "mode", $"Tonemapping: {TechniqueNames[TechniqueIndex]}");
-        UISystem.AddButton("colormgmt", "cycle", "Cycle Tonemapping", () =>
+        Inspector.CreateWindow("colormgmt", "Color Management");
+        Inspector.AddLabel("colormgmt", "mode", $"Tonemapping: {TechniqueNames[TechniqueIndex]}");
+        Inspector.AddButton("colormgmt", "cycle", "Cycle Tonemapping", () =>
             TechniqueIndex = (TechniqueIndex + 1) % TechniqueNames.Length);
     }
 
@@ -61,7 +61,7 @@ public class ColorManagement : core.System
             .Commit()
             .SetTarget(null);
 
-        UISystem.SetLabel("colormgmt", "mode", $"Tonemapping: {TechniqueNames[TechniqueIndex]}");
+        Inspector.SetLabel("colormgmt", "mode", $"Tonemapping: {TechniqueNames[TechniqueIndex]}");
     }
 
     public override void Render()
