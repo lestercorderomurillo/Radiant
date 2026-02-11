@@ -88,9 +88,9 @@ public class PacmanMazeLevelScene : Scene
         {
             Procedural = true,
             MazeSeed = 2482,
-            WallAlbedo = new Color((byte)0, (byte)0, (byte)80, (byte)255),
-            WallEmissive = new Color((byte)80, (byte)120, (byte)255, (byte)255),
-            CoinColor = new Color(80, 255, 200),
+            WallAlbedo = new Color(0, 0, 55),
+            WallEmissive = new Color(56, 84, 107),
+            CoinColor = new Color(102, 210, 227),
             FrightenedDuration = 5f,
             Ghosts =
             [
@@ -105,16 +105,16 @@ public class PacmanMazeLevelScene : Scene
         {
             Procedural = true,
             MazeSeed = 1344,
-            WallAlbedo = new Color((byte)80, (byte)0, (byte)0, (byte)255),
-            WallEmissive = new Color((byte)212, (byte)80, (byte)80, (byte)255),
-            CoinColor = new Color(255, 255, 255),
+            WallAlbedo = new Color(30, 30, 20),
+            WallEmissive = new Color(39, 38, 36),
+            CoinColor = new Color(187, 186, 147),
             FrightenedDuration = 5f,
             Ghosts =
             [
-                new() { Type = PacmanGhostType.Rainbow, ReleaseAfter = 4f },
-                new() { Type = PacmanGhostType.Clyde,   ReleaseAfter = 8f },
-                new() { Type = PacmanGhostType.Inky,    ReleaseAtCoinPercent = 0.25f },
-                new() { Type = PacmanGhostType.Blinky,  ReleaseAtCoinPercent = 0.50f },
+                new() { Type = PacmanGhostType.Blinky,   ReleaseAfter = 4f },
+                new() { Type = PacmanGhostType.Clyde,    ReleaseAfter = 8f },
+                new() { Type = PacmanGhostType.Inky,     ReleaseAtCoinPercent = 0.25f },
+                new() { Type = PacmanGhostType.Rainbow,  ReleaseAtCoinPercent = 0.50f },
             ],
             PlayerStartCell = (14, 23),
         },
@@ -123,9 +123,9 @@ public class PacmanMazeLevelScene : Scene
         {
             Procedural = true,
             MazeSeed = 1235,
-            WallAlbedo = new Color((byte)0, (byte)40, (byte)0, (byte)255),
-            WallEmissive = new Color((byte)80, (byte)128, (byte)80, (byte)255),
-            CoinColor = new Color(120, 255, 120),
+            WallAlbedo = new Color(101, 61, 65),
+            WallEmissive = new Color(53, 106, 74),
+            CoinColor = new Color(183, 199, 65),
             FrightenedDuration = 7f,
             Ghosts =
             [
@@ -140,9 +140,9 @@ public class PacmanMazeLevelScene : Scene
         {
             Procedural = true,
             MazeSeed = 7131,
-            WallAlbedo = new Color((byte)0, (byte)0, (byte)0, (byte)255),
-            WallEmissive = new Color((byte)0, (byte)0, (byte)0, (byte)255),
-            CoinColor = new Color(255, 255, 255),
+            WallAlbedo = new Color(38, 16, 25),
+            WallEmissive = new Color(79, 43, 123),
+            CoinColor = new Color(69, 186, 163),
             FrightenedDuration = 4f,
             Ghosts =
             [
@@ -157,9 +157,10 @@ public class PacmanMazeLevelScene : Scene
         new PacmanLevelConfig
         {
             Procedural = true,
-            WallAlbedo = new Color((byte)10, (byte)0, (byte)0, (byte)255),
-            WallEmissive = new Color((byte)40, (byte)0, (byte)0, (byte)255),
-            CoinColor = new Color(255, 60, 60),
+            MazeSeed = 8264,
+            WallAlbedo = new Color(55, 5, 5),
+            WallEmissive = new Color(20, 0, 0),
+            CoinColor = new Color(236, 37, 0),
             FrightenedDuration = 3f,
             Ghosts =
             [

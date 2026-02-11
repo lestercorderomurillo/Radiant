@@ -297,8 +297,8 @@ public class PacmanPlayer : core.System
         if (HudFont == null) return;
 
         var Scale = Matrix.CreateScale(
-            (float)Renderer.ScreenWidth / Renderer.VirtualWidth,
-            (float)Renderer.ScreenHeight / Renderer.VirtualHeight,
+            Renderer.ScreenWidth / Renderer.VirtualWidth,
+            Renderer.ScreenHeight / Renderer.VirtualHeight,
             1f);
 
         string Collected = CoinsCollected.ToString();

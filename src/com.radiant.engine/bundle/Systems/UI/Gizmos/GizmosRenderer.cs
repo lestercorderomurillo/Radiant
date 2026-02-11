@@ -73,8 +73,8 @@ public class GizmosRenderer : core.System
         // Scale from virtual coordinates to actual screen pixels so gizmos
         // resize proportionally with the window (resolution-independent).
         var Scale = Matrix.CreateScale(
-            (float)Renderer.ScreenWidth / Renderer.VirtualWidth,
-            (float)Renderer.ScreenHeight / Renderer.VirtualHeight,
+            Renderer.ScreenWidth / Renderer.VirtualWidth,
+            Renderer.ScreenHeight / Renderer.VirtualHeight,
             1f);
 
         if (Enabled)

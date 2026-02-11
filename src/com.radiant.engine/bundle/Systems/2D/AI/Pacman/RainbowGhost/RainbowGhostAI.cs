@@ -31,6 +31,7 @@ public class RainbowGhostAI : core.System
     private const float FrightenedExtraDuration = 5f;
     private const float FrightenedBlinkThreshold = 1.5f;
     private const float FrightenedBlinkRate = 8f;
+    private const float FrightenedShrink = 0.85f;
     private static readonly Color FrightenedColor = new Color(30, 30, 200);
     private static readonly Color FrightenedBlinkColor = new Color(100, 150, 255);
 
@@ -83,6 +84,7 @@ public class RainbowGhostAI : core.System
     private (int x, int y)[] WanderTargetTiles = new (int, int)[1 + MaxClones];
     // Assigned corner per entity for spread-out behavior
     private (int x, int y)[] CornerTargets = new (int, int)[1 + MaxClones];
+    private float IdleTime;
 
     public bool IsFrightened => FrightenedTimer > 0f;
 
@@ -145,18 +147,42 @@ public class RainbowGhostAI : core.System
         if (!Initialized) return;
         FrightenedTimer = duration + FrightenedExtraDuration;
 
-        // Change body colors to dark blue (skip eaten main)
+        // Change body colors to dark blue + shrink (skip eaten main)
         if (!MainEaten && MainExitedHouse)
         {
-            ref var mat = ref Scene.ECS.GetComponent<Material>(MainId);
-            mat.Albedo = Color.Transparent;
-            mat.Emissive = FrightenedColor;
+            ref var mainMaterial = ref Scene.ECS.GetComponent<Material>(MainId);
+            mainMaterial.Albedo = Color.Transparent;
+            mainMaterial.Emissive = FrightenedColor;
+            ref var mainCircle = ref Scene.ECS.GetComponent<Circle2D>(MainId);
+            mainCircle.Radius = BodyRadius * FrightenedShrink;
+
+            // Reverse main ghost direction
+            var (pdx, pdy) = MainDir;
+            if (pdx != 0 || pdy != 0)
+            {
+                MainDir = (-pdx, -pdy);
+                var (cx, cy) = MainCell;
+                if (CanMove(cx, cy, -pdx, -pdy))
+                    MainTarget = (cx - pdx, cy - pdy);
+            }
         }
         for (int i = 0; i < CloneCount; i++)
         {
-            ref var mat = ref Scene.ECS.GetComponent<Material>(CloneIds[i]);
-            mat.Albedo = Color.Transparent;
-            mat.Emissive = FrightenedColor;
+            ref var cloneMaterial = ref Scene.ECS.GetComponent<Material>(CloneIds[i]);
+            cloneMaterial.Albedo = Color.Transparent;
+            cloneMaterial.Emissive = FrightenedColor;
+            ref var cloneCircle = ref Scene.ECS.GetComponent<Circle2D>(CloneIds[i]);
+            cloneCircle.Radius = BodyRadius * FrightenedShrink;
+
+            // Reverse clone direction
+            var (cdx, cdy) = CloneDirs[i];
+            if (cdx != 0 || cdy != 0)
+            {
+                CloneDirs[i] = (-cdx, -cdy);
+                var (ccx, ccy) = CloneCells[i];
+                if (CanMove(ccx, ccy, -cdx, -cdy))
+                    CloneTargets[i] = (ccx - cdx, ccy - cdy);
+            }
         }
     }
 
@@ -165,6 +191,7 @@ public class RainbowGhostAI : core.System
         if (!Initialized) return;
 
         float dt = (float)GameTime.ElapsedGameTime.TotalSeconds;
+        IdleTime += dt;
 
         // Advance hue even before release (ghost glows in house)
         if (!MainEaten && MainRespawnTimer <= 0f)
@@ -187,11 +214,19 @@ public class RainbowGhostAI : core.System
             FrightenedTimer -= dt;
             if (FrightenedTimer <= 0f)
             {
-                // Restore colors
+                // Restore colors and radius
                 if (!MainEaten && MainRespawnTimer <= 0f)
+                {
                     UpdateMainColor();
+                    ref var mainCircle = ref Scene.ECS.GetComponent<Circle2D>(MainId);
+                    mainCircle.Radius = BodyRadius;
+                }
                 for (int i = 0; i < CloneCount; i++)
+                {
                     UpdateCloneColor(i);
+                    ref var cloneCircle = ref Scene.ECS.GetComponent<Circle2D>(CloneIds[i]);
+                    cloneCircle.Radius = BodyRadius;
+                }
             }
             else if (FrightenedTimer <= FrightenedBlinkThreshold)
             {
@@ -208,6 +243,25 @@ public class RainbowGhostAI : core.System
                     cloneMat.Emissive = blinkColor;
                 }
             }
+            else
+            {
+                // Hue cycling around blue (azul → celeste → morado) — matches regular ghosts
+                float hueShift = MathF.Sin(IdleTime * 2.5f);
+                byte r = (byte)(30 + 42 * MathF.Max(0, -hueShift));
+                byte g = (byte)(30 + 55 * MathF.Max(0, hueShift));
+                byte b = (byte)(200 + 42 * MathF.Abs(hueShift));
+                var cycledColor = new Color(r, g, b);
+                if (!MainEaten && MainRespawnTimer <= 0f && MainExitedHouse)
+                {
+                    ref var mainMat = ref Scene.ECS.GetComponent<Material>(MainId);
+                    mainMat.Emissive = cycledColor;
+                }
+                for (int i = 0; i < CloneCount; i++)
+                {
+                    ref var cloneMat = ref Scene.ECS.GetComponent<Material>(CloneIds[i]);
+                    cloneMat.Emissive = cycledColor;
+                }
+            }
         }
 
         // Respawn timer countdown (main ghost in house)
@@ -218,8 +272,15 @@ public class RainbowGhostAI : core.System
                 RespawnMain();
         }
 
-        // Freeze all movement until player moves
-        if (Player == null || !Player.HasMoved) return;
+        // Idle floating wobble before player moves (dancing like regular ghosts)
+        if (Player == null || !Player.HasMoved)
+        {
+            ref var transform = ref Scene.ECS.GetComponent<Transform>(MainId);
+            var pos = LogicalPositions[0];
+            float wobble = MathF.Sin(IdleTime * 3f) * 3f;
+            transform.Position = new Vector3(pos.X, pos.Y + wobble, GhostZ);
+            return;
+        }
 
         ElapsedTime += dt;
 
@@ -304,9 +365,6 @@ public class RainbowGhostAI : core.System
 
         float sx = Renderer.ScreenWidth / Renderer.VirtualSize.X;
         float sy = Renderer.ScreenHeight / Renderer.VirtualSize.Y;
-        float eyeR = BodyRadius * 0.667f;
-        float eyeD = eyeR * 2f;
-        float eyeOff = BodyRadius * 0.133f;
 
         Renderer.Reset()
             .Configure(BlendState.AlphaBlend)
@@ -315,6 +373,10 @@ public class RainbowGhostAI : core.System
         int total = 1 + CloneCount;
         for (int i = 0; i < total; i++)
         {
+            float radius = IsFrightened ? BodyRadius * FrightenedShrink : BodyRadius;
+            float eyeR = radius * 0.667f;
+            float eyeD = eyeR * 2f;
+            float eyeOff = radius * 0.133f;
             var (dx, dy) = EyeDirs[i];
             float cx = EyePositions[i].X + dx * eyeOff;
             float cy = EyePositions[i].Y + dy * eyeOff;

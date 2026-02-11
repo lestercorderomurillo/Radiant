@@ -335,8 +335,8 @@ public class Renderer : IDisposable
     public Vector2 WorldToScreen(Vector2 worldPos)
     {
         return new Vector2(
-            worldPos.X * ((float)ScreenWidth / VirtualWidth),
-            worldPos.Y * ((float)ScreenHeight / VirtualHeight));
+            worldPos.X * (ScreenWidth / VirtualWidth),
+            worldPos.Y * (ScreenHeight / VirtualHeight));
     }
 
     #endregion
