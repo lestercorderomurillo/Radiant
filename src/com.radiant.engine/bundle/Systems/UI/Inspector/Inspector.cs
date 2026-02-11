@@ -54,23 +54,25 @@ public class Inspector : core.System
     private const int SliderHandleSize = 16;
     private const int ToggleBoxSize = 22;
 
-    // Colors
-    private static readonly Color WindowBg = new(12, 12, 16, 220);
-    private static readonly Color TitleBarColor = new(28, 28, 36, 240);
-    private static readonly Color TitleBarHover = new(38, 38, 50, 240);
-    private static readonly Color ButtonColor = new(40, 40, 55, 220);
-    private static readonly Color ButtonHover = new(55, 55, 75, 240);
-    private static readonly Color SliderTrack = new(30, 30, 42, 200);
-    private static readonly Color SliderFill = new(70, 105, 180, 255);
-    private static readonly Color SliderHandle = new(140, 140, 160, 255);
-    private static readonly Color ToggleOn = new(70, 70, 160, 255);
-    private static readonly Color ToggleOff = new(50, 50, 55, 200);
-    private static readonly Color CloseColor = new(180, 60, 60, 255);
-    private static readonly Color CloseHover = new(220, 80, 80, 255);
-    private static readonly Color TextColor = new(220, 220, 230, 255);
-    private static readonly Color LabelDim = new(160, 160, 170, 255);
+    // Theme
+    private static bool DarkMode = true;
 
-    // --- Static API ---
+    // Colors (mutable for theme switching)
+    private static Color WindowBg = new(12, 12, 16, 220);
+    private static Color TitleBarColor = new(28, 28, 36, 240);
+    private static Color TitleBarHover = new(38, 38, 50, 240);
+    private static Color ButtonColor = new(40, 40, 55, 220);
+    private static Color ButtonHover = new(55, 55, 75, 240);
+    private static Color SliderTrack = new(30, 30, 42, 200);
+    private static Color SliderFill = new(70, 105, 180, 255);
+    private static Color SliderHandle = new(140, 140, 160, 255);
+    private static Color ToggleOn = new(70, 70, 160, 255);
+    private static Color ToggleOff = new(50, 50, 55, 200);
+    private static Color CloseColor = new(180, 60, 60, 255);
+    private static Color CloseHover = new(220, 80, 80, 255);
+    private static Color TextColor = new(220, 220, 230, 255);
+    private static Color LabelDim = new(160, 160, 170, 255);
+
 
     public static void CreateWindow(string Id, string Title)
         => Instance?.CreateWindowInternal(Id, Title);
@@ -117,7 +119,45 @@ public class Inspector : core.System
     public static bool IsMouseOverUI()
         => Instance?.MouseOverUI ?? false;
 
-    // --- Internal API ---
+    public static void ToggleTheme()
+    {
+        DarkMode = !DarkMode;
+        if (DarkMode)
+        {
+            WindowBg = new(12, 12, 16, 220);
+            TitleBarColor = new(28, 28, 36, 240);
+            TitleBarHover = new(38, 38, 50, 240);
+            ButtonColor = new(40, 40, 55, 220);
+            ButtonHover = new(55, 55, 75, 240);
+            SliderTrack = new(30, 30, 42, 200);
+            SliderFill = new(70, 105, 180, 255);
+            SliderHandle = new(140, 140, 160, 255);
+            ToggleOn = new(70, 70, 160, 255);
+            ToggleOff = new(50, 50, 55, 200);
+            CloseColor = new(180, 60, 60, 255);
+            CloseHover = new(220, 80, 80, 255);
+            TextColor = new(220, 220, 230, 255);
+            LabelDim = new(160, 160, 170, 255);
+        }
+        else
+        {
+            WindowBg = new(225, 225, 230, 235);
+            TitleBarColor = new(160, 162, 175, 240);
+            TitleBarHover = new(140, 142, 158, 240);
+            ButtonColor = new(170, 175, 192, 230);
+            ButtonHover = new(145, 150, 172, 245);
+            SliderTrack = new(180, 180, 190, 200);
+            SliderFill = new(55, 100, 190, 255);
+            SliderHandle = new(90, 90, 105, 255);
+            ToggleOn = new(55, 95, 185, 255);
+            ToggleOff = new(130, 130, 140, 230);
+            CloseColor = new(180, 60, 60, 255);
+            CloseHover = new(220, 80, 80, 255);
+            TextColor = new(25, 25, 30, 255);
+            LabelDim = new(65, 65, 75, 255);
+        }
+    }
+
 
     private void CreateWindowInternal(string Id, string Title)
     {
@@ -252,7 +292,6 @@ public class Inspector : core.System
         SortRenderOrder();
     }
 
-    // --- Auto Layout ---
 
     private void AutoPositionAll()
     {
@@ -312,7 +351,6 @@ public class Inspector : core.System
         return Height + Padding;
     }
 
-    // --- System Lifecycle ---
 
     public override void Initialize()
     {
@@ -493,7 +531,6 @@ public class Inspector : core.System
             ScreenPos.Y * (Renderer.VirtualHeight / Renderer.ScreenHeight));
     }
 
-    // --- Layout ---
 
     private void ComputeAllLayouts()
     {
@@ -568,7 +605,6 @@ public class Inspector : core.System
         return Lines * Font.LineSpacing + 8;
     }
 
-    // --- Rendering ---
 
     public override void LateRender()
     {

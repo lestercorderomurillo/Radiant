@@ -25,6 +25,8 @@ MonoGame C# 2D engine: ECS + GPU-instanced shapes + HRC global illumination.
 | `ref` returns for mutation | `ref var transform = ref ECS.GetComponent<Transform>(entityId);` |
 | Usings order | `System.*`, `com.radiant.*`, then `Microsoft.Xna.*` |
 | No blank lines between same-kind fields | Blank line only between logical groups |
+| No decorative/banner comments | Never `// --- Section ---`, `// ═══`, `// ======`. Blank lines suffice |
+| `/// <summary>` for public API docs | Standard C# XML doc comments on public methods/classes |
 | **Descriptive local variable names** | `transform`, `material`, `circle` — never `t`, `m`, `c` |
 
 The last rule is critical: **never use single-letter or abbreviated variable names**. Use the full type name (lowercased) for local component refs to avoid shadowing the type:
