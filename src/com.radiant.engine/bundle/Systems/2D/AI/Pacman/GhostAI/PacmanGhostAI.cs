@@ -20,10 +20,10 @@ public class PacmanGhostAI : core.System
     public float DefaultReleaseInterval { get; set; } = 0.5f;
     public PacmanPlayer Player { get; set; }
 
-    private const float RespawnDelay = 3f;
+    private const float RespawnDelay = 6f;
     private const float EatenSpeedMultiplier = 2.5f;
-    private const float FrightenedSpeedMultiplier = 0.3f;
-    private const float FrightenedExtraDuration = 3f;
+    private const float FrightenedSpeedMultiplier = 0.4f;
+    private const float FrightenedExtraDuration = 4f;
     private const float FrightenedBlinkThreshold = 1.5f;
     private const float FrightenedBlinkRate = 8f;
     private static readonly Color FrightenedColor = new Color(30, 30, 200);
@@ -641,14 +641,9 @@ public class PacmanGhostAI : core.System
             RespawnTimer[i] = RespawnDelay;
             ExitedHouse[i] = false;
 
-            // Show dim body while waiting to respawn
             ref var material = ref Scene.ECS.GetComponent<Material>(GhostIds[i]);
             material.Albedo = Color.Transparent;
-            material.Emissive = new Color(
-                (byte)(GhostColors[i].R / 3),
-                (byte)(GhostColors[i].G / 3),
-                (byte)(GhostColors[i].B / 3),
-                (byte)(GhostColors[i].A));
+            material.Emissive = GhostColors[i];
 
             PickHouseWander(i);
             return;

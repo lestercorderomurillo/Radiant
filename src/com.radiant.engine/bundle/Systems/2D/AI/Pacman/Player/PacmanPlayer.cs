@@ -10,7 +10,7 @@ namespace com.radiant.engine.bundle;
 [RunAfter(typeof(PacmanMazeBuilder))]
 [RunBefore(typeof(PacmanGhostAI))]
 public class PacmanPlayer : core.System
-{
+{ 
     public (int x, int y) Cell { get; private set; }
     public Vector2 WorldPosition { get; private set; }
     public int CoinsCollected { get; private set; }

@@ -1,5 +1,4 @@
 using com.radiant.engine.core;
-using com.radiant.engine.runtime;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using System;
@@ -26,10 +25,10 @@ public class RainbowGhostAI : core.System
     private const float TrioDuration = 7f;
     private static readonly float[] MergeSpeedMults = [1.8f, 1.5f, 1.3f];
     private const float HueCycleSpeed = 0.35f;
-    private const float RespawnDelay = 3f;
+    private const float RespawnDelay = 6f;
     private const float EatenSpeedMultiplier = 2.5f;
-    private const float FrightenedSpeedMultiplier = 0.3f;
-    private const float FrightenedExtraDuration = 3f;
+    private const float FrightenedSpeedMultiplier = 0.4f;
+    private const float FrightenedExtraDuration = 4f;
     private const float FrightenedBlinkThreshold = 1.5f;
     private const float FrightenedBlinkRate = 8f;
     private static readonly Color FrightenedColor = new Color(30, 30, 200);
@@ -611,10 +610,9 @@ public class RainbowGhostAI : core.System
             MainRespawnTimer = RespawnDelay;
             MainExitedHouse = false;
 
-            // Show dim body while waiting
             ref var material = ref Scene.ECS.GetComponent<Material>(MainId);
             material.Albedo = Color.Transparent;
-            material.Emissive = new Color((byte)60, (byte)60, (byte)60, (byte)255);
+            material.Emissive = LightFactory.HueToRGB(MainHue);
 
             PickHouseWander(ref Cell, ref Target, ref Dir);
             return;
