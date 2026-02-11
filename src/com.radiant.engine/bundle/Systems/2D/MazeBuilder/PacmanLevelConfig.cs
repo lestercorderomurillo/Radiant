@@ -25,7 +25,7 @@ public class PacmanLevelConfig
 
     public float PowerPelletRadius { get; set; } = 16f;
     public Color PowerPelletColor { get; set; } = new Color((byte)255, (byte)255, (byte)255, (byte)255);
-    public float FrightenedDuration { get; set; } = 6f;
+    public float FrightenedDuration { get; set; } = 5f;
     public (int x, int y)[] PowerPelletCells { get; set; }
 
     public GhostEntry[] Ghosts { get; set; } = [];

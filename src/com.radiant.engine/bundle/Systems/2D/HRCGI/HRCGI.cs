@@ -19,7 +19,7 @@ public class HRCGI : core.System
     private const int MaxCascades = 11;
     private static readonly int[] ProbeScales = [4, 3, 2, 1];
     private static readonly string[] QualityNames = ["Performance", "Balanced", "Ultra", "Native"];
-    private int ProbeScaleIndex = 3;
+    private int ProbeScaleIndex = 2;
     private int ProbeScale => ProbeScales[ProbeScaleIndex];
     private int CascadeCount;
 

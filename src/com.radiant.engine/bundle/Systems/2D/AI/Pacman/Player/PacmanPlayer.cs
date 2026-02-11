@@ -20,7 +20,7 @@ public class PacmanPlayer : core.System
     public bool HasMoved { get; private set; }
     public PacmanGhostAI GhostAI { get; set; }
     public RainbowGhostAI RainbowAI { get; set; }
-    public float FrightenedDuration { get; set; } = 6f;
+    public float FrightenedDuration { get; set; } = 5f;
 
     PacmanMazeBuilder Maze;
     Geometry Geometry;

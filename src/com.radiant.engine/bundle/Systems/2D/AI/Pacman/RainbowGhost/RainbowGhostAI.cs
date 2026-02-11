@@ -28,7 +28,7 @@ public class RainbowGhostAI : core.System
     private const float RespawnDelay = 6f;
     private const float EatenSpeedMultiplier = 2.5f;
     private const float FrightenedSpeedMultiplier = 0.4f;
-    private const float FrightenedExtraDuration = 4f;
+    private const float FrightenedExtraDuration = 5f;
     private const float FrightenedBlinkThreshold = 1.5f;
     private const float FrightenedBlinkRate = 8f;
     private static readonly Color FrightenedColor = new Color(30, 30, 200);
