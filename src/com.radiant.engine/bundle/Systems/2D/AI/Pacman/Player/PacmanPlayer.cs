@@ -50,6 +50,8 @@ public class PacmanPlayer : core.System
     static readonly Color EyeColor = new Color(30, 15, 5);
     float CollectFlash;
     float BaseRadius;
+    float IdleTime;
+    float WobbleX, WobbleY;
 
     public void Track(int entityId, (int x, int y) startCell, float z)
     {
@@ -63,7 +65,7 @@ public class PacmanPlayer : core.System
         Tracked = true;
         PlayerCaught = false;
         HasMoved = false;
-        PrevCell = (-1, -1);
+        PrevCell = startCell;
         CoinsCollected = 0;
         CoinsTotal = Maze.CoinCells.Count;
         RenderPosition = WorldPosition;
@@ -115,7 +117,7 @@ public class PacmanPlayer : core.System
         float step = Speed * dt;
 
         ref var transform = ref Scene.ECS.GetComponent<Transform>(EntityId);
-        var pos = new Vector2(transform.Position.X, transform.Position.Y);
+        var pos = WorldPosition;
         var target = Maze.CellCenter(TargetCell.x, TargetCell.y);
 
         var diff = target - pos;
@@ -176,7 +178,11 @@ public class PacmanPlayer : core.System
             pos += move;
         }
 
-        transform.Position = new Vector3(pos, Z);
+        IdleTime += dt;
+        float wobble = MathF.Sin(IdleTime * 3f) * 3f;
+        WobbleX = CurrentDir.dy != 0 ? wobble : 0f;
+        WobbleY = CurrentDir.dy != 0 ? 0f : wobble;
+        transform.Position = new Vector3(pos.X + WobbleX, pos.Y + WobbleY, Z);
         WorldPosition = pos;
 
         // Coin collect: radius bump
@@ -248,8 +254,8 @@ public class PacmanPlayer : core.System
 
         float Sx = Renderer.ScreenWidth / Renderer.VirtualSize.X;
         float Sy = Renderer.ScreenHeight / Renderer.VirtualSize.Y;
-        float Pcx = RenderPosition.X;
-        float Pcy = RenderPosition.Y;
+        float Pcx = RenderPosition.X + WobbleX;
+        float Pcy = RenderPosition.Y + WobbleY;
 
         float Radius = Scene.ECS.GetComponent<Circle2D>(EntityId).Radius;
         float EyeR = Radius * 0.767f;

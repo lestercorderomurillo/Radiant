@@ -413,8 +413,8 @@ public class PacmanMazeLevelScene : Scene
             float phase = CoinWaveTime * 1.8f - cell.Item1 * 0.5f;
 
             var basePos = Maze.CellCenter(cell.Item1, cell.Item2);
-            float pelletX = basePos.X;
-            float pelletY = basePos.Y + 4.5f * MathF.Sin(phase);
+            float pelletX = basePos.X + 3f * MathF.Sin(phase * 1.3f + 0.7f);
+            float pelletY = basePos.Y + 6f * MathF.Sin(phase);
 
             float dx = playerPos.X - pelletX;
             float dy = playerPos.Y - pelletY;

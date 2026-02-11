@@ -23,6 +23,7 @@ public class PacmanGhostAI : core.System
     private const float RespawnDelay = 6f;
     private const float EatenSpeedMultiplier = 2.5f;
     private const float FrightenedSpeedMultiplier = 0.4f;
+    private const float FrightenedShrink = 0.85f;
     private const float FrightenedExtraDuration = 5f;
     private const float FrightenedBlinkThreshold = 1.5f;
     private const float FrightenedBlinkRate = 8f;
@@ -45,13 +46,16 @@ public class PacmanGhostAI : core.System
     private Vector2[] PrevPositions;     // 1-frame delayed (intermediate)
     private Vector2[] Positions;         // Un-wobbled logical positions
     private float ElapsedTime;
+    private float IdleTime;
     private Random Rng = new();
 
     private PacmanGhostMode CurrentMode = PacmanGhostMode.Scatter;
-    private PacmanGhostMode PreFrightenedMode;
     private float ModeTimer;
     private int ModePhase;
-    private float FrightenedTimer;
+
+    // Per-ghost frightened state (power pellet only affects ghosts alive at that moment)
+    private bool[] Frightened;
+    private float[] FrightenedTimers;
 
     // Classic Pac-Man Level 1 mode timing
     private static readonly (PacmanGhostMode mode, float duration)[] ModeCycle =
@@ -119,6 +123,8 @@ public class PacmanGhostAI : core.System
         ExitedHouse = new bool[count];
         Eaten = new bool[count];
         RespawnTimer = new float[count];
+        Frightened = new bool[count];
+        FrightenedTimers = new float[count];
         GhostColors = new Color[count];
         EyePositions = new Vector2[count];
         PrevPositions = new Vector2[count];
@@ -160,7 +166,6 @@ public class PacmanGhostAI : core.System
         ModeTimer = 0f;
         ModePhase = 0;
         CurrentMode = PacmanGhostMode.Scatter;
-        FrightenedTimer = 0f;
     }
 
     public void Clear()
@@ -171,30 +176,40 @@ public class PacmanGhostAI : core.System
         GhostIds = null;
     }
 
-    /// <summary>Trigger frightened mode (all ghosts reverse and move randomly at half speed).</summary>
+    /// <summary>Trigger frightened mode (only ghosts alive and out of house are affected).</summary>
     public void SetFrightened(float duration)
     {
         if (GhostIds == null) return;
-        if (CurrentMode != PacmanGhostMode.Frightened)
-            PreFrightenedMode = CurrentMode;
-        CurrentMode = PacmanGhostMode.Frightened;
-        FrightenedTimer = duration + FrightenedExtraDuration;
 
-        // Change body color of active ghosts to dark blue
+        float timer = duration + FrightenedExtraDuration;
         for (int i = 0; i < GhostIds.Length; i++)
         {
             if (Eaten[i] || RespawnTimer[i] > 0f || !ExitedHouse[i]) continue;
+            Frightened[i] = true;
+            FrightenedTimers[i] = timer;
+
             ref var material = ref Scene.ECS.GetComponent<Material>(GhostIds[i]);
             material.Albedo = Color.Transparent;
             material.Emissive = FrightenedColor;
-        }
+            ref var circle = ref Scene.ECS.GetComponent<Circle2D>(GhostIds[i]);
+            circle.Radius = BodyRadius * FrightenedShrink;
 
-        ReverseAll();
+            // Reverse direction
+            var (pdx, pdy) = GhostDirs[i];
+            if (pdx == 0 && pdy == 0) continue;
+            var (cx, cy) = GhostCells[i];
+            GhostDirs[i] = (-pdx, -pdy);
+            if (CanGhostMove(i, cx, cy, -pdx, -pdy))
+                GhostTargets[i] = (cx - pdx, cy - pdy);
+        }
     }
 
     public override void Update()
     {
         if (GhostIds == null) return;
+
+        float dt = (float)GameTime.ElapsedGameTime.TotalSeconds;
+        IdleTime += dt;
 
         // Shift position history: Geometry renders ReadBuffer (2 frames behind current)
         // so eyes must use 2-frame-delayed positions to match the body in EmissiveTexture
@@ -205,9 +220,19 @@ public class PacmanGhostAI : core.System
             PrevPositions[i] = new Vector2(t.Position.X, t.Position.Y);
         }
 
-        if (Player == null || !Player.HasMoved) return;
+        if (Player == null || !Player.HasMoved)
+        {
+            // Idle floating wobble before match starts
+            for (int i = 0; i < GhostIds.Length; i++)
+            {
+                ref var transform = ref Scene.ECS.GetComponent<Transform>(GhostIds[i]);
+                float wobble = MathF.Sin(IdleTime * 3f + i * 1.7f) * 3f;
+                var pos = Positions[i];
+                transform.Position = new Vector3(pos.X, pos.Y + wobble, GhostZ);
+            }
+            return;
+        }
 
-        float dt = (float)GameTime.ElapsedGameTime.TotalSeconds;
         ElapsedTime += dt;
         UpdateMode(dt);
 
@@ -230,14 +255,14 @@ public class PacmanGhostAI : core.System
                 currentStep = step * EatenSpeedMultiplier;
             else if (!ExitedHouse[i] && !IsReleased(i))
                 currentStep = step * 0.5f;
-            else if (CurrentMode == PacmanGhostMode.Frightened && ExitedHouse[i])
+            else if (Frightened[i])
                 currentStep = frightenedStep;
             else
                 currentStep = step;
 
             // Shadow: 1.25x base, ramps to 1.5x when approaching, normal speed when very close
             if (GhostEntries[i].Type == PacmanGhostType.Shadow && ExitedHouse[i]
-                && !Eaten[i] && CurrentMode != PacmanGhostMode.Frightened)
+                && !Eaten[i] && !Frightened[i])
             {
                 var (scx, scy) = GhostCells[i];
                 var (stx, sty) = Player != null ? Player.Cell : ChaseTargets[i];
@@ -289,7 +314,7 @@ public class PacmanGhostAI : core.System
                 float dy = pos.Y - Player.WorldPosition.Y;
                 if (dx * dx + dy * dy < BodyRadius * BodyRadius)
                 {
-                    if (CurrentMode == PacmanGhostMode.Frightened)
+                    if (Frightened[i])
                         EatGhost(i);
                     else
                         Player.PlayerCaught = true;
@@ -304,9 +329,6 @@ public class PacmanGhostAI : core.System
 
         float sx = Renderer.ScreenWidth / Renderer.VirtualSize.X;
         float sy = Renderer.ScreenHeight / Renderer.VirtualSize.Y;
-        float eyeR = BodyRadius * 0.667f;
-        float eyeD = eyeR * 2f;
-        float eyeOff = BodyRadius * 0.133f;
 
         Renderer.Reset()
             .Configure(BlendState.AlphaBlend)
@@ -314,6 +336,10 @@ public class PacmanGhostAI : core.System
 
         for (int i = 0; i < GhostIds.Length; i++)
         {
+            float radius = Frightened[i] ? BodyRadius * FrightenedShrink : BodyRadius;
+            float eyeR = radius * 0.667f;
+            float eyeD = eyeR * 2f;
+            float eyeOff = radius * 0.133f;
             var (dx, dy) = GhostDirs[i];
             float cx = EyePositions[i].X + dx * eyeOff;
             float cy = EyePositions[i].Y + dy * eyeOff;
@@ -323,7 +349,7 @@ public class PacmanGhostAI : core.System
                 Color eyeColor;
                 if (Eaten[i])
                     eyeColor = Color.White;
-                else if (CurrentMode == PacmanGhostMode.Frightened && ExitedHouse[i] && RespawnTimer[i] <= 0f)
+                else if (Frightened[i])
                     eyeColor = Color.White;
                 else
                     eyeColor = GhostEntries[i].Type == PacmanGhostType.Shadow ? Color.White : Color.Black;
@@ -344,9 +370,13 @@ public class PacmanGhostAI : core.System
     private void EatGhost(int i)
     {
         Eaten[i] = true;
+        Frightened[i] = false;
+        FrightenedTimers[i] = 0f;
         ref var material = ref Scene.ECS.GetComponent<Material>(GhostIds[i]);
         material.Albedo = Color.Transparent;
         material.Emissive = Color.Transparent;
+        ref var circle = ref Scene.ECS.GetComponent<Circle2D>(GhostIds[i]);
+        circle.Radius = BodyRadius;
     }
 
     private void RespawnGhost(int i)
@@ -354,14 +384,9 @@ public class PacmanGhostAI : core.System
         RespawnTimer[i] = 0f;
         ExitedHouse[i] = false;
 
-        // Restore appearance based on current mode
+        // Always restore normal color — respawned ghosts are never frightened
         ref var material = ref Scene.ECS.GetComponent<Material>(GhostIds[i]);
-        if (CurrentMode == PacmanGhostMode.Frightened)
-        {
-            material.Albedo = Color.Transparent;
-            material.Emissive = FrightenedColor;
-        }
-        else if (GhostEntries[i].Type == PacmanGhostType.Shadow)
+        if (GhostEntries[i].Type == PacmanGhostType.Shadow)
         {
             material.Albedo = GhostColors[i];
             material.Emissive = Color.Black;
@@ -373,50 +398,57 @@ public class PacmanGhostAI : core.System
         }
     }
 
-    private void RestoreGhostColors()
+    private void RestoreGhostColor(int i)
     {
-        for (int i = 0; i < GhostIds.Length; i++)
+        if (Eaten[i] || RespawnTimer[i] > 0f) return;
+        ref var material = ref Scene.ECS.GetComponent<Material>(GhostIds[i]);
+        if (GhostEntries[i].Type == PacmanGhostType.Shadow)
         {
-            if (Eaten[i] || RespawnTimer[i] > 0f) continue;
-            ref var material = ref Scene.ECS.GetComponent<Material>(GhostIds[i]);
-            if (GhostEntries[i].Type == PacmanGhostType.Shadow)
-            {
-                material.Albedo = GhostColors[i];
-                material.Emissive = Color.Black;
-            }
-            else
-            {
-                material.Albedo = Color.Transparent;
-                material.Emissive = GhostColors[i];
-            }
+            material.Albedo = GhostColors[i];
+            material.Emissive = Color.Black;
+        }
+        else
+        {
+            material.Albedo = Color.Transparent;
+            material.Emissive = GhostColors[i];
         }
     }
 
     private void UpdateMode(float dt)
     {
-        if (CurrentMode == PacmanGhostMode.Frightened)
+        // Per-ghost frightened timers
+        for (int i = 0; i < GhostIds.Length; i++)
         {
-            FrightenedTimer -= dt;
-            if (FrightenedTimer <= 0f)
+            if (!Frightened[i]) continue;
+
+            FrightenedTimers[i] -= dt;
+            if (FrightenedTimers[i] <= 0f)
             {
-                CurrentMode = PreFrightenedMode;
-                RestoreGhostColors();
-                ReverseAll();
+                Frightened[i] = false;
+                FrightenedTimers[i] = 0f;
+                RestoreGhostColor(i);
+                ref var circle = ref Scene.ECS.GetComponent<Circle2D>(GhostIds[i]);
+                circle.Radius = BodyRadius;
             }
-            else if (FrightenedTimer <= FrightenedBlinkThreshold)
+            else if (FrightenedTimers[i] <= FrightenedBlinkThreshold)
             {
-                bool blinkOn = MathF.Sin(FrightenedTimer * FrightenedBlinkRate * MathF.PI) > 0f;
-                var blinkColor = blinkOn ? FrightenedBlinkColor : FrightenedColor;
-                for (int i = 0; i < GhostIds.Length; i++)
-                {
-                    if (Eaten[i] || RespawnTimer[i] > 0f || !ExitedHouse[i]) continue;
-                    ref var material = ref Scene.ECS.GetComponent<Material>(GhostIds[i]);
-                    material.Emissive = blinkColor;
-                }
+                bool blinkOn = MathF.Sin(FrightenedTimers[i] * FrightenedBlinkRate * MathF.PI) > 0f;
+                ref var material = ref Scene.ECS.GetComponent<Material>(GhostIds[i]);
+                material.Emissive = blinkOn ? FrightenedBlinkColor : FrightenedColor;
             }
-            return;
+            else
+            {
+                // Hue cycling around blue (azul → celeste → morado)
+                float hueShift = MathF.Sin(IdleTime * 2.5f + i * 1.3f);
+                byte r = (byte)(30 + 42 * MathF.Max(0, -hueShift));
+                byte g = (byte)(30 + 55 * MathF.Max(0, hueShift));
+                byte b = (byte)(200 + 42 * MathF.Abs(hueShift));
+                ref var material = ref Scene.ECS.GetComponent<Material>(GhostIds[i]);
+                material.Emissive = new Color(r, g, b);
+            }
         }
 
+        // Scatter/chase cycle continues independently
         if (ModePhase >= ModeCycle.Length)
         {
             CurrentMode = PacmanGhostMode.Chase;
@@ -429,30 +461,9 @@ public class PacmanGhostAI : core.System
             ModeTimer -= ModeCycle[ModePhase].duration;
             ModePhase++;
 
-            var prevMode = CurrentMode;
             CurrentMode = ModePhase < ModeCycle.Length
                 ? ModeCycle[ModePhase].mode
                 : PacmanGhostMode.Chase;
-
-            // Mode change takes effect at next intersection (no mid-corridor reversal)
-        }
-    }
-
-    private void ReverseAll()
-    {
-        for (int i = 0; i < GhostIds.Length; i++)
-        {
-            if (!ExitedHouse[i]) continue;
-            if (Eaten[i]) continue;
-
-            var (pdx, pdy) = GhostDirs[i];
-            if (pdx == 0 && pdy == 0) continue;
-
-            var (cx, cy) = GhostCells[i];
-            GhostDirs[i] = (-pdx, -pdy);
-
-            if (CanGhostMove(i, cx, cy, -pdx, -pdy))
-                GhostTargets[i] = (cx - pdx, cy - pdy);
         }
     }
 
@@ -544,13 +555,6 @@ public class PacmanGhostAI : core.System
             if (!Maze.InGhostHouse(cx, cy) && !Maze.IsGhostDoor(cx, cy))
             {
                 ExitedHouse[i] = true;
-                // Apply frightened color if entering during frightened mode
-                if (CurrentMode == PacmanGhostMode.Frightened)
-                {
-                    ref var material = ref Scene.ECS.GetComponent<Material>(GhostIds[i]);
-                    material.Albedo = Color.Transparent;
-                    material.Emissive = FrightenedColor;
-                }
             }
             else
             {
@@ -570,7 +574,7 @@ public class PacmanGhostAI : core.System
         }
 
         // Frightened mode: random turns at intersections
-        if (CurrentMode == PacmanGhostMode.Frightened)
+        if (Frightened[i])
         {
             PickRandom(i);
             return;
