@@ -89,6 +89,10 @@ public class Geometry : core.System
         public RendererShape[] AbsorptionRenderArray;
         public int EmissiveRenderCount;
         public int AbsorptionRenderCount;
+
+        // Sparse tracking — only layers that actually received shapes
+        public int[][] OccupiedLayers;     // [threadIndex][] layers with shapes
+        public int[] OccupiedLayerCount;   // [threadIndex] count of occupied layers
     }
 
     private BufferSet[] Buffers; // [0] and [1]
@@ -101,6 +105,9 @@ public class Geometry : core.System
 
     // Timing for profiling
     private float CollectMs, FlattenMs, RenderMs;
+
+    // Scratch buffer for sparse flatten (reused each frame)
+    private int[] FlattenScratch = new int[1024];
 
     // Initial render array capacity
     private const int InitialRenderCapacity = 65536;
@@ -150,6 +157,11 @@ public class Geometry : core.System
             Buffers[b].EmissiveMaxLayerByThread = new int[ThreadCount];
             Buffers[b].AbsorptionMinLayerByThread = new int[ThreadCount];
             Buffers[b].AbsorptionMaxLayerByThread = new int[ThreadCount];
+
+            Buffers[b].OccupiedLayers = new int[ThreadCount][];
+            Buffers[b].OccupiedLayerCount = new int[ThreadCount];
+            for (int t = 0; t < ThreadCount; t++)
+                Buffers[b].OccupiedLayers[t] = new int[256];
 
             // Flat render arrays
             Buffers[b].EmissiveRenderArray = new RendererShape[InitialRenderCapacity];
@@ -270,11 +282,17 @@ public class Geometry : core.System
         var swCollect = Stopwatch.StartNew();
         ref var buf = ref Buffers[bufferIdx];
 
-        Array.Clear(buf.EmissiveCounts, 0, BucketCount);
-        Array.Clear(buf.AbsorptionCounts, 0, BucketCount);
-
+        // Sparse clear — only reset buckets that were occupied last frame
         for (int t = 0; t < ThreadCount; t++)
         {
+            for (int i = 0; i < buf.OccupiedLayerCount[t]; i++)
+            {
+                int bucketIndex = t * MaxZLayers + buf.OccupiedLayers[t][i];
+                buf.EmissiveCounts[bucketIndex] = 0;
+                buf.AbsorptionCounts[bucketIndex] = 0;
+            }
+            buf.OccupiedLayerCount[t] = 0;
+
             buf.EmissiveMinLayerByThread[t] = MaxZLayers;
             buf.EmissiveMaxLayerByThread[t] = -1;
             buf.AbsorptionMinLayerByThread[t] = MaxZLayers;
@@ -293,6 +311,8 @@ public class Geometry : core.System
         var absorptionMaxByThread = buf.AbsorptionMaxLayerByThread;
         var motionByThread = buf.MotionShapesByThread;
         var textureByThread = buf.TextureDrawsByThread;
+        var occupiedLayers = buf.OccupiedLayers;
+        var occupiedLayerCount = buf.OccupiedLayerCount;
 
         Scene.ECS.Query((int threadIndex, int entity, ref Rectangle2D rectangle, ref Transform transform, ref Material material) =>
         {
@@ -315,6 +335,15 @@ public class Geometry : core.System
             }
 
             int emissiveIndex = emissiveCounts[bucketIndex];
+
+            if (emissiveIndex == 0)
+            {
+                int occIdx = occupiedLayerCount[threadIndex]++;
+                if (occIdx >= occupiedLayers[threadIndex].Length)
+                    Array.Resize(ref occupiedLayers[threadIndex], occIdx * 2);
+                occupiedLayers[threadIndex][occIdx] = layer;
+            }
+
             if (emissiveBuffers[bucketIndex] == null || emissiveIndex >= emissiveBuffers[bucketIndex].Length)
                 EnsureBuffer(ref emissiveBuffers[bucketIndex], emissiveIndex);
 
@@ -362,6 +391,15 @@ public class Geometry : core.System
             }
 
             int emissiveIndex = emissiveCounts[bucketIndex];
+
+            if (emissiveIndex == 0)
+            {
+                int occIdx = occupiedLayerCount[threadIndex]++;
+                if (occIdx >= occupiedLayers[threadIndex].Length)
+                    Array.Resize(ref occupiedLayers[threadIndex], occIdx * 2);
+                occupiedLayers[threadIndex][occIdx] = layer;
+            }
+
             if (emissiveBuffers[bucketIndex] == null || emissiveIndex >= emissiveBuffers[bucketIndex].Length)
                 EnsureBuffer(ref emissiveBuffers[bucketIndex], emissiveIndex);
             ref var emissiveShape = ref emissiveBuffers[bucketIndex][emissiveIndex];
@@ -404,6 +442,15 @@ public class Geometry : core.System
             }
 
             int emissiveIndex = emissiveCounts[bucketIndex];
+
+            if (emissiveIndex == 0)
+            {
+                int occIdx = occupiedLayerCount[threadIndex]++;
+                if (occIdx >= occupiedLayers[threadIndex].Length)
+                    Array.Resize(ref occupiedLayers[threadIndex], occIdx * 2);
+                occupiedLayers[threadIndex][occIdx] = layer;
+            }
+
             if (emissiveBuffers[bucketIndex] == null || emissiveIndex >= emissiveBuffers[bucketIndex].Length)
                 EnsureBuffer(ref emissiveBuffers[bucketIndex], emissiveIndex);
             ref var emissiveShape = ref emissiveBuffers[bucketIndex][emissiveIndex];
@@ -474,24 +521,41 @@ public class Geometry : core.System
     {
         var buckets = isEmissive ? buf.EmissiveBuffers : buf.AbsorptionBuffers;
         var counts = isEmissive ? buf.EmissiveCounts : buf.AbsorptionCounts;
-        int minLayer = isEmissive ? buf.EmissiveMinLayer : buf.AbsorptionMinLayer;
-        int maxLayer = isEmissive ? buf.EmissiveMaxLayer : buf.AbsorptionMaxLayer;
 
-        if (maxLayer < 0)
+        // Collect all occupied layers from all threads into scratch buffer
+        int scratchCount = 0;
+        for (int t = 0; t < ThreadCount; t++)
+        {
+            int layerCount = buf.OccupiedLayerCount[t];
+            if (scratchCount + layerCount > FlattenScratch.Length)
+                Array.Resize(ref FlattenScratch, (scratchCount + layerCount) * 2);
+            Array.Copy(buf.OccupiedLayers[t], 0, FlattenScratch, scratchCount, layerCount);
+            scratchCount += layerCount;
+        }
+
+        if (scratchCount == 0)
         {
             if (isEmissive) buf.EmissiveRenderCount = 0;
             else buf.AbsorptionRenderCount = 0;
             return;
         }
 
-        // Count total shapes (new indexing: threadIndex * MaxZLayers + layer)
-        int totalCount = 0;
-        for (int layer = minLayer; layer <= maxLayer; layer++)
+        // Sort and deduplicate to get unique layers in Z-order
+        Array.Sort(FlattenScratch, 0, scratchCount);
+        int uniqueCount = 1;
+        for (int i = 1; i < scratchCount; i++)
         {
+            if (FlattenScratch[i] != FlattenScratch[i - 1])
+                FlattenScratch[uniqueCount++] = FlattenScratch[i];
+        }
+
+        // Count total shapes across only occupied layers
+        int totalCount = 0;
+        for (int i = 0; i < uniqueCount; i++)
+        {
+            int layer = FlattenScratch[i];
             for (int t = 0; t < ThreadCount; t++)
-            {
                 totalCount += counts[t * MaxZLayers + layer];
-            }
         }
 
         // Ensure render array capacity
@@ -503,10 +567,11 @@ public class Geometry : core.System
             renderArray = new RendererShape[newCapacity];
         }
 
-        // Copy buckets to render array in Z-order (using Array.Copy for speed)
+        // Copy buckets to render array in Z-order (only occupied layers)
         int offset = 0;
-        for (int layer = minLayer; layer <= maxLayer; layer++)
+        for (int i = 0; i < uniqueCount; i++)
         {
+            int layer = FlattenScratch[i];
             for (int t = 0; t < ThreadCount; t++)
             {
                 int bucketIndex = t * MaxZLayers + layer;
@@ -686,7 +751,7 @@ public class Geometry : core.System
         Inspector.SetLabel("geometry", "debug", $"Debug: {CurrentDebug}");
         Inspector.SetLabel("geometry", "emissive", $"Emissive Objects: {EmissiveCount}");
         Inspector.SetLabel("geometry", "absorption", $"Absorption Objects: {AbsorptionCount}");
-        Inspector.SetLabel("geometry", "buffers", $"Buffers: {WorldBounds.X}x{WorldBounds.Y}");
+        Inspector.SetLabel("geometry", "buffers", $"World Bounds: {WorldBounds.X}x{WorldBounds.Y}");
         Inspector.SetLabel("geometry", "timing", $"Collect: {CollectMs:F2}ms | Flatten: {FlattenMs:F2}ms | Render: {RenderMs:F2}ms");
         Inspector.SetLabel("geometry", "gpu", $"GPU: SetData: {Renderer.LastSetDataMs:F2}ms | Draw: {Renderer.LastDrawMs:F2}ms");
 
