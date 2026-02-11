@@ -47,7 +47,7 @@ public class Inspector : core.System
     private const int WidgetHeight = 36;
     private const int WidgetSpacing = 6;
     private const int Padding = 12;
-    private const int CloseButtonSize = 28;
+    private const int CloseButtonSize = 22;
     private const int AutoLayoutGap = 20;
     private const int AutoLayoutMaxY = 1900;
     private const int SliderTrackHeight = 8;
@@ -55,16 +55,16 @@ public class Inspector : core.System
     private const int ToggleBoxSize = 22;
 
     // Colors
-    private static readonly Color WindowBg = new(20, 20, 25, 220);
-    private static readonly Color TitleBarColor = new(45, 45, 55, 240);
-    private static readonly Color TitleBarHover = new(55, 55, 70, 240);
-    private static readonly Color ButtonColor = new(60, 60, 80, 220);
-    private static readonly Color ButtonHover = new(80, 80, 110, 240);
-    private static readonly Color SliderTrack = new(50, 50, 65, 200);
-    private static readonly Color SliderFill = new(100, 140, 220, 255);
-    private static readonly Color SliderHandle = new(180, 180, 200, 255);
-    private static readonly Color ToggleOn = new(100, 100, 200, 255);
-    private static readonly Color ToggleOff = new(80, 80, 80, 200);
+    private static readonly Color WindowBg = new(12, 12, 16, 220);
+    private static readonly Color TitleBarColor = new(28, 28, 36, 240);
+    private static readonly Color TitleBarHover = new(38, 38, 50, 240);
+    private static readonly Color ButtonColor = new(40, 40, 55, 220);
+    private static readonly Color ButtonHover = new(55, 55, 75, 240);
+    private static readonly Color SliderTrack = new(30, 30, 42, 200);
+    private static readonly Color SliderFill = new(70, 105, 180, 255);
+    private static readonly Color SliderHandle = new(140, 140, 160, 255);
+    private static readonly Color ToggleOn = new(70, 70, 160, 255);
+    private static readonly Color ToggleOff = new(50, 50, 55, 200);
     private static readonly Color CloseColor = new(180, 60, 60, 255);
     private static readonly Color CloseHover = new(220, 80, 80, 255);
     private static readonly Color TextColor = new(220, 220, 230, 255);
@@ -613,11 +613,13 @@ public class Inspector : core.System
         // Close button
         bool CloseHovered = Window.CloseBounds.Contains((int)Mouse.X, (int)Mouse.Y);
         Renderer.DrawSprite(Solid, Window.CloseBounds, CloseHovered ? CloseHover : CloseColor);
-        var CloseTextSize = Font.MeasureString("X");
+        const float CloseScale = 0.75f;
+        var CloseTextSize = Font.MeasureString("X") * CloseScale;
         var CloseTextPos = new Vector2(
             Window.CloseBounds.X + (Window.CloseBounds.Width - CloseTextSize.X) / 2,
             Window.CloseBounds.Y + (Window.CloseBounds.Height - CloseTextSize.Y) / 2);
-        Renderer.DrawString(Font, "X", CloseTextPos, TextColor);
+        Renderer.DrawString(Font, "X", CloseTextPos, TextColor, CloseScale);
+        Renderer.DrawString(Font, "X", CloseTextPos + Vector2.UnitX, TextColor, CloseScale);
 
         // Widgets
         for (int I = 0; I < Window.Widgets.Count; I++)

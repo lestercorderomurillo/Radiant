@@ -1813,6 +1813,12 @@ public class Renderer : IDisposable
         SpriteBatch.DrawString(font, text, position, color);
     }
 
+    /// <summary>Draws scaled text during a BeginDraw/EndDraw session.</summary>
+    public void DrawString(SpriteFont font, string text, Vector2 position, Color color, float scale)
+    {
+        SpriteBatch.DrawString(font, text, position, color, 0f, Vector2.Zero, scale, SpriteEffects.None, 0f);
+    }
+
     /// <summary>Ends a SpriteBatch drawing session started by BeginDraw.</summary>
     public void EndDraw()
     {
