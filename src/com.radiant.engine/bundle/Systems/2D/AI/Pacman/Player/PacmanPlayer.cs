@@ -130,6 +130,8 @@ public class PacmanPlayer : core.System
             // Collect coin or power pellet at new cell
             if (Cell != PrevCell)
             {
+                if (!HasMoved) HasMoved = true;
+                
                 if (Maze.TryCollectCoin(Cell.x, Cell.y))
                 {
                     CoinsCollected++;
@@ -347,8 +349,6 @@ public class PacmanPlayer : core.System
         else if (kb.IsKeyDown(Keys.Right)) desired = (1, 0);
 
         if (desired == (0, 0)) return;
-
-        if (!HasMoved) HasMoved = true;
 
         // If we can turn immediately from current cell, do it
         if (Maze.CanMove(Cell.x, Cell.y, desired.dx, desired.dy))

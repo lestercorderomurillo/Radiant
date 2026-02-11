@@ -429,11 +429,16 @@ public class PacmanMazeLevelScene : Scene
             }
 
             float bright = 1f + proximity * 0.6f;
+
+            // Prismatic white — rapid hue cycling, very close to white
+            float hue = (CoinWaveTime * 2.5f + cell.Item1 * 0.7f) % 1f;
+            Color rainbow = LightFactory.HueToRGB(hue);
+            const float tint = 0.15f;
             ref var pelletMat = ref ECS.GetComponent<Material>(pelletId);
             pelletMat.Emissive = new Color(
-                (byte)MathF.Min(BasePowerPelletColor.R * bright, 255f),
-                (byte)MathF.Min(BasePowerPelletColor.G * bright, 255f),
-                (byte)MathF.Min(BasePowerPelletColor.B * bright, 255f),
+                (byte)MathF.Min((255f * (1f - tint) + rainbow.R * tint) * bright, 255f),
+                (byte)MathF.Min((255f * (1f - tint) + rainbow.G * tint) * bright, 255f),
+                (byte)MathF.Min((255f * (1f - tint) + rainbow.B * tint) * bright, 255f),
                 BasePowerPelletColor.A);
 
             ref var pelletTransform = ref ECS.GetComponent<Transform>(pelletId);
