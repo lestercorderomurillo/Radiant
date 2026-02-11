@@ -124,7 +124,7 @@ public class RainbowGhostAI : core.System
         var pos = new Vector2(t.Position.X, t.Position.Y);
         EyePositions[0] = pos;
         PrevPositions[0] = pos;
-        EyeDirs[0] = (0, 0);
+        EyeDirs[0] = (1, 0);
         LogicalPositions[0] = pos;
 
         WanderTargetTiles[0] = PickRandomWalkable();

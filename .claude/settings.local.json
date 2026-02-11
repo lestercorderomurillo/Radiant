@@ -19,7 +19,8 @@
       "WebFetch(domain:deepwiki.com)",
       "Bash(findstr:*)",
       "WebFetch(domain:shaunlebron.github.io)",
-      "Bash(bc:*)"
+      "Bash(bc:*)",
+      "mcp__ide__getDiagnostics"
     ]
   }
 }
