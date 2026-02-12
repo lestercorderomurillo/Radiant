@@ -108,7 +108,7 @@ radiant/
 │   │       │   ├── MouseLight/MouseLight.cs
 │   │       │   ├── PaintBrush/PaintBrush.cs
 │   │       │   ├── MazeBuilder/
-│   │       │   │   ├── PacmanMazeBuilder.cs                 # Maze layout + coin/power pellet tracking
+│   │       │   │   ├── PacmanMazeBuilder.cs                 # Maze layout + static RT walls + coin/power pellet tracking
 │   │       │   │   ├── PacmanMazeGenerator.cs               # Procedural maze generation
 │   │       │   │   └── PacmanLevelConfig.cs                 # Per-level config + GhostEntry struct
 │   │       │   └── AI/Pacman/
@@ -627,12 +627,13 @@ Renderer.Commit();   // End any pending SpriteBatch + mark drawing complete
 
 Collects all entity shapes each frame and produces the textures that feed GI:
 
-1. **Double-buffered collection** — Write buffer (background threads) / Read buffer (render) swapped each frame
-2. **Z-layer bucketing** — 65536 layers x ThreadCount buckets, flattened to render arrays via Array.Copy
-3. **Shape rendering** — Emissive shapes → EmissiveTexture, Absorption shapes → AbsorptionTexture
-4. **SDF generation** — Jump Flooding Algorithm (JFA) on absorption → SDFTexture (HalfVector2)
-5. **Motion vectors** — Per-entity velocity encoded as color → MotionVectorTexture (HalfVector2)
-6. **Texture draws** — Material.Texture entities drawn via SpriteBatch (separate from instanced shapes)
+1. **Background blit** — If `BackgroundEmissive`/`BackgroundAbsorption` are set, blit them first (used by PacmanMazeBuilder for static maze walls)
+2. **Double-buffered collection** — Write buffer (background threads) / Read buffer (render) swapped each frame
+3. **Z-layer bucketing** — 65536 layers x ThreadCount buckets, flattened to render arrays via Array.Copy
+4. **Shape rendering** — Emissive shapes → EmissiveTexture, Absorption shapes → AbsorptionTexture (append mode when backgrounds exist)
+5. **SDF generation** — Jump Flooding Algorithm (JFA) on absorption → SDFTexture (HalfVector2)
+6. **Motion vectors** — Per-entity velocity encoded as color → MotionVectorTexture (HalfVector2)
+7. **Texture draws** — Material.Texture entities drawn via SpriteBatch (separate from instanced shapes)
 
 Debug mode properties:
 - `IsDebugging` — true when any debug visualization is active

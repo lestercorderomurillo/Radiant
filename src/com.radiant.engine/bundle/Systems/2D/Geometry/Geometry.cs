@@ -12,7 +12,7 @@ namespace com.radiant.engine.bundle;
 public class Geometry : core.System
 {
     public override RenderLayer RenderLayer => RenderLayer.World;
-    public float SDFScale = 0.25f;
+    public float SDFScale = 0.5f;
     public bool EnableSDF = false;
 
     private RenderTarget2D JFATexture1;
@@ -31,6 +31,9 @@ public class Geometry : core.System
     public RenderTarget2D AbsorptionTexture { get; private set; }
     public RenderTarget2D SDFTexture { get; private set; }
     public RenderTarget2D MotionVectorTexture { get; private set; }
+
+    public RenderTarget2D BackgroundEmissive { get; set; }
+    public RenderTarget2D BackgroundAbsorption { get; set; }
 
     private int EmissiveCount;
     private int AbsorptionCount;
@@ -605,8 +608,17 @@ public class Geometry : core.System
 
         // Emissive: flush shapes then immediately draw textures (before switching target)
         EmissiveCount = buf.EmissiveRenderCount;
-        Renderer.Configure(BlendState.AlphaBlend)
-            .FlushShapesExternal(buf.EmissiveRenderArray, buf.EmissiveRenderCount, EmissiveTexture, Color.Transparent);
+        if (BackgroundEmissive != null)
+        {
+            Renderer.Blit(BackgroundEmissive, EmissiveTexture, Color.Transparent, BlendState.Opaque);
+            Renderer.Configure(BlendState.AlphaBlend)
+                .FlushShapesExternal(buf.EmissiveRenderArray, buf.EmissiveRenderCount, EmissiveTexture, null);
+        }
+        else
+        {
+            Renderer.Configure(BlendState.AlphaBlend)
+                .FlushShapesExternal(buf.EmissiveRenderArray, buf.EmissiveRenderCount, EmissiveTexture, Color.Transparent);
+        }
 
         if (hasTextures)
         {
@@ -621,8 +633,17 @@ public class Geometry : core.System
 
         // Absorption: flush shapes then immediately draw textures (before switching target)
         AbsorptionCount = buf.AbsorptionRenderCount;
-        Renderer.Configure(BlendState.AlphaBlend)
-            .FlushShapesExternal(buf.AbsorptionRenderArray, buf.AbsorptionRenderCount, AbsorptionTexture, Color.Transparent);
+        if (BackgroundAbsorption != null)
+        {
+            Renderer.Blit(BackgroundAbsorption, AbsorptionTexture, Color.Transparent, BlendState.Opaque);
+            Renderer.Configure(BlendState.AlphaBlend)
+                .FlushShapesExternal(buf.AbsorptionRenderArray, buf.AbsorptionRenderCount, AbsorptionTexture, null);
+        }
+        else
+        {
+            Renderer.Configure(BlendState.AlphaBlend)
+                .FlushShapesExternal(buf.AbsorptionRenderArray, buf.AbsorptionRenderCount, AbsorptionTexture, Color.Transparent);
+        }
 
         if (hasTextures)
         {
@@ -879,6 +900,9 @@ public class Geometry : core.System
         InitializeGeometryBuffers();
         JFAResult = JFATexture1;
         JFAResultInterior = JFATextureInterior1;
+
+        BackgroundEmissive = null;
+        BackgroundAbsorption = null;
     }
 
     public override void Dispose()
