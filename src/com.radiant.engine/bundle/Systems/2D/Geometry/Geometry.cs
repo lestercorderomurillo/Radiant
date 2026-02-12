@@ -602,10 +602,6 @@ public class Geometry : core.System
             if (buf.TextureDrawsByThread[t].Count > 0) { hasTextures = true; break; }
         }
 
-        // Virtual-to-screen scale (render targets are screen-sized, positions are in virtual coords)
-        float sx = Renderer.ScreenWidth / Renderer.VirtualSize.X;
-        float sy = Renderer.ScreenHeight / Renderer.VirtualSize.Y;
-
         // Emissive: flush shapes then immediately draw textures (before switching target)
         EmissiveCount = buf.EmissiveRenderCount;
         if (BackgroundEmissive != null)
@@ -626,7 +622,7 @@ public class Geometry : core.System
             for (int t = 0; t < ThreadCount; t++)
                 foreach (var (pos, size, texture, emissive, _) in buf.TextureDrawsByThread[t])
                     Renderer.DrawTexture(texture,
-                        new Rectangle((int)(pos.X * sx), (int)(pos.Y * sy), (int)(size.X * sx), (int)(size.Y * sy)),
+                        Renderer.VirtualToScreenRect(pos.X, pos.Y, size.X, size.Y),
                         emissive);
             Renderer.Commit();
         }
@@ -651,7 +647,7 @@ public class Geometry : core.System
             for (int t = 0; t < ThreadCount; t++)
                 foreach (var (pos, size, texture, _, absorption) in buf.TextureDrawsByThread[t])
                     Renderer.DrawTexture(texture,
-                        new Rectangle((int)(pos.X * sx), (int)(pos.Y * sy), (int)(size.X * sx), (int)(size.Y * sy)),
+                        Renderer.VirtualToScreenRect(pos.X, pos.Y, size.X, size.Y),
                         absorption);
             Renderer.Commit();
         }

@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using com.radiant.engine.core;
 using Microsoft.Xna.Framework;
@@ -269,9 +268,6 @@ public class PacmanMazeBuilder : core.System
 
     private void DrawMazeToRenderTargets()
     {
-        float sx = Renderer.ScreenWidth / Renderer.VirtualSize.X;
-        float sy = Renderer.ScreenHeight / Renderer.VirtualSize.Y;
-
         MazeEmissiveRT?.Dispose();
         MazeAbsorptionRT?.Dispose();
         MazeEmissiveRT = Renderer.CreateRenderTarget(Renderer.ScreenWidth, Renderer.ScreenHeight);
@@ -314,7 +310,7 @@ public class PacmanMazeBuilder : core.System
 
                 if (!cutTL && !cutTR && !cutBL && !cutBR)
                 {
-                    fills.Add(ToScreen(l, t, r - l, b - t, sx, sy));
+                    fills.Add(Renderer.VirtualToScreenRect(l, t, r - l, b - t));
                 }
                 else
                 {
@@ -324,15 +320,15 @@ public class PacmanMazeBuilder : core.System
                     {
                         float sl = cutTL ? fx + WallMargin : l;
                         float sr = cutTR ? fxr - WallMargin : r;
-                        fills.Add(ToScreen(sl, t, sr - sl, cy1 - t, sx, sy));
+                        fills.Add(Renderer.VirtualToScreenRect(sl, t, sr - sl, cy1 - t));
                     }
                     if (cy1 < cy2)
-                        fills.Add(ToScreen(l, cy1, r - l, cy2 - cy1, sx, sy));
+                        fills.Add(Renderer.VirtualToScreenRect(l, cy1, r - l, cy2 - cy1));
                     if (cy2 < b)
                     {
                         float sl = cutBL ? fx + WallMargin : l;
                         float sr = cutBR ? fxr - WallMargin : r;
-                        fills.Add(ToScreen(sl, cy2, sr - sl, b - cy2, sx, sy));
+                        fills.Add(Renderer.VirtualToScreenRect(sl, cy2, sr - sl, b - cy2));
                     }
                 }
 
@@ -340,41 +336,41 @@ public class PacmanMazeBuilder : core.System
                 Color color = GetWallColor(x, y);
 
                 if (cU)
-                    borders.Add((ToScreen(l, t - WallThickness, r - l, WallThickness, sx, sy), color));
+                    borders.Add((Renderer.VirtualToScreenRect(l, t - WallThickness, r - l, WallThickness), color));
                 if (cD)
-                    borders.Add((ToScreen(l, b, r - l, WallThickness, sx, sy), color));
+                    borders.Add((Renderer.VirtualToScreenRect(l, b, r - l, WallThickness), color));
                 if (cL)
                 {
                     float vt = cU ? t - WallThickness : t;
                     float vb = cD ? b + WallThickness : b;
-                    borders.Add((ToScreen(l - WallThickness, vt, WallThickness, vb - vt, sx, sy), color));
+                    borders.Add((Renderer.VirtualToScreenRect(l - WallThickness, vt, WallThickness, vb - vt), color));
                 }
                 if (cR)
                 {
                     float vt = cU ? t - WallThickness : t;
                     float vb = cD ? b + WallThickness : b;
-                    borders.Add((ToScreen(r, vt, WallThickness, vb - vt, sx, sy), color));
+                    borders.Add((Renderer.VirtualToScreenRect(r, vt, WallThickness, vb - vt), color));
                 }
 
                 if (cutTL)
                 {
-                    borders.Add((ToScreen(fx, fy + WallMargin - WallThickness, WallMargin, WallThickness, sx, sy), color));
-                    borders.Add((ToScreen(fx + WallMargin - WallThickness, fy, WallThickness, WallMargin - WallThickness, sx, sy), color));
+                    borders.Add((Renderer.VirtualToScreenRect(fx, fy + WallMargin - WallThickness, WallMargin, WallThickness), color));
+                    borders.Add((Renderer.VirtualToScreenRect(fx + WallMargin - WallThickness, fy, WallThickness, WallMargin - WallThickness), color));
                 }
                 if (cutTR)
                 {
-                    borders.Add((ToScreen(fxr - WallMargin, fy + WallMargin - WallThickness, WallMargin, WallThickness, sx, sy), color));
-                    borders.Add((ToScreen(fxr - WallMargin, fy, WallThickness, WallMargin - WallThickness, sx, sy), color));
+                    borders.Add((Renderer.VirtualToScreenRect(fxr - WallMargin, fy + WallMargin - WallThickness, WallMargin, WallThickness), color));
+                    borders.Add((Renderer.VirtualToScreenRect(fxr - WallMargin, fy, WallThickness, WallMargin - WallThickness), color));
                 }
                 if (cutBL)
                 {
-                    borders.Add((ToScreen(fx, fyb - WallMargin, WallMargin, WallThickness, sx, sy), color));
-                    borders.Add((ToScreen(fx + WallMargin - WallThickness, fyb - WallMargin + WallThickness, WallThickness, WallMargin - WallThickness, sx, sy), color));
+                    borders.Add((Renderer.VirtualToScreenRect(fx, fyb - WallMargin, WallMargin, WallThickness), color));
+                    borders.Add((Renderer.VirtualToScreenRect(fx + WallMargin - WallThickness, fyb - WallMargin + WallThickness, WallThickness, WallMargin - WallThickness), color));
                 }
                 if (cutBR)
                 {
-                    borders.Add((ToScreen(fxr - WallMargin, fyb - WallMargin, WallMargin, WallThickness, sx, sy), color));
-                    borders.Add((ToScreen(fxr - WallMargin, fyb - WallMargin + WallThickness, WallThickness, WallMargin - WallThickness, sx, sy), color));
+                    borders.Add((Renderer.VirtualToScreenRect(fxr - WallMargin, fyb - WallMargin, WallMargin, WallThickness), color));
+                    borders.Add((Renderer.VirtualToScreenRect(fxr - WallMargin, fyb - WallMargin + WallThickness, WallThickness, WallMargin - WallThickness), color));
                 }
             }
 
@@ -402,12 +398,4 @@ public class PacmanMazeBuilder : core.System
         }
     }
 
-    private static Rectangle ToScreen(float vx, float vy, float vw, float vh, float sx, float sy)
-    {
-        int px = (int)MathF.Round(vx * sx);
-        int py = (int)MathF.Round(vy * sy);
-        int pr = (int)MathF.Round((vx + vw) * sx);
-        int pb = (int)MathF.Round((vy + vh) * sy);
-        return new Rectangle(px, py, pr - px, pb - py);
-    }
 }

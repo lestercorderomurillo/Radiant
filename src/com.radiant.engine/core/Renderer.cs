@@ -121,6 +121,9 @@ public class Renderer : IDisposable
     /// <summary>Square Vector2 using ScreenHigherPowerOfTwo.</summary>
     public Vector2 ScreenSizeHigherPowerOfTwo { get; private set; }
 
+    /// <summary>Scale factor from virtual coordinates to screen pixels (ScreenSize / VirtualSize).</summary>
+    public Vector2 VirtualToScreenScale { get; private set; }
+
     #endregion
 
     #region Render Scale (Dynamic Resolution)
@@ -289,6 +292,7 @@ public class Renderer : IDisposable
         ScreenHigherPowerOfTwo = GetHigherPowerOfTwo(maxDimension);
         ScreenSizeLowerPowerOfTwo = new Vector2(ScreenLowerPowerOfTwo, ScreenLowerPowerOfTwo);
         ScreenSizeHigherPowerOfTwo = new Vector2(ScreenHigherPowerOfTwo, ScreenHigherPowerOfTwo);
+        VirtualToScreenScale = new Vector2(ScreenWidth / VirtualWidth, ScreenHeight / VirtualHeight);
     }
 
     private void UpdateScaledScreenInfo()
@@ -335,8 +339,24 @@ public class Renderer : IDisposable
     public Vector2 WorldToScreen(Vector2 worldPos)
     {
         return new Vector2(
-            worldPos.X * (ScreenWidth / VirtualWidth),
-            worldPos.Y * (ScreenHeight / VirtualHeight));
+            worldPos.X * VirtualToScreenScale.X,
+            worldPos.Y * VirtualToScreenScale.Y);
+    }
+
+    /// <summary>
+    /// Converts a virtual-coordinate rectangle to a screen-pixel Rectangle with edge-snapping.
+    /// Each edge is rounded independently so adjacent rectangles sharing a virtual edge
+    /// map to the exact same screen pixel — no sub-pixel gaps.
+    /// </summary>
+    public Rectangle VirtualToScreenRect(float x, float y, float width, float height)
+    {
+        float sx = VirtualToScreenScale.X;
+        float sy = VirtualToScreenScale.Y;
+        int px = (int)MathF.Round(x * sx);
+        int py = (int)MathF.Round(y * sy);
+        int pr = (int)MathF.Round((x + width) * sx);
+        int pb = (int)MathF.Round((y + height) * sy);
+        return new Rectangle(px, py, pr - px, pb - py);
     }
 
     #endregion

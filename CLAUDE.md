@@ -601,6 +601,8 @@ Renderer.RenderScaleChanged += (scale) => { /* resize RTs */ };
 // Coordinate conversion
 Vector2 worldPos = Renderer.ScreenToWorld(mouseScreenPos);
 Vector2 screenPos = Renderer.WorldToScreen(entityWorldPos);
+Vector2 scale = Renderer.VirtualToScreenScale;              // Cached (ScreenSize / VirtualSize)
+Rectangle rect = Renderer.VirtualToScreenRect(x, y, w, h); // Edge-snapped (no sub-pixel gaps)
 
 // Window state
 Renderer.IsActive          // Window focused?
