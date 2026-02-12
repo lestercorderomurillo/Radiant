@@ -255,6 +255,12 @@ public class PacmanMazeBuilder : core.System
                 float r = fx + CellSize - (cR ? WallMargin : 0);
                 float b = fy + CellSize - (cD ? WallMargin : 0);
 
+                // Extend fill into adjacent wall cells to prevent sub-pixel seam gaps
+                float fl = cL ? l : l - 1f;
+                float ft = cU ? t : t - 1f;
+                float fr = cR ? r : r + 1f;
+                float fb = cD ? b : b + 1f;
+
                 bool cutTL = !cL && !cU && !IsWall(x - 1, y - 1);
                 bool cutTR = !cR && !cU && !IsWall(x + 1, y - 1);
                 bool cutBL = !cL && !cD && !IsWall(x - 1, y + 1);
@@ -262,7 +268,7 @@ public class PacmanMazeBuilder : core.System
 
                 if (!cutTL && !cutTR && !cutBL && !cutBR)
                 {
-                    CreateWall(new Vector2(l, t), new Vector2(r - l, b - t));
+                    CreateWall(new Vector2(fl, ft), new Vector2(fr - fl, fb - ft));
                 }
                 else
                 {
@@ -270,17 +276,17 @@ public class PacmanMazeBuilder : core.System
                     float cy2 = fy + CellSize - WallMargin;
                     if (t < cy1)
                     {
-                        float sl = cutTL ? fx + WallMargin : l;
-                        float sr = cutTR ? fx + CellSize - WallMargin : r;
-                        CreateWall(new Vector2(sl, t), new Vector2(sr - sl, cy1 - t));
+                        float sl = cutTL ? fx + WallMargin : fl;
+                        float sr = cutTR ? fx + CellSize - WallMargin : fr;
+                        CreateWall(new Vector2(sl, ft), new Vector2(sr - sl, cy1 - ft + 1f));
                     }
                     if (cy1 < cy2)
-                        CreateWall(new Vector2(l, cy1), new Vector2(r - l, cy2 - cy1));
+                        CreateWall(new Vector2(fl, cy1), new Vector2(fr - fl, cy2 - cy1));
                     if (cy2 < b)
                     {
-                        float sl = cutBL ? fx + WallMargin : l;
-                        float sr = cutBR ? fx + CellSize - WallMargin : r;
-                        CreateWall(new Vector2(sl, cy2), new Vector2(sr - sl, b - cy2));
+                        float sl = cutBL ? fx + WallMargin : fl;
+                        float sr = cutBR ? fx + CellSize - WallMargin : fr;
+                        CreateWall(new Vector2(sl, cy2 - 1f), new Vector2(sr - sl, fb - cy2 + 1f));
                     }
                 }
 
