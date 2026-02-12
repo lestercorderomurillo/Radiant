@@ -737,6 +737,12 @@ Inspector.AddSlider("myWindow", "speedSlider", "Speed", 0f, 10f, 5f, (value) =>
     // callback with new float value
 });
 
+// Dropdown selector with options
+Inspector.AddDropdown("myWindow", "themeSelect", "Theme", ["Dark", "Light", "Blue"], 0, (index) =>
+{
+    // callback with selected index
+});
+
 // Remove a widget
 Inspector.RemoveWidget("myWindow", "oldWidget");
 ```
@@ -747,6 +753,8 @@ Inspector.RemoveWidget("myWindow", "oldWidget");
 Inspector.SetLabel("myWindow", "fpsLabel", $"FPS: {currentFps:F0}");
 Inspector.SetSliderValue("myWindow", "speedSlider", newSpeed);
 Inspector.SetToggleValue("myWindow", "debugToggle", true);
+Inspector.SetDropdownValue("myWindow", "themeSelect", 2);
+Inspector.SetDropdownOptions("myWindow", "themeSelect", ["A", "B", "C"]);
 ```
 
 ### Input Gating

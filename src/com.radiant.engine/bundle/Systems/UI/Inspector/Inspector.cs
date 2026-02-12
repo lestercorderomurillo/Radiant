@@ -39,6 +39,11 @@ public class Inspector : core.System
     private bool MouseOverUI;
     private bool GlobalVisible = false;
 
+    // Open dropdown state (only one can be open at a time)
+    private string OpenDropdownWindowId;
+    private string OpenDropdownWidgetId;
+    private Rectangle OpenDropdownPopupBounds;
+
     public static event Action WindowsRestored;
 
     // Layout constants
@@ -54,8 +59,8 @@ public class Inspector : core.System
     private const int SliderHandleSize = 16;
     private const int ToggleBoxSize = 22;
 
-    // Theme
-    private static bool DarkMode = true;
+    // Theme (0=Dark, 1=Light, 2=Blueish)
+    private static int CurrentTheme;
 
     // Colors (mutable for theme switching)
     private static Color WindowBg = new(12, 12, 16, 220);
@@ -104,6 +109,9 @@ public class Inspector : core.System
     public static void AddSlider(string WindowId, string WidgetId, string Text, float Min, float Max, float Initial, Action<float> Callback)
         => Instance?.AddSliderInternal(WindowId, WidgetId, Text, Min, Max, Initial, Callback);
 
+    public static void AddDropdown(string WindowId, string WidgetId, string Text, string[] Options, int Initial, Action<int> Callback)
+        => Instance?.AddDropdownInternal(WindowId, WidgetId, Text, Options, Initial, Callback);
+
     public static void RemoveWidget(string WindowId, string WidgetId)
         => Instance?.RemoveWidgetInternal(WindowId, WidgetId);
 
@@ -116,46 +124,74 @@ public class Inspector : core.System
     public static void SetToggleValue(string WindowId, string WidgetId, bool Value)
         => Instance?.SetToggleValueInternal(WindowId, WidgetId, Value);
 
+    public static void SetDropdownValue(string WindowId, string WidgetId, int Index)
+        => Instance?.SetDropdownValueInternal(WindowId, WidgetId, Index);
+
+    public static void SetDropdownOptions(string WindowId, string WidgetId, string[] Options)
+        => Instance?.SetDropdownOptionsInternal(WindowId, WidgetId, Options);
+
     public static bool IsMouseOverUI()
         => Instance?.MouseOverUI ?? false;
 
+    public static void ApplyTheme(int Index)
+    {
+        CurrentTheme = Index;
+        switch (Index)
+        {
+            case 0: // Dark
+                WindowBg = new(12, 12, 16, 220);
+                TitleBarColor = new(28, 28, 36, 240);
+                TitleBarHover = new(38, 38, 50, 240);
+                ButtonColor = new(40, 40, 55, 220);
+                ButtonHover = new(55, 55, 75, 240);
+                SliderTrack = new(30, 30, 42, 200);
+                SliderFill = new(70, 105, 180, 255);
+                SliderHandle = new(140, 140, 160, 255);
+                ToggleOn = new(70, 70, 160, 255);
+                ToggleOff = new(50, 50, 55, 200);
+                CloseColor = new(180, 60, 60, 255);
+                CloseHover = new(220, 80, 80, 255);
+                TextColor = new(220, 220, 230, 255);
+                LabelDim = new(160, 160, 170, 255);
+                break;
+            case 1: // Light
+                WindowBg = new(225, 225, 230, 235);
+                TitleBarColor = new(160, 162, 175, 240);
+                TitleBarHover = new(140, 142, 158, 240);
+                ButtonColor = new(170, 175, 192, 230);
+                ButtonHover = new(145, 150, 172, 245);
+                SliderTrack = new(180, 180, 190, 200);
+                SliderFill = new(55, 100, 190, 255);
+                SliderHandle = new(90, 90, 105, 255);
+                ToggleOn = new(55, 95, 185, 255);
+                ToggleOff = new(130, 130, 140, 230);
+                CloseColor = new(180, 60, 60, 255);
+                CloseHover = new(220, 80, 80, 255);
+                TextColor = new(25, 25, 30, 255);
+                LabelDim = new(65, 65, 75, 255);
+                break;
+            case 2: // Blueish
+                WindowBg = new(10, 16, 30, 225);
+                TitleBarColor = new(18, 30, 55, 240);
+                TitleBarHover = new(25, 42, 72, 240);
+                ButtonColor = new(22, 38, 65, 220);
+                ButtonHover = new(30, 52, 88, 240);
+                SliderTrack = new(15, 25, 50, 200);
+                SliderFill = new(50, 120, 210, 255);
+                SliderHandle = new(110, 155, 210, 255);
+                ToggleOn = new(40, 100, 200, 255);
+                ToggleOff = new(25, 40, 65, 200);
+                CloseColor = new(160, 55, 70, 255);
+                CloseHover = new(200, 75, 90, 255);
+                TextColor = new(180, 210, 240, 255);
+                LabelDim = new(110, 145, 185, 255);
+                break;
+        }
+    }
+
     public static void ToggleTheme()
     {
-        DarkMode = !DarkMode;
-        if (DarkMode)
-        {
-            WindowBg = new(12, 12, 16, 220);
-            TitleBarColor = new(28, 28, 36, 240);
-            TitleBarHover = new(38, 38, 50, 240);
-            ButtonColor = new(40, 40, 55, 220);
-            ButtonHover = new(55, 55, 75, 240);
-            SliderTrack = new(30, 30, 42, 200);
-            SliderFill = new(70, 105, 180, 255);
-            SliderHandle = new(140, 140, 160, 255);
-            ToggleOn = new(70, 70, 160, 255);
-            ToggleOff = new(50, 50, 55, 200);
-            CloseColor = new(180, 60, 60, 255);
-            CloseHover = new(220, 80, 80, 255);
-            TextColor = new(220, 220, 230, 255);
-            LabelDim = new(160, 160, 170, 255);
-        }
-        else
-        {
-            WindowBg = new(225, 225, 230, 235);
-            TitleBarColor = new(160, 162, 175, 240);
-            TitleBarHover = new(140, 142, 158, 240);
-            ButtonColor = new(170, 175, 192, 230);
-            ButtonHover = new(145, 150, 172, 245);
-            SliderTrack = new(180, 180, 190, 200);
-            SliderFill = new(55, 100, 190, 255);
-            SliderHandle = new(90, 90, 105, 255);
-            ToggleOn = new(55, 95, 185, 255);
-            ToggleOff = new(130, 130, 140, 230);
-            CloseColor = new(180, 60, 60, 255);
-            CloseHover = new(220, 80, 80, 255);
-            TextColor = new(25, 25, 30, 255);
-            LabelDim = new(65, 65, 75, 255);
-        }
+        ApplyTheme((CurrentTheme + 1) % 3);
     }
 
 
@@ -243,6 +279,18 @@ public class Inspector : core.System
         });
     }
 
+    private void AddDropdownInternal(string WindowId, string WidgetId, string Text, string[] Options, int Initial, Action<int> Callback)
+    {
+        if (!Windows.TryGetValue(WindowId, out var Window)) return;
+        if (Window.WidgetIndex.ContainsKey(WidgetId)) return;
+        Window.WidgetIndex[WidgetId] = Window.Widgets.Count;
+        Window.Widgets.Add(new Widget
+        {
+            Id = WidgetId, Type = WidgetType.Dropdown, Text = Text, Visible = true,
+            DropdownOptions = Options, DropdownSelected = Initial, DropdownCallback = Callback
+        });
+    }
+
     private void RemoveWidgetInternal(string WindowId, string WidgetId)
     {
         if (!Windows.TryGetValue(WindowId, out var Window)) return;
@@ -279,6 +327,29 @@ public class Inspector : core.System
         var W = Window.Widgets[Index];
         W.ToggleValue = Value;
         Window.Widgets[Index] = W;
+    }
+
+    private void SetDropdownValueInternal(string WindowId, string WidgetId, int Index)
+    {
+        if (!Windows.TryGetValue(WindowId, out var Window)) return;
+        if (!Window.WidgetIndex.TryGetValue(WidgetId, out int WidgetIdx)) return;
+        var W = Window.Widgets[WidgetIdx];
+        if (W.DropdownOptions != null && Index >= 0 && Index < W.DropdownOptions.Length)
+        {
+            W.DropdownSelected = Index;
+            Window.Widgets[WidgetIdx] = W;
+        }
+    }
+
+    private void SetDropdownOptionsInternal(string WindowId, string WidgetId, string[] Options)
+    {
+        if (!Windows.TryGetValue(WindowId, out var Window)) return;
+        if (!Window.WidgetIndex.TryGetValue(WidgetId, out int WidgetIdx)) return;
+        var W = Window.Widgets[WidgetIdx];
+        W.DropdownOptions = Options;
+        if (W.DropdownSelected >= Options.Length)
+            W.DropdownSelected = 0;
+        Window.Widgets[WidgetIdx] = W;
     }
 
     private void SortRenderOrder()
@@ -420,6 +491,20 @@ public class Inspector : core.System
         // Compute layout for hit testing
         ComputeAllLayouts();
 
+        // Hit test open dropdown popup first (renders on top of everything)
+        if (!Dragging && !DraggingSlider && OpenDropdownWindowId != null && LeftPressed)
+        {
+            if (OpenDropdownPopupBounds.Contains((int)VirtualMouse.X, (int)VirtualMouse.Y))
+            {
+                MouseOverUI = true;
+                HandleDropdownPopupClick(VirtualMouse);
+                PrevMouse = CurrentMouse;
+                return;
+            }
+            // Click outside popup closes it
+            CloseDropdown();
+        }
+
         // Hit test windows back-to-front (reverse order = highest Z first)
         if (!Dragging && !DraggingSlider)
         {
@@ -468,6 +553,10 @@ public class Inspector : core.System
             }
         }
 
+        // Mouse over open dropdown popup counts as over UI
+        if (OpenDropdownWindowId != null && OpenDropdownPopupBounds.Contains((int)VirtualMouse.X, (int)VirtualMouse.Y))
+            MouseOverUI = true;
+
         PrevMouse = CurrentMouse;
     }
 
@@ -497,6 +586,13 @@ public class Inspector : core.System
                 case WidgetType.Button:
                     W.ButtonCallback?.Invoke();
                     return;
+
+                case WidgetType.Dropdown:
+                    if (OpenDropdownWindowId == Window.Id && OpenDropdownWidgetId == W.Id)
+                        CloseDropdown();
+                    else
+                        OpenDropdown(Window.Id, W.Id, W);
+                    return;
             }
         }
     }
@@ -522,6 +618,46 @@ public class Inspector : core.System
         W.SliderValue = W.SliderMin + T * (W.SliderMax - W.SliderMin);
         Window.Widgets[Index] = W;
         W.SliderCallback?.Invoke(W.SliderValue);
+    }
+
+    private void OpenDropdown(string WindowId, string WidgetId, Widget W)
+    {
+        OpenDropdownWindowId = WindowId;
+        OpenDropdownWidgetId = WidgetId;
+        int optionCount = W.DropdownOptions?.Length ?? 0;
+        OpenDropdownPopupBounds = new Rectangle(W.Bounds.X, W.Bounds.Bottom, W.Bounds.Width, optionCount * WidgetHeight);
+    }
+
+    private void CloseDropdown()
+    {
+        if (OpenDropdownWindowId == null) return;
+        if (Windows.TryGetValue(OpenDropdownWindowId, out var Window))
+        {
+            if (Window.WidgetIndex.TryGetValue(OpenDropdownWidgetId, out int Index))
+            {
+                var W = Window.Widgets[Index];
+                W.DropdownOpen = false;
+                Window.Widgets[Index] = W;
+            }
+        }
+        OpenDropdownWindowId = null;
+        OpenDropdownWidgetId = null;
+    }
+
+    private void HandleDropdownPopupClick(Vector2 Mouse)
+    {
+        if (!Windows.TryGetValue(OpenDropdownWindowId, out var Window)) return;
+        if (!Window.WidgetIndex.TryGetValue(OpenDropdownWidgetId, out int Index)) return;
+
+        var W = Window.Widgets[Index];
+        int optionIndex = ((int)Mouse.Y - OpenDropdownPopupBounds.Y) / WidgetHeight;
+        if (W.DropdownOptions != null && optionIndex >= 0 && optionIndex < W.DropdownOptions.Length)
+        {
+            W.DropdownSelected = optionIndex;
+            Window.Widgets[Index] = W;
+            W.DropdownCallback?.Invoke(optionIndex);
+        }
+        CloseDropdown();
     }
 
     private Vector2 ScreenToVirtual(Vector2 ScreenPos)
@@ -628,6 +764,9 @@ public class Inspector : core.System
             DrawWindow(Window, VirtualMouse);
         }
 
+        // Second pass: dropdown popup overlay (renders on top of everything)
+        DrawDropdownPopup(VirtualMouse);
+
         Renderer.EndDraw();
     }
 
@@ -669,6 +808,7 @@ public class Inspector : core.System
                 case WidgetType.Button: DrawButton(W, Mouse); break;
                 case WidgetType.Toggle: DrawToggle(W, Mouse); break;
                 case WidgetType.Slider: DrawSlider(W, Mouse); break;
+                case WidgetType.Dropdown: DrawDropdown(W, Mouse); break;
             }
         }
     }
@@ -775,6 +915,58 @@ public class Inspector : core.System
         int HandleY = TrackY + SliderTrackHeight / 2 - SliderHandleSize / 2;
         var HandleRect = new Rectangle(HandleX, HandleY, SliderHandleSize, SliderHandleSize);
         Renderer.DrawSprite(Solid, HandleRect, SliderHandle);
+    }
+
+    private void DrawDropdown(Widget W, Vector2 Mouse)
+    {
+        var Solid = Renderer.GetSolidTexture(Color.White);
+        bool Hovered = W.Bounds.Contains((int)Mouse.X, (int)Mouse.Y);
+        Renderer.DrawSprite(Solid, W.Bounds, Hovered ? ButtonHover : ButtonColor);
+
+        string selectedLabel = W.DropdownOptions != null && W.DropdownSelected < W.DropdownOptions.Length
+            ? W.DropdownOptions[W.DropdownSelected] : "?";
+        string displayText = $"{W.Text}: {selectedLabel}";
+
+        var TextSize = Font.MeasureString(displayText);
+        var TextPos = new Vector2(
+            W.Bounds.X + (W.Bounds.Width - TextSize.X) / 2,
+            W.Bounds.Y + (W.Bounds.Height - TextSize.Y) / 2);
+        Renderer.DrawString(Font, displayText, TextPos, TextColor);
+
+        // Down arrow indicator
+        const float arrowScale = 0.7f;
+        var ArrowSize = Font.MeasureString("v") * arrowScale;
+        var ArrowPos = new Vector2(W.Bounds.Right - Padding - ArrowSize.X, W.Bounds.Y + (W.Bounds.Height - ArrowSize.Y) / 2);
+        Renderer.DrawString(Font, "v", ArrowPos, LabelDim, arrowScale);
+    }
+
+    private void DrawDropdownPopup(Vector2 Mouse)
+    {
+        if (OpenDropdownWindowId == null) return;
+        if (!Windows.TryGetValue(OpenDropdownWindowId, out var Window)) return;
+        if (!Window.WidgetIndex.TryGetValue(OpenDropdownWidgetId, out int Index)) return;
+
+        var W = Window.Widgets[Index];
+        if (W.DropdownOptions == null) return;
+
+        var Solid = Renderer.GetSolidTexture(Color.White);
+
+        // Popup background
+        Renderer.DrawSprite(Solid, OpenDropdownPopupBounds, WindowBg);
+
+        for (int I = 0; I < W.DropdownOptions.Length; I++)
+        {
+            var OptionRect = new Rectangle(OpenDropdownPopupBounds.X, OpenDropdownPopupBounds.Y + I * WidgetHeight, OpenDropdownPopupBounds.Width, WidgetHeight);
+            bool OptionHovered = OptionRect.Contains((int)Mouse.X, (int)Mouse.Y);
+            bool IsSelected = I == W.DropdownSelected;
+
+            Color OptionBg = IsSelected ? SliderFill : (OptionHovered ? ButtonHover : ButtonColor);
+            Renderer.DrawSprite(Solid, OptionRect, OptionBg);
+
+            var OptionTextSize = Font.MeasureString(W.DropdownOptions[I]);
+            var OptionTextPos = new Vector2(OptionRect.X + Padding, OptionRect.Y + (OptionRect.Height - OptionTextSize.Y) / 2);
+            Renderer.DrawString(Font, W.DropdownOptions[I], OptionTextPos, TextColor);
+        }
     }
 
     public override void Dispose()

@@ -9,7 +9,8 @@ public enum WidgetType
     Label,
     Button,
     Toggle,
-    Slider
+    Slider,
+    Dropdown
 }
 
 public struct Widget
@@ -26,6 +27,10 @@ public struct Widget
     public Action ButtonCallback;
     public Action<bool> ToggleCallback;
     public Action<float> SliderCallback;
+    public string[] DropdownOptions;
+    public int DropdownSelected;
+    public Action<int> DropdownCallback;
+    public bool DropdownOpen;
 }
 
 public class WindowData
