@@ -59,7 +59,7 @@ public class Inspector : core.System
     private const int SliderHandleSize = 16;
     private const int ToggleBoxSize = 22;
 
-    // Theme (0=Dark, 1=Light, 2=Blueish)
+    private static readonly string[] ThemeNames = ["Dark", "Light", "Blueish", "Monokai", "Nord"];
     private static int CurrentTheme;
 
     // Colors (mutable for theme switching)
@@ -133,6 +133,8 @@ public class Inspector : core.System
     public static bool IsMouseOverUI()
         => Instance?.MouseOverUI ?? false;
 
+    public static string[] GetThemeNames() => ThemeNames;
+
     public static void ApplyTheme(int Index)
     {
         CurrentTheme = Index;
@@ -186,12 +188,44 @@ public class Inspector : core.System
                 TextColor = new(180, 210, 240, 255);
                 LabelDim = new(110, 145, 185, 255);
                 break;
+            case 3: // Monokai
+                WindowBg = new(39, 40, 34, 225);
+                TitleBarColor = new(55, 56, 48, 240);
+                TitleBarHover = new(70, 71, 60, 240);
+                ButtonColor = new(60, 61, 52, 220);
+                ButtonHover = new(78, 79, 68, 240);
+                SliderTrack = new(45, 46, 38, 200);
+                SliderFill = new(166, 226, 46, 255);
+                SliderHandle = new(230, 219, 116, 255);
+                ToggleOn = new(166, 226, 46, 255);
+                ToggleOff = new(55, 56, 48, 200);
+                CloseColor = new(249, 38, 114, 255);
+                CloseHover = new(255, 80, 145, 255);
+                TextColor = new(248, 248, 242, 255);
+                LabelDim = new(117, 113, 94, 255);
+                break;
+            case 4: // Nord
+                WindowBg = new(46, 52, 64, 225);
+                TitleBarColor = new(59, 66, 82, 240);
+                TitleBarHover = new(67, 76, 94, 240);
+                ButtonColor = new(59, 66, 82, 220);
+                ButtonHover = new(67, 76, 94, 240);
+                SliderTrack = new(46, 52, 64, 200);
+                SliderFill = new(136, 192, 208, 255);
+                SliderHandle = new(129, 161, 193, 255);
+                ToggleOn = new(163, 190, 140, 255);
+                ToggleOff = new(59, 66, 82, 200);
+                CloseColor = new(191, 97, 106, 255);
+                CloseHover = new(210, 120, 130, 255);
+                TextColor = new(236, 239, 244, 255);
+                LabelDim = new(216, 222, 233, 200);
+                break;
         }
     }
 
     public static void ToggleTheme()
     {
-        ApplyTheme((CurrentTheme + 1) % 3);
+        ApplyTheme((CurrentTheme + 1) % ThemeNames.Length);
     }
 
 
@@ -685,7 +719,7 @@ public class Inspector : core.System
 
         // Title bar
         Window.TitleBarBounds = new Rectangle(X, Y, W, TitleBarHeight);
-        Window.CloseBounds = new Rectangle(X + W - CloseButtonSize - 6, Y + 6, CloseButtonSize, CloseButtonSize);
+        Window.CloseBounds = new Rectangle(X + W - CloseButtonSize - 6, Y + 8, CloseButtonSize, CloseButtonSize);
 
         // Widgets
         int ContentWidth = W - Padding * 2;

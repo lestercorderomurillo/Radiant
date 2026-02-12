@@ -74,6 +74,7 @@ public class PerformanceMonitor : core.System
         Inspector.AddLabel("perf", "gpu", "GPU: -");
         Inspector.AddLabel("perf", "ram", "RAM: -");
         Inspector.AddLabel("perf", "peak", "Peak: -");
+        Inspector.AddDropdown("perf", "fpsCap", "FPS Cap", GameLoop.FpsOptionNames, 2, (index) => Renderer.GameLoop?.SetTargetFps(GameLoop.FpsOptions[index]));
         Inspector.AddLabel("perf", "build", Window.BuildTag);
     }
 
@@ -216,22 +217,19 @@ public class PerformanceMonitor : core.System
         var gameLoop = Renderer.GameLoop;
         int TargetFps = gameLoop?.TargetFramesPerSecond ?? 144;
         float ActualFps = gameLoop?.FramesPerSecond ?? 1f;
-        float TargetMs = 1000f / TargetFps;
+        bool Uncapped = TargetFps <= 0;
 
         // Smooth FPS display - exponential moving average (less flickery)
         SmoothedDisplayFps = SmoothedDisplayFps == 0 ? ActualFps : SmoothedDisplayFps * 0.9f + ActualFps * 0.1f;
         int DisplayFps = (int)MathF.Round(SmoothedDisplayFps);
 
         // Reuse StringBuilders - zero allocation
-        FpsBuilder.Clear().Append("FPS: ").Append(DisplayFps).Append('/').Append(TargetFps);
+        FpsBuilder.Clear().Append("FPS: ").Append(DisplayFps);
+        if (!Uncapped) FpsBuilder.Append('/').Append(TargetFps);
         Inspector.SetLabel("perf", "fps", FpsBuilder.ToString());
 
-        FrameTimeBuilder.Clear()
-            .Append("Frame: ")
-            .AppendFormat("{0:F2}", FrameTimeAverage)
-            .Append("ms (target: ")
-            .AppendFormat("{0:F2}", TargetMs)
-            .Append("ms)");
+        FrameTimeBuilder.Clear().Append("Frame: ").AppendFormat("{0:F2}", FrameTimeAverage).Append("ms");
+        if (!Uncapped) FrameTimeBuilder.Append(" (target: ").AppendFormat("{0:F2}", 1000f / TargetFps).Append("ms)");
         Inspector.SetLabel("perf", "frame", FrameTimeBuilder.ToString());
 
         CpuBuilder.Clear().Append("CPU: ").AppendFormat("{0:F1}", CpuUsage).Append("% (").Append(CpuCoreCount).Append(" cores)");

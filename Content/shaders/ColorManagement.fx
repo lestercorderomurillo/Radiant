@@ -130,7 +130,30 @@ float4 PS_AgX(PixelShaderInput input) : SV_Target0
     return float4(LinearToSRGB(color), 1.0);
 }
 
-// ── Techniques ──────────────────────────────────────────────────────────────
+// Filmic: Hable (Uncharted 2)
+
+float3 HablePartial(float3 x)
+{
+    float A = 0.15; // Shoulder strength
+    float B = 0.50; // Linear strength
+    float C = 0.10; // Linear angle
+    float D = 0.20; // Toe strength
+    float E = 0.02; // Toe numerator
+    float F = 0.30; // Toe denominator
+    return ((x * (A * x + C * B) + D * E) / (x * (A * x + B) + D * F)) - E / F;
+}
+
+float4 PS_Filmic(PixelShaderInput input) : SV_Target0
+{
+    float3 color = InputTexture.Sample(Sampler0, input.UV).rgb;
+    float exposureBias = 2.0;
+    float3 mapped = HablePartial(color * exposureBias);
+    float3 whiteScale = 1.0 / HablePartial(11.2);
+    color = mapped * whiteScale;
+    return float4(LinearToSRGB(color), 1.0);
+}
+
+// Techniques
 
 technique None
 {
@@ -165,5 +188,14 @@ technique AgX
     {
         VertexShader = compile vs_5_0 MainVS();
         PixelShader  = compile ps_5_0 PS_AgX();
+    }
+}
+
+technique Filmic
+{
+    pass P0
+    {
+        VertexShader = compile vs_5_0 MainVS();
+        PixelShader  = compile ps_5_0 PS_Filmic();
     }
 }

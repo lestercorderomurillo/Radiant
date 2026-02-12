@@ -26,6 +26,8 @@ public class GameLoop : IGameObject
     public GameTime GameTime { get; set; }
 
     // Timing configuration
+    public static readonly int[] FpsOptions = [60, 120, 144, 0];
+    public static readonly string[] FpsOptionNames = ["60", "120", "144", "No Limit"];
     public int TargetFramesPerSecond { get; private set; } = 144;
 
     public int TargetUpdatesPerSecond { get; private set; } = 64;
@@ -71,6 +73,12 @@ public class GameLoop : IGameObject
         LastUpdateTicks = GlobalTimer.ElapsedTicks;
         LastFrameTicks = GlobalTimer.ElapsedTicks;
         LastFpsUpdate = GlobalTimer.Elapsed.TotalSeconds;
+    }
+
+    public void SetTargetFps(int fps)
+    {
+        TargetFramesPerSecond = fps;
+        FrameInterval = fps > 0 ? 1.0 / fps : 0;
     }
 
     public void Dispose()

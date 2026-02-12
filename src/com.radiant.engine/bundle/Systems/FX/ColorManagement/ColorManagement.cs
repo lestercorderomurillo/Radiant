@@ -10,7 +10,7 @@ namespace com.radiant.engine.bundle;
 public class ColorManagement : core.System
 {
     public override RenderLayer RenderLayer => RenderLayer.World;
-    private static readonly string[] TechniqueNames = ["None", "ACES", "ACES2", "AgX"];
+    private static readonly string[] TechniqueNames = ["None", "ACES", "ACES2", "AgX", "Filmic"];
     private int TechniqueIndex = 2;
     private Func<Texture2D> InputSource;
     private RenderTarget2D OutputTexture;
@@ -18,8 +18,7 @@ public class ColorManagement : core.System
     public override void Initialize()
     {
         Inspector.CreateWindow("colormgmt", "Color Management");
-        Inspector.AddLabel("colormgmt", "mode", $"Tonemapping: {TechniqueNames[TechniqueIndex]}");
-        Inspector.AddButton("colormgmt", "cycle", "Cycle Tonemapping", () => TechniqueIndex = (TechniqueIndex + 1) % TechniqueNames.Length);
+        Inspector.AddDropdown("colormgmt", "tonemap", "Tonemapping", TechniqueNames, TechniqueIndex, (index) => TechniqueIndex = index);
     }
 
     public void SetInputSource(Func<Texture2D> source)
@@ -58,7 +57,6 @@ public class ColorManagement : core.System
             .Commit()
             .SetTarget(null);
 
-        Inspector.SetLabel("colormgmt", "mode", $"Tonemapping: {TechniqueNames[TechniqueIndex]}");
     }
 
     public override void Render()

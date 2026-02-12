@@ -61,7 +61,7 @@ radiant/
 │   ├── shaders/
 │   │   ├── Geometry.fx                  # SDF/JFA generation + debug visualization
 │   │   ├── InstancedShapes.fx           # GPU-instanced 2D shape rendering
-│   │   ├── ColorManagement.fx           # Tonemapping (None/ACES/ACES2/AgX)
+│   │   ├── ColorManagement.fx           # Tonemapping (None/ACES/ACES2/AgX/Filmic)
 │   │   ├── HRC/                         # HRC GI shaders
 │   │   │   ├── HRC_Extensions.fx        #   Ray extension cascade N-1 → N
 │   │   │   ├── HRC_FluenceSum.fx        #   Average 4 frustums → final
