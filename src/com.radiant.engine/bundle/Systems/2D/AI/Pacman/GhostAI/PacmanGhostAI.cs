@@ -312,7 +312,8 @@ public class PacmanGhostAI : core.System
             {
                 float dx = pos.X - Player.WorldPosition.X;
                 float dy = pos.Y - Player.WorldPosition.Y;
-                if (dx * dx + dy * dy < BodyRadius * BodyRadius)
+                float catchRadius = BodyRadius + Player.HitboxRadius;
+                if (dx * dx + dy * dy < catchRadius * catchRadius)
                 {
                     if (Frightened[i])
                         EatGhost(i);

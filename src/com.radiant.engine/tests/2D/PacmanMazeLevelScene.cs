@@ -278,7 +278,7 @@ public class PacmanMazeLevelScene : Scene
         Maze.BuildMaze();
 
         // Coins + power pellets
-        Maze.SpawnCoins(config.CoinRadius * scale, config.CoinColor, 1f);
+        Maze.SpawnCoins(config.CoinRadius * scale, config.CoinColor, 1f, config.PlayerStartCell);
         var pelletPositions = config.PowerPelletCells ?? Maze.FindCornerPelletPositions();
         if (pelletPositions.Length > 0)
             Maze.SpawnPowerPellets(pelletPositions, config.PowerPelletRadius * scale, config.PowerPelletColor, 1f);

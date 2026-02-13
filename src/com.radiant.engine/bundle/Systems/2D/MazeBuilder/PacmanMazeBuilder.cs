@@ -100,7 +100,7 @@ public class PacmanMazeBuilder : core.System
         OffsetX + cx * CellSize + CellSize / 2f,
         OffsetY + cy * CellSize + CellSize / 2f);
 
-    public int[] SpawnCoins(float radius, Color emissive, float z)
+    public int[] SpawnCoins(float radius, Color emissive, float z, (int x, int y)? exclude = null)
     {
         var ecs = Scene.ECS;
         CoinCells.Clear();
@@ -108,7 +108,8 @@ public class PacmanMazeBuilder : core.System
         int count = 0;
         for (int y = 0; y < Rows; y++)
             for (int x = 0; x < Cols; x++)
-                if (!Grid[x, y] && !InGhostHouse(x, y) && !IsGhostDoor(x, y))
+                if (!Grid[x, y] && !InGhostHouse(x, y) && !IsGhostDoor(x, y)
+                    && !(exclude.HasValue && exclude.Value.x == x && exclude.Value.y == y))
                     count++;
 
         var ids = new int[count];
@@ -117,6 +118,7 @@ public class PacmanMazeBuilder : core.System
             for (int x = 0; x < Cols; x++)
             {
                 if (Grid[x, y] || InGhostHouse(x, y) || IsGhostDoor(x, y)) continue;
+                if (exclude.HasValue && exclude.Value.x == x && exclude.Value.y == y) continue;
                 int id = LightFactory.CreateLight(ecs, CellCenter(x, y), radius,
                     emissive, emissive, z);
                 ids[idx++] = id;

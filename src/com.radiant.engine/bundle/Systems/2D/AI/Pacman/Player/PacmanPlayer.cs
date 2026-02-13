@@ -21,6 +21,7 @@ public class PacmanPlayer : core.System
     public PacmanGhostAI GhostAI { get; set; }
     public RainbowGhostAI RainbowAI { get; set; }
     public float FrightenedDuration { get; set; } = 5f;
+    public float HitboxRadius { get; set; } = 10f;
 
     PacmanMazeBuilder Maze;
     Geometry Geometry;
@@ -129,24 +130,10 @@ public class PacmanPlayer : core.System
             Cell = (Maze.WrapX(raw.x), raw.y);
             pos = Maze.CellCenter(Cell.x, Cell.y);
 
-            // Collect coin or power pellet at new cell
             if (Cell != PrevCell)
             {
                 if (!HasMoved) HasMoved = true;
-                
-                if (Maze.TryCollectCoin(Cell.x, Cell.y))
-                {
-                    CoinsCollected++;
-                    CollectFlash = 1f;
-                }
-
-                if (Maze.TryCollectPowerPellet(Cell.x, Cell.y))
-                {
-                    GhostAI?.SetFrightened(FrightenedDuration);
-                    RainbowAI?.SetFrightened(FrightenedDuration);
-                    CollectFlash = 1f;
-                }
-
+                CollectAt(Cell.x, Cell.y);
                 PrevCell = Cell;
             }
 
@@ -184,6 +171,19 @@ public class PacmanPlayer : core.System
         WobbleY = CurrentDir.dy != 0 ? 0f : wobble;
         transform.Position = new Vector3(pos.X + WobbleX, pos.Y + WobbleY, Z);
         WorldPosition = pos;
+
+        // Collect ahead cell when within 0.2 * CellSize (~1.2 cell reach)
+        if (CurrentDir != (0, 0))
+        {
+            int aheadX = Maze.WrapX(Cell.x + CurrentDir.dx);
+            int aheadY = Cell.y + CurrentDir.dy;
+            var aheadCenter = Maze.CellCenter(aheadX, aheadY);
+            float adx = pos.X - aheadCenter.X;
+            float ady = pos.Y - aheadCenter.Y;
+            float reachThreshold = Maze.CellSize * 0.425f;
+            if (adx * adx + ady * ady < reachThreshold * reachThreshold)
+                CollectAt(aheadX, aheadY);
+        }
 
         // Coin collect: radius bump
         if (CollectFlash > 0f)
@@ -373,6 +373,22 @@ public class PacmanPlayer : core.System
         else
         {
             BufferedDir = desired;
+        }
+    }
+
+    void CollectAt(int cx, int cy)
+    {
+        if (Maze.TryCollectCoin(cx, cy))
+        {
+            CoinsCollected++;
+            CollectFlash = 1f;
+        }
+
+        if (Maze.TryCollectPowerPellet(cx, cy))
+        {
+            GhostAI?.SetFrightened(FrightenedDuration);
+            RainbowAI?.SetFrightened(FrightenedDuration);
+            CollectFlash = 1f;
         }
     }
 
