@@ -47,7 +47,7 @@ public class Inspector : core.System
     public static event Action WindowsRestored;
 
     // Layout constants
-    private const int DefaultWindowWidth = 340;
+    private const int DefaultWindowWidth = 375;
     private const int TitleBarHeight = 40;
     private const int WidgetHeight = 36;
     private const int WidgetSpacing = 6;
@@ -59,7 +59,7 @@ public class Inspector : core.System
     private const int SliderHandleSize = 16;
     private const int ToggleBoxSize = 22;
 
-    private static readonly string[] ThemeNames = ["Dark", "Light", "Blueish", "Monokai", "Nord"];
+    private static readonly string[] ThemeNames = ["Dark", "Light", "Monokai", "Nord", "Dracula", "Solarized", "Gruvbox"];
     private static int CurrentTheme;
 
     // Colors (mutable for theme switching)
@@ -76,6 +76,7 @@ public class Inspector : core.System
     private static Color CloseColor = new(180, 60, 60, 255);
     private static Color CloseHover = new(220, 80, 80, 255);
     private static Color TextColor = new(220, 220, 230, 255);
+    private static Color CloseText = new(220, 220, 230, 255);
     private static Color LabelDim = new(160, 160, 170, 255);
 
 
@@ -151,9 +152,10 @@ public class Inspector : core.System
                 SliderHandle = new(140, 140, 160, 255);
                 ToggleOn = new(70, 70, 160, 255);
                 ToggleOff = new(50, 50, 55, 200);
-                CloseColor = new(180, 60, 60, 255);
-                CloseHover = new(220, 80, 80, 255);
+                CloseColor = new(60, 60, 140, 255);
+                CloseHover = new(80, 80, 180, 255);
                 TextColor = new(220, 220, 230, 255);
+                CloseText = new(220, 220, 230, 255);
                 LabelDim = new(160, 160, 170, 255);
                 break;
             case 1: // Light
@@ -170,41 +172,27 @@ public class Inspector : core.System
                 CloseColor = new(180, 60, 60, 255);
                 CloseHover = new(220, 80, 80, 255);
                 TextColor = new(25, 25, 30, 255);
+                CloseText = new(255, 255, 255, 255);
                 LabelDim = new(65, 65, 75, 255);
                 break;
-            case 2: // Blueish
-                WindowBg = new(10, 16, 30, 225);
-                TitleBarColor = new(18, 30, 55, 240);
-                TitleBarHover = new(25, 42, 72, 240);
-                ButtonColor = new(22, 38, 65, 220);
-                ButtonHover = new(30, 52, 88, 240);
-                SliderTrack = new(15, 25, 50, 200);
-                SliderFill = new(50, 120, 210, 255);
-                SliderHandle = new(110, 155, 210, 255);
-                ToggleOn = new(40, 100, 200, 255);
-                ToggleOff = new(25, 40, 65, 200);
-                CloseColor = new(160, 55, 70, 255);
-                CloseHover = new(200, 75, 90, 255);
-                TextColor = new(180, 210, 240, 255);
-                LabelDim = new(110, 145, 185, 255);
-                break;
-            case 3: // Monokai
-                WindowBg = new(39, 40, 34, 225);
-                TitleBarColor = new(55, 56, 48, 240);
-                TitleBarHover = new(70, 71, 60, 240);
-                ButtonColor = new(60, 61, 52, 220);
-                ButtonHover = new(78, 79, 68, 240);
-                SliderTrack = new(45, 46, 38, 200);
-                SliderFill = new(166, 226, 46, 255);
+            case 2: // Monokai
+                WindowBg = new(28, 29, 24, 230);
+                TitleBarColor = new(52, 53, 44, 245);
+                TitleBarHover = new(72, 73, 62, 245);
+                ButtonColor = new(56, 57, 48, 225);
+                ButtonHover = new(88, 89, 75, 245);
+                SliderTrack = new(36, 37, 30, 210);
+                SliderFill = new(130, 200, 80, 255);
                 SliderHandle = new(230, 219, 116, 255);
-                ToggleOn = new(166, 226, 46, 255);
-                ToggleOff = new(55, 56, 48, 200);
-                CloseColor = new(249, 38, 114, 255);
-                CloseHover = new(255, 80, 145, 255);
+                ToggleOn = new(130, 200, 80, 255);
+                ToggleOff = new(42, 43, 36, 210);
+                CloseColor = new(105, 170, 60, 255);
+                CloseHover = new(140, 210, 85, 255);
                 TextColor = new(248, 248, 242, 255);
-                LabelDim = new(117, 113, 94, 255);
+                CloseText = new(248, 248, 242, 255);
+                LabelDim = new(140, 136, 112, 255);
                 break;
-            case 4: // Nord
+            case 3: // Nord
                 WindowBg = new(46, 52, 64, 225);
                 TitleBarColor = new(59, 66, 82, 240);
                 TitleBarHover = new(67, 76, 94, 240);
@@ -215,10 +203,62 @@ public class Inspector : core.System
                 SliderHandle = new(129, 161, 193, 255);
                 ToggleOn = new(163, 190, 140, 255);
                 ToggleOff = new(59, 66, 82, 200);
-                CloseColor = new(191, 97, 106, 255);
-                CloseHover = new(210, 120, 130, 255);
+                CloseColor = new(110, 160, 180, 255);
+                CloseHover = new(140, 200, 215, 255);
                 TextColor = new(236, 239, 244, 255);
+                CloseText = new(236, 239, 244, 255);
                 LabelDim = new(216, 222, 233, 200);
+                break;
+            case 4: // Dracula
+                WindowBg = new(28, 30, 40, 230);
+                TitleBarColor = new(50, 53, 70, 245);
+                TitleBarHover = new(70, 74, 98, 245);
+                ButtonColor = new(52, 55, 74, 225);
+                ButtonHover = new(82, 86, 115, 245);
+                SliderTrack = new(36, 38, 52, 210);
+                SliderFill = new(255, 184, 108, 255);
+                SliderHandle = new(255, 210, 150, 255);
+                ToggleOn = new(80, 250, 123, 255);
+                ToggleOff = new(42, 44, 58, 210);
+                CloseColor = new(220, 155, 80, 255);
+                CloseHover = new(255, 184, 108, 255);
+                TextColor = new(248, 248, 242, 255);
+                CloseText = new(248, 248, 242, 255);
+                LabelDim = new(118, 134, 180, 255);
+                break;
+            case 5: // Solarized
+                WindowBg = new(0, 43, 54, 225);
+                TitleBarColor = new(7, 54, 66, 240);
+                TitleBarHover = new(18, 66, 78, 240);
+                ButtonColor = new(7, 54, 66, 220);
+                ButtonHover = new(18, 66, 78, 240);
+                SliderTrack = new(0, 43, 54, 200);
+                SliderFill = new(38, 139, 210, 255);
+                SliderHandle = new(42, 161, 152, 255);
+                ToggleOn = new(133, 153, 0, 255);
+                ToggleOff = new(7, 54, 66, 200);
+                CloseColor = new(30, 115, 180, 255);
+                CloseHover = new(45, 150, 220, 255);
+                TextColor = new(253, 246, 227, 255);
+                CloseText = new(253, 246, 227, 255);
+                LabelDim = new(147, 161, 161, 255);
+                break;
+            case 6: // Gruvbox
+                WindowBg = new(40, 40, 40, 225);
+                TitleBarColor = new(60, 56, 54, 240);
+                TitleBarHover = new(80, 73, 69, 240);
+                ButtonColor = new(60, 56, 54, 220);
+                ButtonHover = new(80, 73, 69, 240);
+                SliderTrack = new(50, 48, 47, 200);
+                SliderFill = new(215, 153, 33, 255);
+                SliderHandle = new(250, 189, 47, 255);
+                ToggleOn = new(152, 151, 26, 255);
+                ToggleOff = new(60, 56, 54, 200);
+                CloseColor = new(185, 130, 25, 255);
+                CloseHover = new(230, 165, 40, 255);
+                TextColor = new(235, 219, 178, 255);
+                CloseText = new(235, 219, 178, 255);
+                LabelDim = new(168, 153, 132, 255);
                 break;
         }
     }
@@ -827,8 +867,8 @@ public class Inspector : core.System
         var CloseTextPos = new Vector2(
             Window.CloseBounds.X + (Window.CloseBounds.Width - CloseTextSize.X) / 2,
             Window.CloseBounds.Y + (Window.CloseBounds.Height - CloseTextSize.Y) / 2);
-        Renderer.DrawString(Font, "X", CloseTextPos, TextColor, CloseScale);
-        Renderer.DrawString(Font, "X", CloseTextPos + Vector2.UnitX, TextColor, CloseScale);
+        Renderer.DrawString(Font, "X", CloseTextPos, CloseText, CloseScale);
+        Renderer.DrawString(Font, "X", CloseTextPos + Vector2.UnitX, CloseText, CloseScale);
 
         // Widgets
         for (int I = 0; I < Window.Widgets.Count; I++)

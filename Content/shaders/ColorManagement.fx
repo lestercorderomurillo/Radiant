@@ -153,6 +153,51 @@ float4 PS_Filmic(PixelShaderInput input) : SV_Target0
     return float4(LinearToSRGB(color), 1.0);
 }
 
+// Reinhard
+
+float4 PS_Reinhard(PixelShaderInput input) : SV_Target0
+{
+    float3 color = InputTexture.Sample(Sampler0, input.UV).rgb;
+    color = color / (1.0 + color);
+    return float4(LinearToSRGB(color), 1.0);
+}
+
+// Uchimura (Gran Turismo)
+
+float UchimuraCurve(float x, float P, float a, float m, float l, float c, float b)
+{
+    float l0 = ((P - m) * l) / a;
+    float S0 = m + l0;
+    float S1 = m + a * l0;
+    float C2 = (a * P) / (P - S1);
+    float CP = -C2 / P;
+
+    float w0 = 1.0 - smoothstep(0.0, m, x);
+    float w2 = step(m + l0, x);
+    float w1 = 1.0 - w0 - w2;
+
+    float T = m * pow(x / m, c) + b;
+    float S = P - (P - S1) * exp(CP * (x - S0));
+    float L = m + a * (x - m);
+
+    return T * w0 + L * w1 + S * w2;
+}
+
+float4 PS_Uchimura(PixelShaderInput input) : SV_Target0
+{
+    float3 color = InputTexture.Sample(Sampler0, input.UV).rgb;
+    float P = 1.0;   // Max brightness
+    float a = 1.0;   // Contrast
+    float m = 0.22;  // Linear section start
+    float l = 0.4;   // Linear section length
+    float c = 1.33;  // Black tightness curve
+    float b = 0.0;   // Black offset
+    color.r = UchimuraCurve(color.r, P, a, m, l, c, b);
+    color.g = UchimuraCurve(color.g, P, a, m, l, c, b);
+    color.b = UchimuraCurve(color.b, P, a, m, l, c, b);
+    return float4(LinearToSRGB(color), 1.0);
+}
+
 // Techniques
 
 technique None
@@ -197,5 +242,23 @@ technique Filmic
     {
         VertexShader = compile vs_5_0 MainVS();
         PixelShader  = compile ps_5_0 PS_Filmic();
+    }
+}
+
+technique Reinhard
+{
+    pass P0
+    {
+        VertexShader = compile vs_5_0 MainVS();
+        PixelShader  = compile ps_5_0 PS_Reinhard();
+    }
+}
+
+technique Uchimura
+{
+    pass P0
+    {
+        VertexShader = compile vs_5_0 MainVS();
+        PixelShader  = compile ps_5_0 PS_Uchimura();
     }
 }

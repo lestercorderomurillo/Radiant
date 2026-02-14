@@ -241,6 +241,23 @@ public class ECS : IGameObject
         return id;
     }
 
+    public void DestroyAllEntities()
+    {
+        foreach (var arch in Archetypes)
+        {
+            var entities = arch.GetEntities();
+            for (int i = arch.EntityCount - 1; i >= 0; i--)
+            {
+                int entity = entities[i];
+                Spatial.Remove(entity);
+                arch.Remove(i);
+                EntityRecords[entity] = default;
+                RecycledIds.Push(entity);
+                EntityCount_--;
+            }
+        }
+    }
+
     public bool DestroyEntity(int entity)
     {
         ref var record = ref EntityRecords[entity];

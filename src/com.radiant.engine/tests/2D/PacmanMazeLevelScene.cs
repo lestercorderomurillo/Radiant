@@ -70,6 +70,7 @@ public class PacmanMazeLevelScene : Scene
         // Level 1: Classic — Blinky, Pinky, Inky, Clyde
         new PacmanLevelConfig
         {
+            Tag = "1-1",
             Layout = PacmanLayout,
             WallAlbedo = new Color((byte)0, (byte)0, (byte)40, (byte)255),
             WallEmissive = new Color((byte)90, (byte)45, (byte)160, (byte)170),
@@ -89,6 +90,7 @@ public class PacmanMazeLevelScene : Scene
         // Level 2: Pinky, Blinky, Shadow (seeded)
         new PacmanLevelConfig
         {
+            Tag = "1-2",
             Procedural = true,
             MazeSeed = 2482,
             WallAlbedo = new Color(0, 0, 55),
@@ -107,6 +109,7 @@ public class PacmanMazeLevelScene : Scene
         // Level 3: Rainbow, Clyde, Inky, Blinky (seeded)
         new PacmanLevelConfig
         {
+            Tag = "1-3",
             Procedural = true,
             MazeSeed = 1344,
             WallAlbedo = new Color(30, 30, 20),
@@ -126,6 +129,7 @@ public class PacmanMazeLevelScene : Scene
         // Level 4: Dinky, Clyde, Blinky (seeded)
         new PacmanLevelConfig
         {
+            Tag = "1-4",
             Procedural = true,
             MazeSeed = 1235,
             WallAlbedo = new Color(101, 61, 65),
@@ -144,6 +148,7 @@ public class PacmanMazeLevelScene : Scene
         // Level 5: Shadow, Pinky, Rainbow, Clyde (procedural)
         new PacmanLevelConfig
         {
+            Tag = "2-1",
             Procedural = true,
             MazeSeed = 7131,
             WallAlbedo = new Color(38, 16, 25),
@@ -163,6 +168,7 @@ public class PacmanMazeLevelScene : Scene
         // Level 6: Shadow x3 (procedural)
         new PacmanLevelConfig
         {
+            Tag = "2-2",
             Procedural = true,
             MazeSeed = 8264,
             WallAlbedo = new Color(55, 5, 5),
@@ -226,6 +232,7 @@ public class PacmanMazeLevelScene : Scene
         Inspector.AddLabel("scene", "gi", $"GI: {GIGroup.ActiveName}");
         Inspector.AddLabel("scene", "upscaler", $"Upscaler: {UpscalerGroup.ActiveName}");
 
+        Inspector.AddButton("scene", "restartLevel", "Restart Level", () => RestartLevel());
         Inspector.AddButton("scene", "nextLevel", "Next Level", () => LoadLevel((CurrentLevel + 1) % Levels.Length));
         Inspector.AddButton("scene", "spawnLights", "Spawn Lights", () => LightFactory.SpawnRandom(ECS, 100_000, Renderer.VirtualSize));
 
@@ -253,9 +260,19 @@ public class PacmanMazeLevelScene : Scene
         base.SetupScene();
     }
 
+    private void RestartLevel()
+    {
+        ECS.DestroyAllEntities();
+        GhostAI.Clear();
+        RainbowAI.Clear();
+        PlayerSystem.Clear();
+        Maze.ClearCoins();
+        Maze.ClearMaze();
+        LoadLevel(CurrentLevel);
+    }
+
     private void LoadLevel(int index)
     {
-        // Clear previous level
         GhostAI.Clear();
         RainbowAI.Clear();
         PlayerSystem.Clear();
@@ -354,6 +371,7 @@ public class PacmanMazeLevelScene : Scene
         ECS.AddComponent<MotionTrackable>(playerId);
 
         PlayerSystem.Speed = config.GhostSpeed * scale;
+        PlayerSystem.LevelTag = config.Tag;
         PlayerSystem.Track(playerId, playerCell, 65530f);
         PlayerSystem.CoinColor = config.CoinColor;
         PlayerSystem.GhostAI = GhostAI;

@@ -22,6 +22,7 @@ public class PacmanPlayer : core.System
     public RainbowGhostAI RainbowAI { get; set; }
     public float FrightenedDuration { get; set; } = 5f;
     public float HitboxRadius { get; set; } = 10f;
+    public string LevelTag { get; set; } = "1-1";
 
     PacmanMazeBuilder Maze;
     Geometry Geometry;
@@ -301,41 +302,53 @@ public class PacmanPlayer : core.System
             Renderer.ScreenHeight / Renderer.VirtualHeight,
             1f);
 
+        float Padding = 18f;
+        float IconSize = 40f;
+        float Gap = 14f;
+
+        float MazeLeft = Maze.OffsetX + 40f;
+        float MazeRight = Maze.OffsetX + Maze.Cols * Maze.CellSize - 40f;
+        float Y = Maze.OffsetY - 45f;
+
+        // Measure room tag
+        var TagSize = HudFont.MeasureString(LevelTag);
+        float TagBlockWidth = TagSize.X;
+        float TextHeight = TagSize.Y;
+
+        // Measure coins
         string Collected = CoinsCollected.ToString();
         string Separator = " / ";
         string Total = CoinsTotal.ToString();
-
         var CollectedSize = HudFont.MeasureString(Collected);
         var SeparatorSize = HudFont.MeasureString(Separator);
         var TotalSize = HudFont.MeasureString(Total);
-
-        float IconSize = 40f;
-        float Gap = 14f;
-        float TextWidth = CollectedSize.X + SeparatorSize.X + TotalSize.X;
-        float FullWidth = IconSize + Gap + TextWidth;
-        float TextHeight = CollectedSize.Y;
-
-        float Padding = 18f;
-        float X = (Renderer.VirtualWidth - FullWidth) / 2f;
-        float Y = 20f;
-
-        var BgRect = new Rectangle(
-            (int)(X - Padding), (int)(Y - Padding * 0.6f),
-            (int)(FullWidth + Padding * 2f), (int)(TextHeight + Padding * 1.2f));
+        float CoinTextWidth = CollectedSize.X + SeparatorSize.X + TotalSize.X;
+        float CoinBlockWidth = IconSize + Gap + CoinTextWidth;
 
         Renderer.BeginDraw(SpriteSortMode.Deferred, BlendState.AlphaBlend, transform: Scale);
 
-        Renderer.DrawSprite(Renderer.GetSolidTexture(Color.White), BgRect, new Color(0, 0, 0, 180));
+        // Left of maze: room tag
+        float TagX = MazeLeft;
+        var TagBg = new Rectangle(
+            (int)(TagX - Padding), (int)(Y - Padding * 0.6f),
+            (int)(TagBlockWidth + Padding * 2f), (int)(TextHeight + Padding * 1.2f));
+        Renderer.DrawSprite(Renderer.GetSolidTexture(Color.White), TagBg, new Color(0, 0, 0, 180));
+        Renderer.DrawString(HudFont, LevelTag, new Vector2(TagX, Y), new Color(255, 255, 255));
 
-        // Coin icon
+        // Right of maze: coins
+        float CoinX = MazeRight - CoinBlockWidth;
+        var CoinBg = new Rectangle(
+            (int)(CoinX - Padding), (int)(Y - Padding * 0.6f),
+            (int)(CoinBlockWidth + Padding * 2f), (int)(TextHeight + Padding * 1.2f));
+        Renderer.DrawSprite(Renderer.GetSolidTexture(Color.White), CoinBg, new Color(0, 0, 0, 180));
+
         var CoinTex = Renderer.GetCircleTexture((int)IconSize);
         var IconRect = new Rectangle(
-            (int)X, (int)(Y + (TextHeight - IconSize) / 2f),
+            (int)CoinX, (int)(Y + (TextHeight - IconSize) / 2f),
             (int)IconSize, (int)IconSize);
         Renderer.DrawSprite(CoinTex, IconRect, CoinColor);
 
-        // Text
-        float TextX = X + IconSize + Gap;
+        float TextX = CoinX + IconSize + Gap;
         Renderer.DrawString(HudFont, Collected, new Vector2(TextX, Y), CoinColor);
         TextX += CollectedSize.X;
         Renderer.DrawString(HudFont, Separator, new Vector2(TextX, Y), new Color(200, 200, 200));

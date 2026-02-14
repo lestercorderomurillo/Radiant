@@ -12,6 +12,7 @@ public struct GhostEntry
 
 public class PacmanLevelConfig
 {
+    public string Tag { get; set; } = "1-1";
     public string[] Layout { get; set; }
     public bool Procedural { get; set; }
     public int MazeSeed { get; set; }
