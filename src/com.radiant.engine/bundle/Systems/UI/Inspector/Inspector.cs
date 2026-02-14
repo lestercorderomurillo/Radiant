@@ -61,6 +61,7 @@ public class Inspector : core.System
 
     private static readonly string[] ThemeNames = ["Dark", "Light", "Monokai", "Nord", "Dracula", "Solarized", "Gruvbox"];
     private static int CurrentTheme;
+    private static float UIScale = 1.0f;
 
     // Colors (mutable for theme switching)
     private static Color WindowBg = new(12, 12, 16, 220);
@@ -502,6 +503,9 @@ public class Inspector : core.System
         Font = Renderer.GetFont("fonts/BaseFont");
         PrevMouse = Mouse.GetState();
         PrevKeyState = Keyboard.GetState();
+
+        CreateWindow("inspector", "Inspector");
+        AddSlider("inspector", "uiScale", "UI Scale", 0.5f, 2.0f, 1.0f, (value) => { UIScale = value; LayoutDone = false; });
     }
 
     public override void Update()
@@ -737,8 +741,8 @@ public class Inspector : core.System
     private Vector2 ScreenToVirtual(Vector2 ScreenPos)
     {
         return new Vector2(
-            ScreenPos.X * (Renderer.VirtualWidth / Renderer.ScreenWidth),
-            ScreenPos.Y * (Renderer.VirtualHeight / Renderer.ScreenHeight));
+            ScreenPos.X * (Renderer.VirtualWidth / Renderer.ScreenWidth) / UIScale,
+            ScreenPos.Y * (Renderer.VirtualHeight / Renderer.ScreenHeight) / UIScale);
     }
 
 
@@ -823,8 +827,8 @@ public class Inspector : core.System
         ComputeAllLayouts();
 
         var Scale = Matrix.CreateScale(
-            Renderer.ScreenWidth / Renderer.VirtualWidth,
-            Renderer.ScreenHeight / Renderer.VirtualHeight,
+            Renderer.ScreenWidth / Renderer.VirtualWidth * UIScale,
+            Renderer.ScreenHeight / Renderer.VirtualHeight * UIScale,
             1f);
 
         var CurrentMouse = Mouse.GetState();
