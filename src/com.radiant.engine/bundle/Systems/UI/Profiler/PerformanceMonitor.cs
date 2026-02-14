@@ -75,6 +75,7 @@ public class PerformanceMonitor : core.System
         Inspector.AddLabel("perf", "ram", "RAM: -");
         Inspector.AddLabel("perf", "peak", "Peak: -");
         Inspector.AddDropdown("perf", "fpsCap", "FPS Cap", GameLoop.FpsOptionNames, 2, (index) => Renderer.GameLoop?.SetTargetFps(GameLoop.FpsOptions[index]));
+        Inspector.AddToggle("perf", "throttleUnfocused", "Throttle Unfocused", true, (enabled) => { if (Renderer.GameLoop != null) Renderer.GameLoop.ThrottleUnfocused = enabled; });
         Inspector.AddLabel("perf", "build", Window.BuildTag);
     }
 

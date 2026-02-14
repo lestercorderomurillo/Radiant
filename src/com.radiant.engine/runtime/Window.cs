@@ -35,6 +35,7 @@ public class Window : Game
 
         IsMouseVisible = true;
         IsFixedTimeStep = false;
+        InactiveSleepTime = TimeSpan.Zero;
 
         GraphicsDeviceManager.SynchronizeWithVerticalRetrace = false;
         GraphicsDeviceManager.PreferredDepthStencilFormat = DepthFormat.None;

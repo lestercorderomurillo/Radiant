@@ -54,18 +54,12 @@ public class Scene : IGameObject
 
     internal void InternalRender()
     {
-        if (!Renderer.IsActive)
-            return;
-
         Render();
         ECS.Render();
     }
 
     internal void InternalLateRender()
     {
-        if (!Renderer.IsActive)
-            return;
-
         LateRender();
         ECS.LateRender();
     }

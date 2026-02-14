@@ -29,12 +29,15 @@ public class GameLoop : IGameObject
     public static readonly int[] FpsOptions = [60, 120, 144, 0];
     public static readonly string[] FpsOptionNames = ["60", "120", "144", "No Limit"];
     public int TargetFramesPerSecond { get; private set; } = 144;
+    public const int UnfocusedFramesPerSecond = 30;
+    public bool ThrottleUnfocused = true;
 
     public int TargetUpdatesPerSecond { get; private set; } = 64;
 
     private double UpdateInterval;
 
     private double FrameInterval;
+    private static readonly double UnfocusedFrameInterval = 1.0 / UnfocusedFramesPerSecond;
 
     // Timing state
     private Stopwatch GlobalTimer = new();
@@ -157,9 +160,11 @@ public class GameLoop : IGameObject
         long frameStartTicks = GlobalTimer.ElapsedTicks;
 
         // Frame pacing - yield-based sleep with short spin-wait finish
-        if (TargetFramesPerSecond > 0)
+        bool focused = Window.IsActive;
+        double activeInterval = (!focused && ThrottleUnfocused) ? UnfocusedFrameInterval : FrameInterval;
+        if (activeInterval > 0)
         {
-            long targetTicks = LastFrameTicks + (long)(FrameInterval * Stopwatch.Frequency);
+            long targetTicks = LastFrameTicks + (long)(activeInterval * Stopwatch.Frequency);
 
             if (frameStartTicks < targetTicks)
             {
