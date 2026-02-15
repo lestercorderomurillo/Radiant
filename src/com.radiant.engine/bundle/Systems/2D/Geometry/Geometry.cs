@@ -175,12 +175,8 @@ public class Geometry : core.System
         ReadBuffer = 1;
 
         Inspector.CreateWindow("geometry", "Geometry");
-        Inspector.AddLabel("geometry", "debug", "Debug: None");
-        Inspector.AddButton("geometry", "cycleDebug", "Cycle Debug Mode", () =>
-        {
-            int count = Enum.GetValues<DebugMode>().Length;
-            CurrentDebug = (DebugMode)(((int)CurrentDebug + 1) % count);
-        });
+        var debugModeNames = Enum.GetNames<DebugMode>();
+        Inspector.AddDropdown("geometry", "debugMode", "Debug", debugModeNames, 0, (index) => CurrentDebug = (DebugMode)index);
         Inspector.AddLabel("geometry", "emissive", "Emissive Objects: 0");
         Inspector.AddLabel("geometry", "absorption", "Absorption Objects: 0");
         Inspector.AddLabel("geometry", "buffers", "Buffers: -");
@@ -765,7 +761,7 @@ public class Geometry : core.System
 
     private void UpdateGizmos()
     {
-        Inspector.SetLabel("geometry", "debug", $"Debug: {CurrentDebug}");
+        Inspector.SetDropdownValue("geometry", "debugMode", (int)CurrentDebug);
         Inspector.SetLabel("geometry", "emissive", $"Emissive Objects: {EmissiveCount}");
         Inspector.SetLabel("geometry", "absorption", $"Absorption Objects: {AbsorptionCount}");
         Inspector.SetLabel("geometry", "buffers", $"World Bounds: {WorldBounds.X}x{WorldBounds.Y}");

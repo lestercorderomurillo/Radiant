@@ -19,7 +19,8 @@ public class Bilinear : core.System
         Inspector.AddLabel("bilinear", "quality", "...");
         Inspector.AddLabel("bilinear", "input", "...");
         Inspector.AddLabel("bilinear", "output", "...");
-        Inspector.AddButton("bilinear", "cycleQuality", "Cycle Quality", () => UDRQuality.Cycle());
+        Inspector.AddDropdown("bilinear", "qualityDrop", "Quality", UDRQuality.Names, UDRQuality.Index, (index) => UDRQuality.Set(index));
+        UDRQuality.Changed += _ => Inspector.SetDropdownValue("bilinear", "qualityDrop", UDRQuality.Index);
     }
 
     public void SetInputSource(Func<Texture2D> source)

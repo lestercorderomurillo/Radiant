@@ -33,6 +33,16 @@ public struct Widget
     public bool DropdownOpen;
 }
 
+public struct InspectorTheme
+{
+    public Color WindowBg, TitleBarColor, TitleBarHover;
+    public Color ButtonColor, ButtonHover;
+    public Color SliderTrack, SliderFill, SliderHandle;
+    public Color ToggleOn, ToggleOff;
+    public Color CloseColor, CloseHover;
+    public Color TextColor, CloseText, LabelDim;
+}
+
 public class WindowData
 {
     public string Id;

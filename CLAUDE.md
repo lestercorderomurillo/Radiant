@@ -703,7 +703,7 @@ InitializeJFA, InitializeJFAInterior, JFAPass, GenerateSDFFromJFA, DebugSDFVisib
 
 ## UI System (Inspector)
 
-Retained-mode window system: draggable panels, title bars, close buttons, and interactive widgets. **Static API** — safe to call even if Inspector system isn't registered (calls silently ignored). Renders in `LateRender()` before GizmosRenderer. Default window width: 340.
+Retained-mode window system: draggable panels, title bars, close buttons, and interactive widgets. **Static API** — safe to call even if Inspector system isn't registered (calls silently ignored). Renders in `LateRender()` before GizmosRenderer. Default window width: 375.
 
 ### Window Management
 
@@ -769,6 +769,32 @@ if (!Inspector.IsMouseOverUI())
     // Handle world interaction (clicks, painting, etc.)
 }
 ```
+
+### Theme API
+
+Registry-based theme system — built-in themes registered at startup, external code can add custom themes.
+
+```csharp
+// Register a custom theme
+Inspector.RegisterTheme("MyTheme", new InspectorTheme
+{
+    WindowBg = new(20, 20, 30, 220), TitleBarColor = new(40, 40, 60, 240), TitleBarHover = new(50, 50, 70, 240),
+    ButtonColor = new(45, 45, 65, 220), ButtonHover = new(60, 60, 80, 240),
+    SliderTrack = new(35, 35, 50, 200), SliderFill = new(80, 120, 200, 255), SliderHandle = new(150, 150, 170, 255),
+    ToggleOn = new(80, 80, 170, 255), ToggleOff = new(55, 55, 60, 200),
+    CloseColor = new(180, 60, 60, 255), CloseHover = new(220, 80, 80, 255),
+    TextColor = new(220, 220, 230, 255), CloseText = new(220, 220, 230, 255), LabelDim = new(160, 160, 170, 255)
+});
+
+// Apply by name or index
+Inspector.ApplyTheme("MyTheme");
+Inspector.ApplyTheme(0);  // Index into registered theme list
+
+// Get all registered theme names
+string[] names = Inspector.GetThemeNames();
+```
+
+Built-in themes: Dark, Light, Monokai, Nord, Dracula, Solarized, Gruvbox.
 
 ### Events
 
@@ -892,6 +918,7 @@ All other controls (debug modes, quality cycling, GI/upscaler toggle, level cycl
 - **Renderer wraps all MonoGame** — `Window`, `Device`, `SpriteBatch` are `[Obsolete]`. Systems use Renderer API exclusively
 - **Inspector for all UI** — Static API, each system creates its own window in `Initialize()`. Silently ignored if Inspector not registered. `Inspector.IsMouseOverUI()` for input gating
 - **GizmosRenderer** — Visual overlay only. Lines/circles/arcs/rects/text. No stats display (all stats in Inspector windows)
+- **Fluent API** — Design system APIs as fluent interfaces when possible (method chaining, clear return types)
 
 ---
 

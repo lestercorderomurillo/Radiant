@@ -36,6 +36,7 @@ public class Inspector : core.System
     private bool DraggingSlider;
     private string SliderWindowId;
     private string SliderWidgetId;
+    private float DragStartUIScale;
     private bool MouseOverUI;
     private bool GlobalVisible = false;
 
@@ -54,13 +55,13 @@ public class Inspector : core.System
     private const int Padding = 12;
     private const int CloseButtonSize = 22;
     private const int AutoLayoutGap = 20;
-    private const int AutoLayoutMaxY = 1900;
     private const int SliderTrackHeight = 8;
     private const int SliderHandleSize = 16;
     private const int ToggleBoxSize = 22;
 
-    private static readonly string[] ThemeNames = ["Dark", "Light", "Monokai", "Nord", "Dracula", "Solarized", "Gruvbox"];
-    private static int CurrentTheme;
+    private static readonly Dictionary<string, InspectorTheme> Themes = new();
+    private static readonly List<string> ThemeNameList = new();
+    private static string CurrentThemeName;
     private static float UIScale = 1.0f;
 
     // Colors (mutable for theme switching)
@@ -135,138 +136,40 @@ public class Inspector : core.System
     public static bool IsMouseOverUI()
         => Instance?.MouseOverUI ?? false;
 
-    public static string[] GetThemeNames() => ThemeNames;
+    public static string[] GetThemeNames() => ThemeNameList.ToArray();
+
+    public static void RegisterTheme(string Name, InspectorTheme Theme)
+    {
+        if (!Themes.ContainsKey(Name))
+            ThemeNameList.Add(Name);
+        Themes[Name] = Theme;
+    }
+
+    public static void ApplyTheme(string Name)
+    {
+        if (!Themes.TryGetValue(Name, out var theme)) return;
+        CurrentThemeName = Name;
+        WindowBg = theme.WindowBg;
+        TitleBarColor = theme.TitleBarColor;
+        TitleBarHover = theme.TitleBarHover;
+        ButtonColor = theme.ButtonColor;
+        ButtonHover = theme.ButtonHover;
+        SliderTrack = theme.SliderTrack;
+        SliderFill = theme.SliderFill;
+        SliderHandle = theme.SliderHandle;
+        ToggleOn = theme.ToggleOn;
+        ToggleOff = theme.ToggleOff;
+        CloseColor = theme.CloseColor;
+        CloseHover = theme.CloseHover;
+        TextColor = theme.TextColor;
+        CloseText = theme.CloseText;
+        LabelDim = theme.LabelDim;
+    }
 
     public static void ApplyTheme(int Index)
     {
-        CurrentTheme = Index;
-        switch (Index)
-        {
-            case 0: // Dark
-                WindowBg = new(12, 12, 16, 220);
-                TitleBarColor = new(28, 28, 36, 240);
-                TitleBarHover = new(38, 38, 50, 240);
-                ButtonColor = new(40, 40, 55, 220);
-                ButtonHover = new(55, 55, 75, 240);
-                SliderTrack = new(30, 30, 42, 200);
-                SliderFill = new(70, 105, 180, 255);
-                SliderHandle = new(140, 140, 160, 255);
-                ToggleOn = new(70, 70, 160, 255);
-                ToggleOff = new(50, 50, 55, 200);
-                CloseColor = new(60, 60, 140, 255);
-                CloseHover = new(80, 80, 180, 255);
-                TextColor = new(220, 220, 230, 255);
-                CloseText = new(220, 220, 230, 255);
-                LabelDim = new(160, 160, 170, 255);
-                break;
-            case 1: // Light
-                WindowBg = new(225, 225, 230, 235);
-                TitleBarColor = new(160, 162, 175, 240);
-                TitleBarHover = new(140, 142, 158, 240);
-                ButtonColor = new(170, 175, 192, 230);
-                ButtonHover = new(145, 150, 172, 245);
-                SliderTrack = new(180, 180, 190, 200);
-                SliderFill = new(55, 100, 190, 255);
-                SliderHandle = new(90, 90, 105, 255);
-                ToggleOn = new(55, 95, 185, 255);
-                ToggleOff = new(130, 130, 140, 230);
-                CloseColor = new(180, 60, 60, 255);
-                CloseHover = new(220, 80, 80, 255);
-                TextColor = new(25, 25, 30, 255);
-                CloseText = new(255, 255, 255, 255);
-                LabelDim = new(65, 65, 75, 255);
-                break;
-            case 2: // Monokai
-                WindowBg = new(28, 29, 24, 230);
-                TitleBarColor = new(52, 53, 44, 245);
-                TitleBarHover = new(72, 73, 62, 245);
-                ButtonColor = new(56, 57, 48, 225);
-                ButtonHover = new(88, 89, 75, 245);
-                SliderTrack = new(36, 37, 30, 210);
-                SliderFill = new(130, 200, 80, 255);
-                SliderHandle = new(230, 219, 116, 255);
-                ToggleOn = new(130, 200, 80, 255);
-                ToggleOff = new(42, 43, 36, 210);
-                CloseColor = new(105, 170, 60, 255);
-                CloseHover = new(140, 210, 85, 255);
-                TextColor = new(248, 248, 242, 255);
-                CloseText = new(248, 248, 242, 255);
-                LabelDim = new(140, 136, 112, 255);
-                break;
-            case 3: // Nord
-                WindowBg = new(46, 52, 64, 225);
-                TitleBarColor = new(59, 66, 82, 240);
-                TitleBarHover = new(67, 76, 94, 240);
-                ButtonColor = new(59, 66, 82, 220);
-                ButtonHover = new(67, 76, 94, 240);
-                SliderTrack = new(46, 52, 64, 200);
-                SliderFill = new(136, 192, 208, 255);
-                SliderHandle = new(129, 161, 193, 255);
-                ToggleOn = new(163, 190, 140, 255);
-                ToggleOff = new(59, 66, 82, 200);
-                CloseColor = new(110, 160, 180, 255);
-                CloseHover = new(140, 200, 215, 255);
-                TextColor = new(236, 239, 244, 255);
-                CloseText = new(236, 239, 244, 255);
-                LabelDim = new(216, 222, 233, 200);
-                break;
-            case 4: // Dracula
-                WindowBg = new(28, 30, 40, 230);
-                TitleBarColor = new(50, 53, 70, 245);
-                TitleBarHover = new(70, 74, 98, 245);
-                ButtonColor = new(52, 55, 74, 225);
-                ButtonHover = new(82, 86, 115, 245);
-                SliderTrack = new(36, 38, 52, 210);
-                SliderFill = new(255, 184, 108, 255);
-                SliderHandle = new(255, 210, 150, 255);
-                ToggleOn = new(80, 250, 123, 255);
-                ToggleOff = new(42, 44, 58, 210);
-                CloseColor = new(220, 155, 80, 255);
-                CloseHover = new(255, 184, 108, 255);
-                TextColor = new(248, 248, 242, 255);
-                CloseText = new(248, 248, 242, 255);
-                LabelDim = new(118, 134, 180, 255);
-                break;
-            case 5: // Solarized
-                WindowBg = new(0, 43, 54, 225);
-                TitleBarColor = new(7, 54, 66, 240);
-                TitleBarHover = new(18, 66, 78, 240);
-                ButtonColor = new(7, 54, 66, 220);
-                ButtonHover = new(18, 66, 78, 240);
-                SliderTrack = new(0, 43, 54, 200);
-                SliderFill = new(38, 139, 210, 255);
-                SliderHandle = new(42, 161, 152, 255);
-                ToggleOn = new(133, 153, 0, 255);
-                ToggleOff = new(7, 54, 66, 200);
-                CloseColor = new(30, 115, 180, 255);
-                CloseHover = new(45, 150, 220, 255);
-                TextColor = new(253, 246, 227, 255);
-                CloseText = new(253, 246, 227, 255);
-                LabelDim = new(147, 161, 161, 255);
-                break;
-            case 6: // Gruvbox
-                WindowBg = new(40, 40, 40, 225);
-                TitleBarColor = new(60, 56, 54, 240);
-                TitleBarHover = new(80, 73, 69, 240);
-                ButtonColor = new(60, 56, 54, 220);
-                ButtonHover = new(80, 73, 69, 240);
-                SliderTrack = new(50, 48, 47, 200);
-                SliderFill = new(215, 153, 33, 255);
-                SliderHandle = new(250, 189, 47, 255);
-                ToggleOn = new(152, 151, 26, 255);
-                ToggleOff = new(60, 56, 54, 200);
-                CloseColor = new(185, 130, 25, 255);
-                CloseHover = new(230, 165, 40, 255);
-                TextColor = new(235, 219, 178, 255);
-                CloseText = new(235, 219, 178, 255);
-                LabelDim = new(168, 153, 132, 255);
-                break;
-        }
-    }
-
-    public static void ToggleTheme()
-    {
-        ApplyTheme((CurrentTheme + 1) % ThemeNames.Length);
+        if (Index >= 0 && Index < ThemeNameList.Count)
+            ApplyTheme(ThemeNameList[Index]);
     }
 
 
@@ -457,10 +360,9 @@ public class Inspector : core.System
             }
 
             int GroupHeight = ComputeWindowHeight(Window);
-            foreach (var Hidden in PendingHidden)
-                GroupHeight = Math.Max(GroupHeight, ComputeWindowHeight(Hidden));
 
-            if (Y + GroupHeight > AutoLayoutMaxY && Y > AutoLayoutGap)
+            float maxY = Renderer.VirtualHeight / UIScale - AutoLayoutGap;
+            if (Y + GroupHeight > maxY && Y > AutoLayoutGap)
             {
                 X += DefaultWindowWidth + AutoLayoutGap;
                 Y = AutoLayoutGap;
@@ -504,8 +406,86 @@ public class Inspector : core.System
         PrevMouse = Mouse.GetState();
         PrevKeyState = Keyboard.GetState();
 
+        RegisterBuiltInThemes();
+
         CreateWindow("inspector", "Inspector");
-        AddSlider("inspector", "uiScale", "UI Scale", 0.5f, 2.0f, 1.0f, (value) => { UIScale = value; LayoutDone = false; });
+        AddSlider("inspector", "uiScale", "UI Scale", 0.5f, 2.0f, 1.0f, (value) => UIScale = value);
+        AddDropdown("inspector", "theme", "Theme", GetThemeNames(), 0, (index) => ApplyTheme(index));
+
+        var gameLoop = Renderer.GameLoop;
+        AddDropdown("inspector", "fpsCap", "FPS Cap", GameLoop.FpsOptionNames, 2, (index) => gameLoop?.SetTargetFps(GameLoop.FpsOptions[index]));
+        AddToggle("inspector", "throttleUnfocused", "Throttle Unfocused", true, (enabled) => { if (gameLoop != null) gameLoop.ThrottleUnfocused = enabled; });
+    }
+
+    private static void RegisterBuiltInThemes()
+    {
+        if (Themes.Count > 0) return;
+
+        RegisterTheme("Dark", new InspectorTheme
+        {
+            WindowBg = new(12, 12, 16, 220), TitleBarColor = new(28, 28, 36, 240), TitleBarHover = new(38, 38, 50, 240),
+            ButtonColor = new(40, 40, 55, 220), ButtonHover = new(55, 55, 75, 240),
+            SliderTrack = new(30, 30, 42, 200), SliderFill = new(70, 105, 180, 255), SliderHandle = new(140, 140, 160, 255),
+            ToggleOn = new(70, 70, 160, 255), ToggleOff = new(50, 50, 55, 200),
+            CloseColor = new(60, 60, 140, 255), CloseHover = new(80, 80, 180, 255),
+            TextColor = new(220, 220, 230, 255), CloseText = new(220, 220, 230, 255), LabelDim = new(160, 160, 170, 255)
+        });
+        RegisterTheme("Light", new InspectorTheme
+        {
+            WindowBg = new(225, 225, 230, 235), TitleBarColor = new(160, 162, 175, 240), TitleBarHover = new(140, 142, 158, 240),
+            ButtonColor = new(170, 175, 192, 230), ButtonHover = new(145, 150, 172, 245),
+            SliderTrack = new(180, 180, 190, 200), SliderFill = new(55, 100, 190, 255), SliderHandle = new(90, 90, 105, 255),
+            ToggleOn = new(55, 95, 185, 255), ToggleOff = new(130, 130, 140, 230),
+            CloseColor = new(180, 60, 60, 255), CloseHover = new(220, 80, 80, 255),
+            TextColor = new(25, 25, 30, 255), CloseText = new(255, 255, 255, 255), LabelDim = new(65, 65, 75, 255)
+        });
+        RegisterTheme("Monokai", new InspectorTheme
+        {
+            WindowBg = new(28, 29, 24, 230), TitleBarColor = new(52, 53, 44, 245), TitleBarHover = new(72, 73, 62, 245),
+            ButtonColor = new(56, 57, 48, 225), ButtonHover = new(88, 89, 75, 245),
+            SliderTrack = new(36, 37, 30, 210), SliderFill = new(130, 200, 80, 255), SliderHandle = new(230, 219, 116, 255),
+            ToggleOn = new(130, 200, 80, 255), ToggleOff = new(42, 43, 36, 210),
+            CloseColor = new(105, 170, 60, 255), CloseHover = new(140, 210, 85, 255),
+            TextColor = new(248, 248, 242, 255), CloseText = new(248, 248, 242, 255), LabelDim = new(140, 136, 112, 255)
+        });
+        RegisterTheme("Nord", new InspectorTheme
+        {
+            WindowBg = new(46, 52, 64, 225), TitleBarColor = new(59, 66, 82, 240), TitleBarHover = new(67, 76, 94, 240),
+            ButtonColor = new(59, 66, 82, 220), ButtonHover = new(67, 76, 94, 240),
+            SliderTrack = new(46, 52, 64, 200), SliderFill = new(136, 192, 208, 255), SliderHandle = new(129, 161, 193, 255),
+            ToggleOn = new(163, 190, 140, 255), ToggleOff = new(59, 66, 82, 200),
+            CloseColor = new(110, 160, 180, 255), CloseHover = new(140, 200, 215, 255),
+            TextColor = new(236, 239, 244, 255), CloseText = new(236, 239, 244, 255), LabelDim = new(216, 222, 233, 200)
+        });
+        RegisterTheme("Dracula", new InspectorTheme
+        {
+            WindowBg = new(28, 30, 40, 230), TitleBarColor = new(50, 53, 70, 245), TitleBarHover = new(70, 74, 98, 245),
+            ButtonColor = new(52, 55, 74, 225), ButtonHover = new(82, 86, 115, 245),
+            SliderTrack = new(36, 38, 52, 210), SliderFill = new(255, 184, 108, 255), SliderHandle = new(255, 210, 150, 255),
+            ToggleOn = new(80, 250, 123, 255), ToggleOff = new(42, 44, 58, 210),
+            CloseColor = new(220, 155, 80, 255), CloseHover = new(255, 184, 108, 255),
+            TextColor = new(248, 248, 242, 255), CloseText = new(248, 248, 242, 255), LabelDim = new(118, 134, 180, 255)
+        });
+        RegisterTheme("Solarized", new InspectorTheme
+        {
+            WindowBg = new(0, 43, 54, 225), TitleBarColor = new(7, 54, 66, 240), TitleBarHover = new(18, 66, 78, 240),
+            ButtonColor = new(7, 54, 66, 220), ButtonHover = new(18, 66, 78, 240),
+            SliderTrack = new(0, 43, 54, 200), SliderFill = new(38, 139, 210, 255), SliderHandle = new(42, 161, 152, 255),
+            ToggleOn = new(133, 153, 0, 255), ToggleOff = new(7, 54, 66, 200),
+            CloseColor = new(30, 115, 180, 255), CloseHover = new(45, 150, 220, 255),
+            TextColor = new(253, 246, 227, 255), CloseText = new(253, 246, 227, 255), LabelDim = new(147, 161, 161, 255)
+        });
+        RegisterTheme("Gruvbox", new InspectorTheme
+        {
+            WindowBg = new(40, 40, 40, 225), TitleBarColor = new(60, 56, 54, 240), TitleBarHover = new(80, 73, 69, 240),
+            ButtonColor = new(60, 56, 54, 220), ButtonHover = new(80, 73, 69, 240),
+            SliderTrack = new(50, 48, 47, 200), SliderFill = new(215, 153, 33, 255), SliderHandle = new(250, 189, 47, 255),
+            ToggleOn = new(152, 151, 26, 255), ToggleOff = new(60, 56, 54, 200),
+            CloseColor = new(185, 130, 25, 255), CloseHover = new(230, 165, 40, 255),
+            TextColor = new(235, 219, 178, 255), CloseText = new(235, 219, 178, 255), LabelDim = new(168, 153, 132, 255)
+        });
+
+        CurrentThemeName = "Dark";
     }
 
     public override void Update()
@@ -552,6 +532,8 @@ public class Inspector : core.System
         else if (DraggingSlider && LeftReleased)
         {
             DraggingSlider = false;
+            if (UIScale != DragStartUIScale)
+                LayoutDone = false;
         }
 
         // Handle window dragging
@@ -650,6 +632,7 @@ public class Inspector : core.System
             {
                 case WidgetType.Slider:
                     DraggingSlider = true;
+                    DragStartUIScale = UIScale;
                     SliderWindowId = Window.Id;
                     SliderWidgetId = W.Id;
                     HandleSliderDrag(Mouse);
@@ -740,9 +723,10 @@ public class Inspector : core.System
 
     private Vector2 ScreenToVirtual(Vector2 ScreenPos)
     {
+        float scale = DraggingSlider ? DragStartUIScale : UIScale;
         return new Vector2(
-            ScreenPos.X * (Renderer.VirtualWidth / Renderer.ScreenWidth) / UIScale,
-            ScreenPos.Y * (Renderer.VirtualHeight / Renderer.ScreenHeight) / UIScale);
+            ScreenPos.X * (Renderer.VirtualWidth / Renderer.ScreenWidth) / scale,
+            ScreenPos.Y * (Renderer.VirtualHeight / Renderer.ScreenHeight) / scale);
     }
 
 

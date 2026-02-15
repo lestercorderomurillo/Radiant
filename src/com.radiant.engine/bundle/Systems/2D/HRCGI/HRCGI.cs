@@ -76,9 +76,9 @@ public class HRCGI : core.System
 
         Inspector.CreateWindow("hrcgi", "HRCGI");
         Inspector.AddLabel("hrcgi", "info", "...");
-        Inspector.AddButton("hrcgi", "cycleQuality", "Cycle Quality", () =>
+        Inspector.AddDropdown("hrcgi", "quality", "Quality", QualityNames, ProbeScaleIndex, (index) =>
         {
-            ProbeScaleIndex = (ProbeScaleIndex + 1) % ProbeScales.Length;
+            ProbeScaleIndex = index;
             DisposeRenderTargets();
             CalculateCascadeSizes();
             CreateRenderTargets();

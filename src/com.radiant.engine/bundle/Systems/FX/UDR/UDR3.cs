@@ -40,9 +40,9 @@ public class UDR3 : core.System
         Inspector.AddLabel("udr3", "input", "...");
         Inspector.AddLabel("udr3", "output", "...");
         Inspector.AddLabel("udr3", "frames", "...");
-        Inspector.AddButton("udr3", "cycleQuality", "Cycle Quality", () => UDRQuality.Cycle());
-        Inspector.AddButton("udr3", "debugEdges", "Toggle Debug Edges", () => DebugEdges = (DebugEdges + 1) % 2);
-        Inspector.AddLabel("udr3", "debugInfo", "Debug Edges: OFF");
+        Inspector.AddDropdown("udr3", "qualityDrop", "Quality", UDRQuality.Names, UDRQuality.Index, (index) => UDRQuality.Set(index));
+        UDRQuality.Changed += _ => Inspector.SetDropdownValue("udr3", "qualityDrop", UDRQuality.Index);
+        Inspector.AddToggle("udr3", "debugEdges", "Debug Edges", false, (enabled) => DebugEdges = enabled ? 1 : 0);
     }
 
     public void SetInputSource(Func<Texture2D> source)
@@ -166,12 +166,10 @@ public class UDR3 : core.System
         if (FrameIndex < FramesToAccumulate)
             FrameIndex++;
 
-        string[] debugNames = ["OFF", "Edge Mask"];
         Inspector.SetLabel("udr3", "quality", $"Quality: {UDRQuality.Names[UDRQuality.Index]} ({UDRQuality.ScaleNormalized:P0})");
         Inspector.SetLabel("udr3", "input", $"Input Size: {input.Width}x{input.Height}");
         Inspector.SetLabel("udr3", "output", $"Output Size: {OutputSize.X}x{OutputSize.Y}");
         Inspector.SetLabel("udr3", "frames", $"Frames to Accumulate: {FramesToAccumulate} (current: {effectiveFrames})");
-        Inspector.SetLabel("udr3", "debugInfo", $"Debug Edges: {debugNames[DebugEdges]}");
     }
 
     public override void Render()

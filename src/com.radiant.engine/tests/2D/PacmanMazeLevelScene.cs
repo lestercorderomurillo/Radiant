@@ -251,7 +251,6 @@ public class PacmanMazeLevelScene : Scene
         });
 
         Inspector.AddButton("scene", "toggleGizmos", "Toggle Gizmos", () => Gizmos.ToggleGizmos());
-        Inspector.AddDropdown("scene", "themeDropdown", "Theme", Inspector.GetThemeNames(), 0, (index) => Inspector.ApplyTheme(index));
         Inspector.AddToggle("scene", "pause", "Pause", false, (paused) => ECS.Paused = paused);
 
         Inspector.WindowsRestored += UpdateWindowVisibility;
