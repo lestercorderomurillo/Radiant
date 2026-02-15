@@ -67,7 +67,7 @@ public class PerformanceMonitor : core.System
         InitializeGpuCounters();
         StartSamplerThread();
 
-        Inspector.CreateWindow("perf", "Metrics");
+        Inspector.CreateWindow("perf", "Metrics", 1);
         Inspector.AddLabel("perf", "fps", "FPS: -");
         Inspector.AddLabel("perf", "frame", "Frame: -");
         Inspector.AddLabel("perf", "cpu", "CPU: -");

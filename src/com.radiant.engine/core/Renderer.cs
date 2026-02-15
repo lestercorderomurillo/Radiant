@@ -173,6 +173,7 @@ public class Renderer : IDisposable
     private Dictionary<string, SpriteFont> FontCache = new();
     private Dictionary<(Color, int, int), Texture2D> SolidTextureCache = new();
     private Dictionary<int, Texture2D> CircleTextureCache = new();
+    private Dictionary<int, Texture2D> RoundedRectCache = new();
     private VertexBuffer QuadVertexBuffer;
     private IndexBuffer QuadIndexBuffer;
     private Effect CurrentShader;
@@ -1433,6 +1434,93 @@ public class Renderer : IDisposable
     }
 
     /// <summary>
+    /// Gets or creates a cached anti-aliased rounded rectangle texture for 9-slice rendering.
+    /// The texture is (radius*2+2) pixels square with premultiplied alpha SDF corners.
+    /// </summary>
+    /// <param name="radius">Corner radius in pixels.</param>
+    /// <returns>Cached white rounded rect texture with premultiplied alpha.</returns>
+    public Texture2D GetRoundedRectTexture(int radius)
+    {
+        if (radius < 1) radius = 1;
+
+        if (!RoundedRectCache.TryGetValue(radius, out var texture))
+        {
+            int size = radius * 2 + 2;
+            texture = new Texture2D(Device, size, size);
+            var data = new Color[size * size];
+            float center = size / 2f;
+            float innerDist = center - radius;
+
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float px = x + 0.5f;
+                    float py = y + 0.5f;
+                    float dx = MathF.Max(MathF.Abs(px - center) - innerDist, 0f);
+                    float dy = MathF.Max(MathF.Abs(py - center) - innerDist, 0f);
+                    float dist = MathF.Sqrt(dx * dx + dy * dy) - radius;
+                    float alpha = MathHelper.Clamp(0.5f - dist, 0f, 1f);
+                    byte a = (byte)(alpha * 255f + 0.5f);
+                    data[y * size + x] = new Color(a, a, a, a);
+                }
+            }
+
+            texture.SetData(data);
+            RoundedRectCache[radius] = texture;
+        }
+        return texture;
+    }
+
+    /// <summary>
+    /// Draws a rounded rectangle using 9-slice rendering during a BeginDraw/EndDraw session.
+    /// Corner radius is clamped to half the smallest dimension. Falls back to solid rect for tiny sizes.
+    /// </summary>
+    public void DrawRoundedRect(Rectangle bounds, Color color, int cornerRadius, RoundedCorners corners = RoundedCorners.All)
+    {
+        int radius = Math.Min(cornerRadius, Math.Min(bounds.Width, bounds.Height) / 2);
+        if (radius <= 1 || corners == RoundedCorners.None)
+        {
+            SpriteBatch.Draw(GetSolidTexture(Color.White), bounds, color);
+            return;
+        }
+
+        var tex = GetRoundedRectTexture(radius);
+        int texSize = radius * 2 + 2;
+        int bx = bounds.X, by = bounds.Y, bw = bounds.Width, bh = bounds.Height;
+        int innerW = bw - radius * 2;
+        int innerH = bh - radius * 2;
+        var srcSolid = new Rectangle(radius, radius, 1, 1);
+
+        Rectangle srcTL = corners.HasFlag(RoundedCorners.TL) ? new Rectangle(0, 0, radius, radius) : srcSolid;
+        SpriteBatch.Draw(tex, new Rectangle(bx, by, radius, radius), srcTL, color);
+
+        Rectangle srcTR = corners.HasFlag(RoundedCorners.TR) ? new Rectangle(texSize - radius, 0, radius, radius) : srcSolid;
+        SpriteBatch.Draw(tex, new Rectangle(bx + bw - radius, by, radius, radius), srcTR, color);
+
+        Rectangle srcBL = corners.HasFlag(RoundedCorners.BL) ? new Rectangle(0, texSize - radius, radius, radius) : srcSolid;
+        SpriteBatch.Draw(tex, new Rectangle(bx, by + bh - radius, radius, radius), srcBL, color);
+
+        Rectangle srcBR = corners.HasFlag(RoundedCorners.BR) ? new Rectangle(texSize - radius, texSize - radius, radius, radius) : srcSolid;
+        SpriteBatch.Draw(tex, new Rectangle(bx + bw - radius, by + bh - radius, radius, radius), srcBR, color);
+
+        if (innerW > 0)
+        {
+            SpriteBatch.Draw(tex, new Rectangle(bx + radius, by, innerW, radius), new Rectangle(radius, 0, 2, radius), color);
+            SpriteBatch.Draw(tex, new Rectangle(bx + radius, by + bh - radius, innerW, radius), new Rectangle(radius, texSize - radius, 2, radius), color);
+        }
+
+        if (innerH > 0)
+        {
+            SpriteBatch.Draw(tex, new Rectangle(bx, by + radius, radius, innerH), new Rectangle(0, radius, radius, 2), color);
+            SpriteBatch.Draw(tex, new Rectangle(bx + bw - radius, by + radius, radius, innerH), new Rectangle(texSize - radius, radius, radius, 2), color);
+        }
+
+        if (innerW > 0 && innerH > 0)
+            SpriteBatch.Draw(tex, new Rectangle(bx + radius, by + radius, innerW, innerH), srcSolid, color);
+    }
+
+    /// <summary>
     /// Uploads raw Color array data to a render target. Use for efficient bulk updates.
     /// The array should match the texture dimensions (width * height elements).
     /// </summary>
@@ -1905,6 +1993,10 @@ public class Renderer : IDisposable
             texture?.Dispose();
         CircleTextureCache.Clear();
 
+        foreach (var texture in RoundedRectCache.Values)
+            texture?.Dispose();
+        RoundedRectCache.Clear();
+
         foreach (var shader in ShaderCache.Values)
             shader?.Dispose();
         ShaderCache.Clear();
@@ -1918,4 +2010,14 @@ public class Renderer : IDisposable
     }
 
     #endregion
+}
+
+/// <summary>
+/// Flags for which corners to round in DrawRoundedRect. Combinable for partial rounding.
+/// </summary>
+[Flags]
+public enum RoundedCorners : byte
+{
+    None = 0, TL = 1, TR = 2, BL = 4, BR = 8,
+    Top = TL | TR, Bottom = BL | BR, All = Top | Bottom
 }

@@ -51,6 +51,7 @@ public class WindowData
     public bool Visible;
     public int ZOrder;
     public int CreationIndex;
+    public int LayoutOrder;
     public List<Widget> Widgets = new();
     public Dictionary<string, int> WidgetIndex = new();
     public Rectangle TitleBarBounds;

@@ -53,11 +53,13 @@ public class Inspector : core.System
     private const int WidgetHeight = 36;
     private const int WidgetSpacing = 6;
     private const int Padding = 12;
-    private const int CloseButtonSize = 22;
+    private const int CloseButtonSize = 26;
+    private const int CloseButtonWidth = 36;
     private const int AutoLayoutGap = 20;
     private const int SliderTrackHeight = 8;
-    private const int SliderHandleSize = 16;
+    private const int SliderHandleSize = 14;
     private const int ToggleBoxSize = 22;
+    private const int CornerRadius = 6;
 
     private static readonly Dictionary<string, InspectorTheme> Themes = new();
     private static readonly List<string> ThemeNameList = new();
@@ -81,8 +83,8 @@ public class Inspector : core.System
     private static Color LabelDim = new(160, 160, 170, 255);
 
 
-    public static void CreateWindow(string Id, string Title)
-        => Instance?.CreateWindowInternal(Id, Title);
+    public static void CreateWindow(string Id, string Title, int LayoutOrder = 100)
+        => Instance?.CreateWindowInternal(Id, Title, LayoutOrder);
 
     public static void DestroyWindow(string Id)
         => Instance?.DestroyWindowInternal(Id);
@@ -171,7 +173,7 @@ public class Inspector : core.System
     }
 
 
-    private void CreateWindowInternal(string Id, string Title)
+    private void CreateWindowInternal(string Id, string Title, int LayoutOrder)
     {
         if (Windows.ContainsKey(Id)) return;
         var Window = new WindowData
@@ -182,7 +184,8 @@ public class Inspector : core.System
             Size = new Vector2(DefaultWindowWidth, 0),
             Visible = true,
             ZOrder = NextZOrder++,
-            CreationIndex = NextCreationIndex++
+            CreationIndex = NextCreationIndex++,
+            LayoutOrder = LayoutOrder
         };
         Windows[Id] = Window;
         RenderOrder.Add(Window);
@@ -349,7 +352,11 @@ public class Inspector : core.System
     private void AutoPositionAll()
     {
         var Ordered = new List<WindowData>(Windows.Values);
-        Ordered.Sort((A, B) => A.CreationIndex.CompareTo(B.CreationIndex));
+        Ordered.Sort((A, B) =>
+        {
+            int order = A.LayoutOrder.CompareTo(B.LayoutOrder);
+            return order != 0 ? order : A.CreationIndex.CompareTo(B.CreationIndex);
+        });
 
         float X = AutoLayoutGap;
         float Y = AutoLayoutGap;
@@ -406,8 +413,9 @@ public class Inspector : core.System
 
         RegisterBuiltInThemes();
 
-        CreateWindow("inspector", "Inspector");
+        CreateWindow("inspector", "Inspector", 0);
         AddSlider("inspector", "uiScale", "UI Scale", 0.5f, 2.0f, 1.0f, (value) => UIScale = value);
+        ApplyTheme(0);
         AddDropdown("inspector", "theme", "Theme", GetThemeNames(), 0, (index) => ApplyTheme(index));
 
         var gameLoop = Renderer.GameLoop;
@@ -419,6 +427,15 @@ public class Inspector : core.System
     {
         if (Themes.Count > 0) return;
 
+        RegisterTheme("Radiant", new InspectorTheme
+        {
+            WindowBg = new(28, 30, 40, 230), TitleBarColor = new(50, 53, 70, 245), TitleBarHover = new(70, 74, 98, 245),
+            ButtonColor = new(52, 55, 74, 225), ButtonHover = new(82, 86, 115, 245),
+            SliderTrack = new(36, 38, 52, 210), SliderFill = new(255, 184, 108, 255), SliderHandle = new(255, 210, 150, 255),
+            ToggleOn = new(220, 170, 80, 255), ToggleOff = new(42, 44, 58, 210),
+            CloseColor = new(220, 155, 80, 255), CloseHover = new(255, 184, 108, 255),
+            TextColor = new(248, 248, 242, 255), CloseText = new(248, 248, 242, 255), LabelDim = new(118, 134, 180, 255)
+        });
         RegisterTheme("Dark", new InspectorTheme
         {
             WindowBg = new(12, 12, 16, 220), TitleBarColor = new(28, 28, 36, 240), TitleBarHover = new(38, 38, 50, 240),
@@ -454,15 +471,6 @@ public class Inspector : core.System
             ToggleOn = new(163, 190, 140, 255), ToggleOff = new(59, 66, 82, 200),
             CloseColor = new(110, 160, 180, 255), CloseHover = new(140, 200, 215, 255),
             TextColor = new(236, 239, 244, 255), CloseText = new(236, 239, 244, 255), LabelDim = new(216, 222, 233, 200)
-        });
-        RegisterTheme("Dracula", new InspectorTheme
-        {
-            WindowBg = new(28, 30, 40, 230), TitleBarColor = new(50, 53, 70, 245), TitleBarHover = new(70, 74, 98, 245),
-            ButtonColor = new(52, 55, 74, 225), ButtonHover = new(82, 86, 115, 245),
-            SliderTrack = new(36, 38, 52, 210), SliderFill = new(255, 184, 108, 255), SliderHandle = new(255, 210, 150, 255),
-            ToggleOn = new(80, 250, 123, 255), ToggleOff = new(42, 44, 58, 210),
-            CloseColor = new(220, 155, 80, 255), CloseHover = new(255, 184, 108, 255),
-            TextColor = new(248, 248, 242, 255), CloseText = new(248, 248, 242, 255), LabelDim = new(118, 134, 180, 255)
         });
         RegisterTheme("Solarized", new InspectorTheme
         {
@@ -733,7 +741,7 @@ public class Inspector : core.System
 
         // Title bar
         Window.TitleBarBounds = new Rectangle(X, Y, W, TitleBarHeight);
-        Window.CloseBounds = new Rectangle(X + W - CloseButtonSize - 6, Y + 8, CloseButtonSize, CloseButtonSize);
+        Window.CloseBounds = new Rectangle(X + W - CloseButtonWidth - 6, Y + (TitleBarHeight - CloseButtonSize) / 2, CloseButtonWidth, CloseButtonSize);
 
         // Widgets
         int ContentWidth = W - Padding * 2;
@@ -820,24 +828,18 @@ public class Inspector : core.System
 
     private void DrawWindow(WindowData Window, Vector2 Mouse)
     {
-        var Solid = Renderer.GetSolidTexture(Color.White);
+        Renderer.DrawRoundedRect(Window.WindowBounds, WindowBg, CornerRadius);
 
-        // Window background
-        Renderer.DrawSprite(Solid, Window.WindowBounds, WindowBg);
-
-        // Title bar
         bool TitleHovered = Window.TitleBarBounds.Contains((int)Mouse.X, (int)Mouse.Y);
-        Renderer.DrawSprite(Solid, Window.TitleBarBounds, TitleHovered ? TitleBarHover : TitleBarColor);
+        Renderer.DrawRoundedRect(Window.TitleBarBounds, TitleHovered ? TitleBarHover : TitleBarColor, CornerRadius, RoundedCorners.Top);
 
-        // Title text (double-draw for bold)
         var TitlePos = new Vector2(Window.TitleBarBounds.X + Padding, Window.TitleBarBounds.Y + 8);
         Renderer.DrawString(Font, Window.Title, TitlePos, TextColor);
         Renderer.DrawString(Font, Window.Title, TitlePos + Vector2.UnitX, TextColor);
 
-        // Close button
         bool CloseHovered = Window.CloseBounds.Contains((int)Mouse.X, (int)Mouse.Y);
-        Renderer.DrawSprite(Solid, Window.CloseBounds, CloseHovered ? CloseHover : CloseColor);
-        const float CloseScale = 0.75f;
+        Renderer.DrawRoundedRect(Window.CloseBounds, CloseHovered ? CloseHover : CloseColor, CornerRadius);
+        const float CloseScale = 0.7f;
         var CloseTextSize = Font.MeasureString("X") * CloseScale;
         var CloseTextPos = new Vector2(
             Window.CloseBounds.X + (Window.CloseBounds.Width - CloseTextSize.X) / 2,
@@ -915,9 +917,8 @@ public class Inspector : core.System
 
     private void DrawButton(Widget W, Vector2 Mouse)
     {
-        var Solid = Renderer.GetSolidTexture(Color.White);
         bool Hovered = W.Bounds.Contains((int)Mouse.X, (int)Mouse.Y);
-        Renderer.DrawSprite(Solid, W.Bounds, Hovered ? ButtonHover : ButtonColor);
+        Renderer.DrawRoundedRect(W.Bounds, Hovered ? ButtonHover : ButtonColor, CornerRadius);
 
         var TextSize = Font.MeasureString(W.Text);
         var TextPos = new Vector2(
@@ -928,21 +929,17 @@ public class Inspector : core.System
 
     private void DrawToggle(Widget W, Vector2 Mouse)
     {
-        var Solid = Renderer.GetSolidTexture(Color.White);
-
-        // Toggle box
         int BoxY = W.Bounds.Y + (W.Bounds.Height - ToggleBoxSize) / 2;
         var BoxRect = new Rectangle(W.Bounds.X, BoxY, ToggleBoxSize, ToggleBoxSize);
-        Renderer.DrawSprite(Solid, BoxRect, W.ToggleValue ? ToggleOn : ToggleOff);
+        Renderer.DrawRoundedRect(BoxRect, W.ToggleValue ? ToggleOn : ToggleOff, CornerRadius);
 
-        // Inner fill
         if (W.ToggleValue)
         {
             int Inset = 5;
             var InnerRect = new Rectangle(
                 BoxRect.X + Inset, BoxRect.Y + Inset,
                 BoxRect.Width - Inset * 2, BoxRect.Height - Inset * 2);
-            Renderer.DrawSprite(Solid, InnerRect, TextColor);
+            Renderer.DrawRoundedRect(InnerRect, TextColor, CornerRadius);
         }
 
         // Label text
@@ -952,42 +949,35 @@ public class Inspector : core.System
 
     private void DrawSlider(Widget W, Vector2 Mouse)
     {
-        var Solid = Renderer.GetSolidTexture(Color.White);
-
-        // Label + value text
         string ValueText = $"{W.Text}: {W.SliderValue:F2}";
         var TextPos = new Vector2(W.Bounds.X + 4, W.Bounds.Y + 2);
         Renderer.DrawString(Font, ValueText, TextPos, TextColor);
 
-        // Track
         int TrackY = W.Bounds.Y + Font.LineSpacing + 8;
         int TrackLeft = W.Bounds.X + Padding;
         int TrackWidth = W.Bounds.Width - Padding * 2;
         var TrackRect = new Rectangle(TrackLeft, TrackY, TrackWidth, SliderTrackHeight);
-        Renderer.DrawSprite(Solid, TrackRect, SliderTrack);
+        Renderer.DrawRoundedRect(TrackRect, SliderTrack, CornerRadius);
 
-        // Fill
         float Range = W.SliderMax - W.SliderMin;
         float T = Range > 0 ? (W.SliderValue - W.SliderMin) / Range : 0;
         int FillWidth = (int)(TrackWidth * T);
         if (FillWidth > 0)
         {
             var FillRect = new Rectangle(TrackLeft, TrackY, FillWidth, SliderTrackHeight);
-            Renderer.DrawSprite(Solid, FillRect, SliderFill);
+            Renderer.DrawRoundedRect(FillRect, SliderFill, CornerRadius);
         }
 
-        // Handle
         int HandleX = TrackLeft + FillWidth - SliderHandleSize / 2;
         int HandleY = TrackY + SliderTrackHeight / 2 - SliderHandleSize / 2;
         var HandleRect = new Rectangle(HandleX, HandleY, SliderHandleSize, SliderHandleSize);
-        Renderer.DrawSprite(Solid, HandleRect, SliderHandle);
+        Renderer.DrawSprite(Renderer.GetCircleTexture(SliderHandleSize * 4), HandleRect, SliderHandle);
     }
 
     private void DrawDropdown(Widget W, Vector2 Mouse)
     {
-        var Solid = Renderer.GetSolidTexture(Color.White);
         bool Hovered = W.Bounds.Contains((int)Mouse.X, (int)Mouse.Y);
-        Renderer.DrawSprite(Solid, W.Bounds, Hovered ? ButtonHover : ButtonColor);
+        Renderer.DrawRoundedRect(W.Bounds, Hovered ? ButtonHover : ButtonColor, CornerRadius);
 
         string selectedLabel = W.DropdownOptions != null && W.DropdownSelected < W.DropdownOptions.Length
             ? W.DropdownOptions[W.DropdownSelected] : "?";
@@ -1015,10 +1005,7 @@ public class Inspector : core.System
         var W = Window.Widgets[Index];
         if (W.DropdownOptions == null) return;
 
-        var Solid = Renderer.GetSolidTexture(Color.White);
-
-        // Popup background
-        Renderer.DrawSprite(Solid, OpenDropdownPopupBounds, WindowBg);
+        Renderer.DrawRoundedRect(OpenDropdownPopupBounds, WindowBg, CornerRadius);
 
         for (int I = 0; I < W.DropdownOptions.Length; I++)
         {
@@ -1027,7 +1014,9 @@ public class Inspector : core.System
             bool IsSelected = I == W.DropdownSelected;
 
             Color OptionBg = IsSelected ? SliderFill : (OptionHovered ? ButtonHover : ButtonColor);
-            Renderer.DrawSprite(Solid, OptionRect, OptionBg);
+            RoundedCorners optionCorners = W.DropdownOptions.Length == 1 ? RoundedCorners.All :
+                I == 0 ? RoundedCorners.Top : I == W.DropdownOptions.Length - 1 ? RoundedCorners.Bottom : RoundedCorners.None;
+            Renderer.DrawRoundedRect(OptionRect, OptionBg, CornerRadius, optionCorners);
 
             var OptionTextSize = Font.MeasureString(W.DropdownOptions[I]);
             var OptionTextPos = new Vector2(OptionRect.X + Padding, OptionRect.Y + (OptionRect.Height - OptionTextSize.Y) / 2);

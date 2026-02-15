@@ -8,6 +8,7 @@ MonoGame C# 2D engine: ECS + GPU-instanced shapes + HRC global illumination.
 ## Rules
 
 - **Always update this file** after modifying the codebase (renames, new files, API changes, etc.).
+- **Never create Texture2D or GPU resources directly in systems.** If the Renderer API is missing something, add it there so all systems benefit.
 
 ---
 
@@ -549,7 +550,23 @@ Texture2D ghostTex  = Renderer.GetTexture("Ghost");          // Content pipeline
 SpriteFont font      = Renderer.GetFont("fonts/BaseFont");    // SpriteFont
 Texture2D whitePixel = Renderer.GetSolidTexture(Color.White); // 1x1 solid (cached by color+size)
 Texture2D circleTex  = Renderer.GetCircleTexture(64);         // AA circle (cached by diameter)
+Texture2D roundedTex = Renderer.GetRoundedRectTexture(8);     // AA rounded rect (cached by radius)
 ```
+
+### Rounded Rectangles (9-slice)
+
+```csharp
+// Fully rounded (all corners)
+Renderer.DrawRoundedRect(bounds, color, cornerRadius);
+
+// Selective corners (title bar with top-only rounding, window body with bottom-only)
+Renderer.DrawRoundedRect(titleBarBounds, titleColor, 8, RoundedCorners.Top);
+Renderer.DrawRoundedRect(bodyBounds, bodyColor, 8, RoundedCorners.Bottom);
+
+// Falls back to solid rect when radius <= 1 or RoundedCorners.None
+```
+
+`RoundedCorners` flags: `None`, `TL`, `TR`, `BL`, `BR`, `Top` (TL|TR), `Bottom` (BL|BR), `All` (Top|Bottom). Corner radius auto-clamps to half the smallest dimension (8px-tall slider track → pill shape).
 
 ### Texture Slots (low-level)
 
@@ -916,7 +933,7 @@ All other controls (debug modes, quality cycling, GI/upscaler toggle, level cycl
 - **Zero-allocation hot paths** — PagedBitSet (1 bit/entity), span-based spatial queries, pooled RT binding arrays, StringBuilder reuse, cycle sort for in-place reordering
 - **GPU instancing** — Single `DrawInstancedPrimitives` call for up to 65k shapes via DynamicVertexBuffer
 - **Centralized assets** — All textures via `Renderer.GetTexture()`, fonts via `Renderer.GetFont()`, shaders via `Renderer.SetShader()`/`GetShaderEffect()`. Never access `Window.Content` directly
-- **Renderer wraps all MonoGame** — `Window`, `Device`, `SpriteBatch` are `[Obsolete]`. Systems use Renderer API exclusively
+- **Renderer wraps all MonoGame** — `Window`, `Device`, `SpriteBatch` are `[Obsolete]`. Systems use Renderer API exclusively. Never create `Texture2D` or GPU resources in systems — add to Renderer API instead
 - **Inspector for all UI** — Static API, each system creates its own window in `Initialize()`. Silently ignored if Inspector not registered. `Inspector.IsMouseOverUI()` for input gating
 - **GizmosRenderer** — Visual overlay only. Lines/circles/arcs/rects/text. No stats display (all stats in Inspector windows)
 - **Fluent API** — Design system APIs as fluent interfaces when possible (method chaining, clear return types)

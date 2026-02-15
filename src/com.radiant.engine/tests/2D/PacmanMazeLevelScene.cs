@@ -226,7 +226,7 @@ public class PacmanMazeLevelScene : Scene
         UpdateUpscalerInput();
 
         // Scene control window
-        Inspector.CreateWindow("scene", "Scene");
+        Inspector.CreateWindow("scene", "Scene", 2);
 
         Inspector.AddLabel("scene", "level", $"Level: 1/{Levels.Length}");
         Inspector.AddLabel("scene", "gi", $"GI: {GIGroup.ActiveName}");
