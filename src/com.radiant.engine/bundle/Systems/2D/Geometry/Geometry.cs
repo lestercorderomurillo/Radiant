@@ -174,16 +174,16 @@ public class Geometry : core.System
         WriteBuffer = 0;
         ReadBuffer = 1;
 
-        Inspector.CreateWindow("geometry", "Geometry");
+        Inspector.CreateWindow("pipeline", "Pipeline Controller");
         var debugModeNames = Enum.GetNames<DebugMode>();
-        Inspector.AddDropdown("geometry", "debugMode", "Debug", debugModeNames, 0, (index) => CurrentDebug = (DebugMode)index);
-        Inspector.AddLabel("geometry", "emissive", "Emissive Objects: 0");
-        Inspector.AddLabel("geometry", "absorption", "Absorption Objects: 0");
-        Inspector.AddLabel("geometry", "buffers", "Buffers: -");
-        Inspector.AddLabel("geometry", "timing", "Timing: -");
-        Inspector.AddLabel("geometry", "gpu", "GPU: -");
-        Inspector.AddLabel("geometry", "sdf", "SDF: -");
-        Inspector.AddLabel("geometry", "jfa", "JFA: -");
+        Inspector.AddDropdown("pipeline", "debugMode", "Debug", debugModeNames, 0, (index) => CurrentDebug = (DebugMode)index);
+        Inspector.AddLabel("pipeline", "emissive", "Emissive Objects: 0");
+        Inspector.AddLabel("pipeline", "absorption", "Absorption Objects: 0");
+        Inspector.AddLabel("pipeline", "buffers", "Buffers: -");
+        Inspector.AddLabel("pipeline", "timing", "Timing: -");
+        Inspector.AddLabel("pipeline", "gpu", "GPU: -");
+        Inspector.AddLabel("pipeline", "sdf", "SDF: -");
+        Inspector.AddLabel("pipeline", "jfa", "JFA: -");
     }
 
     private void InitializeJFA()
@@ -761,22 +761,22 @@ public class Geometry : core.System
 
     private void UpdateGizmos()
     {
-        Inspector.SetDropdownValue("geometry", "debugMode", (int)CurrentDebug);
-        Inspector.SetLabel("geometry", "emissive", $"Emissive Objects: {EmissiveCount}");
-        Inspector.SetLabel("geometry", "absorption", $"Absorption Objects: {AbsorptionCount}");
-        Inspector.SetLabel("geometry", "buffers", $"World Bounds: {WorldBounds.X}x{WorldBounds.Y}");
-        Inspector.SetLabel("geometry", "timing", $"Collect: {CollectMs:F2}ms | Flatten: {FlattenMs:F2}ms | Render: {RenderMs:F2}ms");
-        Inspector.SetLabel("geometry", "gpu", $"GPU: SetData: {Renderer.LastSetDataMs:F2}ms | Draw: {Renderer.LastDrawMs:F2}ms");
+        Inspector.SetDropdownValue("pipeline", "debugMode", (int)CurrentDebug);
+        Inspector.SetLabel("pipeline", "emissive", $"Emissive Objects: {EmissiveCount}");
+        Inspector.SetLabel("pipeline", "absorption", $"Absorption Objects: {AbsorptionCount}");
+        Inspector.SetLabel("pipeline", "buffers", $"World Bounds: {WorldBounds.X}x{WorldBounds.Y}");
+        Inspector.SetLabel("pipeline", "timing", $"Collect: {CollectMs:F2}ms | Flatten: {FlattenMs:F2}ms | Render: {RenderMs:F2}ms");
+        Inspector.SetLabel("pipeline", "gpu", $"GPU: SetData: {Renderer.LastSetDataMs:F2}ms | Draw: {Renderer.LastDrawMs:F2}ms");
 
         if (EnableSDF)
         {
-            Inspector.SetLabel("geometry", "sdf", $"SDF: {SDFBounds.X}x{SDFBounds.Y} ({SDFScale:P0})");
-            Inspector.SetLabel("geometry", "jfa", $"JFA Passes: {JFAPassCount}");
+            Inspector.SetLabel("pipeline", "sdf", $"SDF: {SDFBounds.X}x{SDFBounds.Y} ({SDFScale:P0})");
+            Inspector.SetLabel("pipeline", "jfa", $"JFA Passes: {JFAPassCount}");
         }
         else
         {
-            Inspector.SetLabel("geometry", "sdf", "SDF: Disabled");
-            Inspector.SetLabel("geometry", "jfa", "");
+            Inspector.SetLabel("pipeline", "sdf", "SDF: Disabled");
+            Inspector.SetLabel("pipeline", "jfa", "");
         }
     }
 

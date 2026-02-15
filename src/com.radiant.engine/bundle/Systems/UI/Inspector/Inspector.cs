@@ -200,14 +200,20 @@ public class Inspector : core.System
 
     private void SetWindowVisible(string Id, bool Visible)
     {
-        if (Windows.TryGetValue(Id, out var Window))
+        if (Windows.TryGetValue(Id, out var Window) && Window.Visible != Visible)
+        {
             Window.Visible = Visible;
+            LayoutDone = false;
+        }
     }
 
     private void ToggleWindowInternal(string Id)
     {
         if (Windows.TryGetValue(Id, out var Window))
+        {
             Window.Visible = !Window.Visible;
+            LayoutDone = false;
+        }
     }
 
     private bool IsWindowVisibleInternal(string Id)
@@ -349,13 +355,13 @@ public class Inspector : core.System
 
         float X = AutoLayoutGap;
         float Y = AutoLayoutGap;
-        var PendingHidden = new List<WindowData>();
+        Vector2 lastVisiblePos = new Vector2(X, Y);
 
         foreach (var Window in Ordered)
         {
             if (!Window.Visible)
             {
-                PendingHidden.Add(Window);
+                Window.Position = lastVisiblePos;
                 continue;
             }
 
@@ -369,15 +375,9 @@ public class Inspector : core.System
             }
 
             Window.Position = new Vector2(X, Y);
-            foreach (var Hidden in PendingHidden)
-                Hidden.Position = new Vector2(X, Y);
-
-            PendingHidden.Clear();
+            lastVisiblePos = Window.Position;
             Y += GroupHeight + AutoLayoutGap;
         }
-
-        foreach (var Hidden in PendingHidden)
-            Hidden.Position = new Vector2(X, Y);
     }
 
     private int ComputeWindowHeight(WindowData Window)

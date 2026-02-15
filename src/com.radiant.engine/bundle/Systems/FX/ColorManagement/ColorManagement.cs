@@ -17,8 +17,7 @@ public class ColorManagement : core.System
 
     public override void Initialize()
     {
-        Inspector.CreateWindow("colormgmt", "Color Management");
-        Inspector.AddDropdown("colormgmt", "tonemap", "Tonemapping", TechniqueNames, TechniqueIndex, (index) => TechniqueIndex = index);
+        Inspector.AddDropdown("pipeline", "tonemap", "Tonemapping", TechniqueNames, TechniqueIndex, (index) => TechniqueIndex = index);
     }
 
     public void SetInputSource(Func<Texture2D> source)
