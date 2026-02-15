@@ -350,6 +350,14 @@ public class ECS : IGameObject
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int? AtExact(float x, float y, float z) => Spatial.AtExact(x, y, z);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public ReadOnlySpan<int> InRadius2D(float cx, float cz, float radius, float y = 0) => Spatial.InRadius2D(cx, cz, radius, y);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public ReadOnlySpan<int> Nearest(Vector3 center, int count, float maxRadius = float.MaxValue) => Spatial.Nearest(center, count, maxRadius);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public ReadOnlySpan<int> Nearest(float cx, float cy, float cz, int count, float maxRadius = float.MaxValue) => Spatial.Nearest(cx, cy, cz, count, maxRadius);
 
     public static int ThreadCount => CachedThreadCount;
 

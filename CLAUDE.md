@@ -3,14 +3,10 @@
 MonoGame C# 2D engine: ECS + GPU-instanced shapes + HRC global illumination.
 .NET 8.0 WindowsDX. MonoGame 3.8.5-preview.1. Unsafe enabled. SQLite 1.0.118.
 
----
-
 ## Rules
 
 - **Always update this file** after modifying the codebase (renames, new files, API changes, etc.).
-- **Never create Texture2D or GPU resources directly in systems.** If the Renderer API is missing something, add it there so all systems benefit.
-
----
+- **Never create Texture2D or GPU resources directly in systems.** Add to Renderer API instead.
 
 ## Code Style
 
@@ -29,231 +25,111 @@ MonoGame C# 2D engine: ECS + GPU-instanced shapes + HRC global illumination.
 | No decorative/banner comments | Never `// --- Section ---`, `// ═══`, `// ======`. Blank lines suffice |
 | `/// <summary>` for public API docs | Standard C# XML doc comments on public methods/classes |
 | **Descriptive local variable names** | `transform`, `material`, `circle` — never `t`, `m`, `c` |
-| **No dead code** | Remove fields/variables set but never read, unused usings, unreachable code. Public API awaiting callers is fine — dead internal wiring is not |
+| **No dead code** | Remove unused fields/variables/usings. Public API awaiting callers is fine |
 
-The last rule is critical: **never use single-letter or abbreviated variable names**. Use the full type name (lowercased) for local component refs to avoid shadowing the type:
+**Critical**: never use single-letter or abbreviated variable names. Local refs use lowercase type name (camelCase) to avoid type shadowing:
 
 ```csharp
-// CORRECT — local refs use lowercase type name
-ref var transform = ref ECS.GetComponent<Transform>(entityId);
-ref var material = ref ECS.GetComponent<Material>(entityId);
-ref var circle = ref ECS.GetComponent<Circle2D>(entityId);
-
-// Also correct — contextual prefix when multiple entities in scope
-ref var playerTransform = ref ECS.GetComponent<Transform>(playerId);
-ref var ghostMaterial = ref ECS.GetComponent<Material>(ghostId);
-
-// WRONG — single letters / abbreviations
-ref var t = ref ECS.GetComponent<Transform>(id);
-ref var m = ref ECS.GetComponent<Material>(id);
-ref var mat = ref ECS.GetComponent<Material>(id);
+ref var transform = ref ECS.GetComponent<Transform>(entityId);       // correct
+ref var playerTransform = ref ECS.GetComponent<Transform>(playerId); // correct (contextual prefix)
+ref var t = ref ECS.GetComponent<Transform>(id);                     // WRONG
 ```
-
-Note: PascalCase applies to fields, properties, methods, parameters, and constants. Local variables use camelCase of the type/descriptive name to avoid type shadowing.
-
----
 
 ## Directory Structure
 
 ```
 radiant/
 ├── Content/
-│   ├── fonts/BaseFont.spritefont           # Tahoma 14pt (Gizmos, general)
-│   ├── fonts/InspectorFont.spritefont     # Tahoma 42pt (Inspector HD, drawn at 1/3 scale)
-│   ├── Ghost.png, Eyes.png              # Pac-Man textures (premultiplied alpha)
+│   ├── fonts/BaseFont.spritefont, InspectorFont.spritefont (42pt, drawn at 1/3 scale)
+│   ├── Ghost.png, Eyes.png (premultiplied alpha)
 │   ├── shaders/
-│   │   ├── Geometry.fx                  # SDF/JFA generation + debug visualization
-│   │   ├── InstancedShapes.fx           # GPU-instanced 2D shape rendering
-│   │   ├── ColorManagement.fx           # Tonemapping (None/ACES/ACES2/AgX/Filmic/Reinhard/Uchimura)
-│   │   ├── HRC/                         # HRC GI shaders
-│   │   │   ├── HRC_Extensions.fx        #   Ray extension cascade N-1 → N
-│   │   │   ├── HRC_FluenceSum.fx        #   Average 4 frustums → final
-│   │   │   ├── HRC_FrustumSeed.fx       #   Seed cascade 0 from scene
-│   │   │   └── HRC_MergingCones.fx      #   Backward cone merge N → 0
-│   │   ├── RCGI/RCGI.fx                 # Alternative ray-march GI
-│   │   └── UDR/UDR1.fx, UDR2.fx, UDR3.fx  # Ultra Dynamic Range upscalers
-│   └── Content.mgcb                     # Pipeline config (HiDef, Windows)
+│   │   ├── Geometry.fx, InstancedShapes.fx, ColorManagement.fx
+│   │   ├── HRC/ (HRC_Extensions, HRC_FluenceSum, HRC_FrustumSeed, HRC_MergingCones)
+│   │   ├── RCGI/RCGI.fx, UDR/UDR1-3.fx
+│   └── Content.mgcb (HiDef, Windows)
 │
 ├── src/com.radiant.engine/
-│   ├── core/
-│   │   ├── ECS.cs              (~612 lines)  # Entity Component System
-│   │   ├── Archetype.cs                       # Dense component storage arrays
-│   │   ├── Renderer.cs         (~1884 lines)  # Fluent rendering API
-│   │   ├── Scene.cs                           # Scene lifecycle (SetupECS → SetupScene)
-│   │   ├── System.cs                          # Abstract system + RunAfter/RunBefore/Pausable attrs
-│   │   ├── SystemGroup.cs                     # Toggle between mutually exclusive systems
-│   │   ├── Shape.cs                           # GPU shape struct (24 bytes, 4 types)
-│   │   ├── SpatialIndex.cs                    # Grid spatial hashing (cell=64)
-│   │   ├── PagedBitSet.cs                     # 1-bit-per-entity tracking
-│   │   └── Interfaces/
-│   │       ├── Component.cs                   # Marker interface for ECS components
-│   │       └── GameObject.cs                  # IGameObject lifecycle interface
-│   │
+│   ├── core/ (ECS, Archetype, Renderer, Scene, System, SystemGroup, Shape, SpatialIndex, PagedBitSet)
 │   ├── bundle/
 │   │   ├── Components/
-│   │   │   ├── Spatial/Transform.cs           # Position/Rotation/Scale (Vector3)
-│   │   │   ├── 2D/                            # Camera2D, Circle2D, Rectangle2D, Triangle2D,
-│   │   │   │                                  # Collision2D, Movement2D, RigidBody2D
-│   │   │   ├── 3D/                            # Chunk3D (16³ voxels), Tile3D
-│   │   │   └── GPU/                           # Material, MotionTrackable
-│   │   ├── Extensions/
-│   │   │   ├── LightFactory.cs                # CreateLight(), SpawnRandom(), HueToRGB()
-│   │   │   └── VectorExtensions.cs            # Add/Sub/Mul/Div/Apply for Vector3
+│   │   │   ├── Spatial/Transform.cs
+│   │   │   ├── 2D/ (Camera2D, Circle2D, Rectangle2D, Triangle2D, Collision2D, Movement2D, RigidBody2D)
+│   │   │   ├── 3D/ (Chunk3D, Tile3D)
+│   │   │   └── GPU/ (Material, MotionTrackable)
+│   │   ├── Extensions/ (LightFactory, VectorExtensions)
 │   │   └── Systems/
-│   │       ├── 2D/
-│   │       │   ├── Geometry/Geometry.cs        (~828 lines) # Shape collection + SDF/JFA
-│   │       │   ├── HRCGI/HRCGI.cs             (~318 lines) # HRC Global Illumination
-│   │       │   ├── RCGI/RCGI.cs                             # Radiance Cascades GI (alt)
-│   │       │   ├── Tileset/Tileset.cs                       # 2D infinite tile world
-│   │       │   ├── Tileset/TileTypes.cs                     # Tile definitions + TileData component
-│   │       │   ├── WorldGen/WorldGen.cs                     # Terrain generation
-│   │       │   ├── PerlinNoise2D/PerlinNoise.cs
-│   │       │   ├── MouseLight/MouseLight.cs
-│   │       │   ├── PaintBrush/PaintBrush.cs
-│   │       │   ├── MazeBuilder/
-│   │       │   │   ├── PacmanMazeBuilder.cs                 # Maze layout + static RT walls + coin/power pellet tracking
-│   │       │   │   ├── PacmanMazeGenerator.cs               # Procedural maze generation
-│   │       │   │   └── PacmanLevelConfig.cs                 # Per-level config + GhostEntry struct
-│   │       │   └── AI/Pacman/
-│   │       │       ├── GhostAI/PacmanGhostAI.cs             # Ghost AI (scatter/chase/frightened/eaten)
-│   │       │       ├── Player/PacmanPlayer.cs               # Arrow-key player + coins + power pellets + HUD
-│   │       │       └── RainbowGhost/RainbowGhostAI.cs       # Rainbow ghost (clone/merge/frightened/eaten)
-│   │       ├── 3D/Tileset3D/Tileset3D.cs                    # 3D tilemap (placeholder, empty)
-│   │       ├── FX/
-│   │       │   ├── ColorManagement/ColorManagement.cs       # Tonemapping post-process
-│   │       │   └── UDR/                                     # Bilinear.cs, UDR1-3.cs, UDRQuality.cs
-│   │       └── UI/
-│   │           ├── Gizmos/Gizmos.cs + GizmosRenderer.cs     # Debug overlay (lines/circles/arcs/rects/text)
-│   │           ├── UIWindow/UITypes.cs + Inspector.cs        # Retained-mode UI windows
-│   │           └── Profiler/PerformanceMonitor.cs            # FPS/CPU/GPU/RAM stats
-│   │
-│   ├── runtime/
-│   │   ├── GameClient.cs              # Entry: creates Window + GameLoop + Scene
-│   │   ├── GameLoop.cs   (~212 lines) # 144 FPS / 64 UPS, frame pacing
-│   │   ├── GameServer.cs              # TCP server + lobby
-│   │   └── Window.cs                  # MonoGame Game subclass (3360x1890)
-│   │
-│   ├── mplay/                         # Multiplayer (TCP + HTTP lobby, not actively used)
-│   │   ├── NetworkClient.cs
-│   │   ├── NetworkManager.cs
-│   │   └── NetworkMessage.cs
-│   │
-│   └── tests/2D/
-│       ├── PacmanMazeLevelScene.cs    # Pac-Man demo (6 levels, Inspector controls)
-│       ├── SimpleLightScene.cs        # Single warm light
-│       └── TilesetScene.cs           # Tile world demo
+│   │       ├── 2D/ Geometry, HRCGI, RCGI, Tileset, WorldGen, PerlinNoise2D,
+│   │       │       MouseLight, PaintBrush, MazeBuilder, AI/Pacman
+│   │       ├── 3D/ Tileset3D
+│   │       ├── FX/ ColorManagement, UDR
+│   │       └── UI/ Gizmos, UIWindow, Profiler
+│   ├── runtime/ (GameClient, GameLoop, GameServer, Window)
+│   ├── mplay/ (NetworkClient, NetworkManager, NetworkMessage)
+│   └── tests/2D/ (PacmanMazeLevelScene, SimpleLightScene, TilesetScene)
 │
-└── Program.cs                         # Entry point → GameClient.Run()
+└── Program.cs
 ```
 
----
+## ECS
 
-## ECS (Entity Component System)
+Archetype-based, 64-bit bitmask signatures (max 64 component types), parallel queries, spatial indexing.
 
-Archetype-based ECS with 64-bit bitmask signatures (max 64 component types), parallel job system, and spatial indexing.
-
-### Creating and Destroying Entities
+### Entities & Components
 
 ```csharp
-// Create a bare entity (no components)
 int entityId = ECS.CreateEntity();
-
-// Create with position (auto-adds Transform + inserts into SpatialIndex)
-int entityId = ECS.CreateEntity(new Vector3(100, 200, 0));
-
-// Destroy — removes from spatial index, recycles ID via stack
+int entityId = ECS.CreateEntity(new Vector3(100, 200, 0)); // Auto-adds Transform + SpatialIndex
 ECS.DestroyEntity(entityId);
-```
 
-### Adding and Querying Components
+ref var transform = ref ECS.AddComponent<Transform>(entityId); // Returns ref
+ref var material = ref ECS.GetComponent<Material>(entityId);   // Returns ref — always capture by ref
 
-All components are `struct : Component`. `AddComponent` returns a ref so you can set fields immediately. `GetComponent` also returns a ref — **always capture by ref when mutating**.
+bool has = ECS.HasComponent<Circle2D>(entityId);
 
-```csharp
-// Add a component — returns ref to the newly added component
-ref var transform = ref ECS.AddComponent<Transform>(entityId);
-transform.Position = new Vector3(100, 200, 0);
-
-// Get a component — returns ref for in-place mutation
-ref var material = ref ECS.GetComponent<Material>(entityId);
-material.Albedo = Color.White;
-material.Emissive = new Color(255, 200, 100, 128);
-
-// Check if entity has a component
-bool hasCircle = ECS.HasComponent<Circle2D>(entityId);
-
-// Update position (also updates SpatialIndex)
-ECS.SetPosition(entityId, new Vector3(150, 250, 0));
+ECS.SetPosition(entityId, position); // Also updates SpatialIndex
 ```
 
 ### Parallel Queries
 
-Queries match all archetypes containing the requested components and distribute work across `ProcessorCount` threads.
+1-3 components, distributed across `ProcessorCount` threads:
 
 ```csharp
-// 1-component query
-ECS.Query<Transform>((threadId, entity, ref transform) =>
-{
-    transform.Position.X += 1f;
-});
-
-// 2-component query
-ECS.Query<Transform, Material>((threadId, entity, ref transform, ref material) =>
-{
-    material.Emissive = new Color(transform.Position.X / 3840f, 0, 0, 255);
-});
-
-// 3-component query
-ECS.Query<Transform, Circle2D, Material>((threadId, entity, ref transform, ref circle, ref material) =>
-{
-    circle.Radius = transform.Scale.X * 10f;
-});
+ECS.Query<Transform>((threadId, entity, ref transform) => { });
+ECS.Query<Transform, Material>((threadId, entity, ref transform, ref material) => { });
+ECS.Query<Transform, Circle2D, Material>((threadId, entity, ref transform, ref circle, ref material) => { });
 ```
 
 ### Spatial Queries
 
-Grid-based spatial index (cell size = 64 units, sparse dictionary, max 256 entities/cell). Returns `ReadOnlySpan<int>` (zero-allocation).
+Returns `ReadOnlySpan<int>` (zero-allocation):
 
 ```csharp
-// All entities within radius
-ReadOnlySpan<int> nearby = ECS.InRadius(center, radius);
+ECS.InRadius(center, radius);
+ECS.InBox(min, max);
+ECS.AtExact(position);                    // 0.01 precision
 
-// All entities in axis-aligned box
-ReadOnlySpan<int> inBox = ECS.InBox(min, max);
-
-// Entity at exact position (0.01 precision)
-int? exact = ECS.AtExact(position);
-
-// K-nearest neighbors
-ReadOnlySpan<int> nearest = ECS.Spatial.Nearest(center, count, maxRadius);
-
-// 2D radius query (ignores Y)
-ReadOnlySpan<int> flat = ECS.Spatial.InRadius2D(centerX, centerZ, radius);
+ECS.Nearest(center, count, maxRadius);
+ECS.InRadius2D(centerX, centerZ, radius); // Ignores Y
 ```
 
-### Pausing
+### Pausing & System Retrieval
 
 ```csharp
-ECS.Paused = true;  // Skips Update/FixedUpdate ONLY for systems marked [Pausable]
+ECS.GameplayPaused = true;  // Skips systems marked [Pausable] or [Pausable(PauseGroup.Gameplay)]
+ECS.AnimationPaused = true; // Skips systems marked [Pausable(PauseGroup.Animation)]
+
+var system = ECS.GetSystem<Geometry>(); // Returns null if not registered
 ```
 
-Systems without `[Pausable]` keep running (e.g., Inspector, Gizmos, rendering systems).
+`[Pausable]` defaults to `PauseGroup.Gameplay`. Systems without the attribute always run.
 
-### System Retrieval
-
-```csharp
-var geometry = ECS.GetSystem<Geometry>();  // Returns null if not registered
-```
-
-### Components Reference
-
-All components are `struct : Component`. Reference type fields (like `Texture2D`) are safe — ECS uses managed `Array.Copy`.
+### Components
 
 | Component | Fields | Notes |
 |-----------|--------|-------|
-| `Transform` | Position, Rotation, Scale (Vector3) | Rotation.X used as facing direction in some systems |
-| `Camera2D` | Position (Vector2), Zoom (float), Rotation (float) | |
-| `Material` | Albedo, Emissive (Color), Texture (Texture2D?) | Auto-calculates Absorption and EmissiveScaled on set |
+| `Transform` | Position, Rotation, Scale (Vector3) | Rotation.X = facing direction |
+| `Camera2D` | Position (Vector2), Zoom, Rotation (float) | |
+| `Material` | Albedo, Emissive (Color), Texture (Texture2D?) | Auto-calculates Absorption/EmissiveScaled on set |
 | `Circle2D` | Radius (float) | |
 | `Rectangle2D` | Size (Vector2) | |
 | `Triangle2D` | Size (Vector2), Bordered (bool) | |
@@ -261,19 +137,12 @@ All components are `struct : Component`. Reference type fields (like `Texture2D`
 | `Movement2D` | Speed, Acceleration (Vector2) | |
 | `RigidBody2D` | Weight (float) | |
 | `MotionTrackable` | 4-frame Vector3 circular buffer | Push(pos), CalculateVelocity() |
-| `Tile3D` | Id (ushort) | Used as array elements in Chunk3D.Tiles[] |
-| `Chunk3D` | Tiles (Tile3D[]) — 16x16x16 | Get(x,y,z), Set(x,y,z,tile) |
-| `TileData` | X, Y, Layer (int), TileTypeId (string) | Tileset system component |
+| `Chunk3D` | Tiles (Tile3D[]) — 16x16x16 | Get/Set(x,y,z,tile) |
+| `TileData` | X, Y, Layer (int), TileTypeId (string) | |
 
-`Tile3D` (ushort Id) is a Component. Used as array elements inside `Chunk3D.Tiles[]`, not typically as a standalone ECS component on entities.
-
-`Material` is the most complex: setting `Albedo` or `Emissive` auto-recalculates `Absorption` (inverted albedo for non-emitters, scaled emissive for emitters) and `EmissiveScaled` (RGB * intensity). The `Texture` field modulates emissive color when non-null.
-
----
+`Material`: setting Albedo/Emissive auto-recalculates Absorption and EmissiveScaled. Texture modulates emissive when non-null. Reference fields safe — ECS uses managed `Array.Copy`.
 
 ## System Architecture
-
-### System Base Class
 
 ```csharp
 public abstract class System
@@ -282,256 +151,153 @@ public abstract class System
     public Renderer Renderer;
     public GameTime GameTime;
     public bool Enabled = true;
-    public virtual RenderLayer RenderLayer => RenderLayer.Gameplay; // Render/LateRender sort order
+    public virtual RenderLayer RenderLayer => RenderLayer.Gameplay;
 
-    public virtual void Initialize() {}   // Called once after ECS.Initialize()
-    public virtual void Update() {}       // Called every frame
-    public virtual void FixedUpdate() {}  // Called at 64 UPS
-    public virtual void Render() {}       // Called every frame (rendering pass)
-    public virtual void LateRender() {}   // Called after all Render() calls
-    public virtual void OnResize() {}     // Called when window resizes
-    public virtual void Dispose() {}      // Called on shutdown
+    public virtual void Initialize() {}   // Once after ECS.Initialize()
+    public virtual void Update() {}       // Every frame
+    public virtual void FixedUpdate() {}  // 64 UPS
+    public virtual void Render() {}       // Every frame (GPU pipeline order)
+    public virtual void LateRender() {}   // After all Render() — sorted by RenderLayer then topo
+    public virtual void OnResize() {}
+    public virtual void Dispose() {}
 }
 ```
 
-### Ordering Attributes
+### Ordering & Attributes
 
-Accepts `params Type[]` — pass one or multiple system types per attribute. `AllowMultiple = true` so you can also use separate attributes.
+`[RunAfter(typeof(A), typeof(B))]`, `[RunBefore(...)]` — params Type[], AllowMultiple.
+`[Pausable]` — skipped when `ECS.GameplayPaused` (default). `[Pausable(PauseGroup.Animation)]` — skipped when `ECS.AnimationPaused`.
+Topological sort (Kahn's) at `ECS.Initialize()`.
 
-```csharp
-// Multiple types in one attribute (preferred when listing dependencies)
-[RunAfter(typeof(HRCGI), typeof(RCGI))]
-[RunBefore(typeof(Bilinear), typeof(UDR1), typeof(UDR2), typeof(UDR3))]
-[Pausable]                         // Skipped when ECS.Paused = true
-public class ColorManagement : System { ... }
+### RenderLayer
 
-// Single type per attribute also works
-[RunAfter(typeof(Geometry))]
-[RunBefore(typeof(GizmosRenderer))]
-public class MySystem : System { ... }
-```
+`LateRender()` sorted by layer first, then topo index. `Render()` stays pure topo (GPU pipeline deps).
 
-Topological sort (Kahn's algorithm) runs at `ECS.Initialize()`.
+| Layer | Value | Systems |
+|-------|-------|---------|
+| World | 0 | Geometry, HRCGI, RCGI, ColorManagement, Bilinear, UDR1-3 |
+| Gameplay | 1 | *(default)* Game systems |
+| Overlay | 2 | GizmosRenderer, PerformanceMonitor |
+| UI | 3 | Inspector |
 
-### RenderLayer — Render Order Control
+### SystemGroup
 
-`LateRender()` uses a separate render-sorted system list: sorted by `RenderLayer` first, then topological index within each layer. `Update()`/`FixedUpdate()`/`Render()` still use pure topological order. (`Render()` keeps topological order because it has GPU pipeline dependencies — systems switch render targets, and reordering would cause backbuffer content loss on MonoGame WindowsDX.)
+Mutually exclusive systems (e.g., HRCGI vs RCGI):
 
 ```csharp
-public enum RenderLayer : byte { World = 0, Gameplay = 1, Overlay = 2, UI = 3 }
-```
-
-Override in your system class (default is `Gameplay`):
-
-```csharp
-public override RenderLayer RenderLayer => RenderLayer.World;
-```
-
-| Layer | Systems |
-|-------|---------|
-| **World** | Geometry, HRCGI, RCGI, ColorManagement, Bilinear, UDR1, UDR2, UDR3 |
-| **Gameplay** | *(default)* PacmanGhostAI, PacmanPlayer, RainbowGhostAI, PacmanMazeBuilder, MouseLight, PaintBrush, Tileset, WorldGen, PerlinNoise |
-| **Overlay** | GizmosRenderer, PerformanceMonitor |
-| **UI** | Inspector |
-
-### SystemGroup — Mutually Exclusive Systems
-
-For systems that are alternatives to each other (e.g., HRCGI vs RCGI, Bilinear vs UDR1/2/3):
-
-```csharp
-// Create group — only one system is enabled at a time
-var giGroup = new SystemGroup(
+var group = new SystemGroup(
     ("HRCGI", ECS.AddSystem<HRCGI>()),
     ("RCGI",  ECS.AddSystem<RCGI>(enabled: false))
 );
 
-giGroup.Toggle();              // Dispose current → Initialize next → Enable it
-giGroup.ActiveName;            // "HRCGI" or "RCGI"
-giGroup.Active;                // The currently enabled System instance
-giGroup.ForEach(system => {}); // Iterate all systems in group
+group.Toggle();              // Dispose current → Initialize next
+group.ActiveName;            // Current system name
+group.Active;                // Current System instance
+group.ForEach(system => {}); // Iterate all systems in group
 ```
-
-### System Init Order
-
-1. Inspector → 2. PerformanceMonitor → 3. Geometry → 4. HRCGI/RCGI → 5. ColorManagement → 6. Bilinear/UDR → 7. PacmanMazeBuilder → 8. PacmanPlayer → 9. PacmanGhostAI → 10. RainbowGhostAI → 11. GizmosRenderer
-
-(Actual order determined by `[RunAfter]`/`[RunBefore]` topological sort)
-
----
 
 ## Renderer API
 
-All rendering goes through the `Renderer` class. **Never access `Device`, `SpriteBatch`, or `Window.Content` directly** (marked `[Obsolete]`).
+All rendering through `Renderer`. Never access `Device`, `SpriteBatch`, `Window.Content` directly.
 
 ### Fluent Shader Pipeline
 
-Chain shader setup and rendering into a single expression. `Draw()` renders a fullscreen quad.
-
 ```csharp
 Renderer
-    .Reset()                                      // Clear all state
-    .SetShader("HRC/HRC_FrustumSeed")             // Load + activate shader (cached)
-    .SetTechnique("Default")                       // Select technique
-    .Configure(BlendState.Opaque)                  // Set blend state
-    .Configure(SamplerState.PointClamp, slot: 0)   // Set sampler at slot
-    .SetTarget(outputRT)                           // Set render target (null = backbuffer)
-    .Clear(Color.Black)                            // Clear current target
-    .SetParameter("EmissiveTexture", emissiveTex)  // Set shader parameter (typed overloads)
+    .Reset()
+    .SetShader("HRC/HRC_FrustumSeed").SetTechnique("Default")
+    .Configure(BlendState.Opaque).Configure(SamplerState.PointClamp, slot: 0)
+    .SetTarget(outputRT).Clear(Color.Black)
+    .SetParameter("EmissiveTexture", emissiveTex)
     .SetParameter("ScreenSize", Renderer.ScreenSize)
-    .Draw()                                        // Draw fullscreen quad
-    .Commit();                                     // End any pending SpriteBatch
+    .Draw()
+    .Commit();
 ```
 
-### Shader Management
+**Shader management**:
+- `SetShader(name)` — load + activate (cached)
+- `SetTechnique(name)` — select technique
+- `GetShaderEffect(name)` — get Effect without activating
+- `ReleaseShader(name)` — dispose + remove from cache
 
-```csharp
-Renderer.SetShader("HRC/HRC_Extensions");     // Load + set active (cached after first load)
-Renderer.SetTechnique("Default");              // Set technique on active shader
-Renderer.GetShaderEffect("InstancedShapes");   // Get Effect without setting active (for external params)
-Renderer.ReleaseShader("OldShader");           // Dispose + remove from cache
-```
+**SetParameter** (typed overloads: float, int, bool, Vector2/3/4, Matrix, Texture2D, arrays):
+- `SetParameter(name, value)` — on active shader
+- `SetParameter(name, value, externalEffect)` — on specific Effect
+- `SetParameter(effect, name, value)` — static helper
 
-### Shader Parameters
-
-All `SetParameter` overloads work on the active shader by default, or pass an explicit `Effect`:
-
-```csharp
-// Typed overloads (float, int, bool, Vector2/3/4, Matrix, Texture2D, arrays)
-Renderer.SetParameter("BlurRadius", 5.0f);
-Renderer.SetParameter("ScreenSize", new Vector2(3840, 2160));
-Renderer.SetParameter("InputTexture", someTexture);
-Renderer.SetParameter("Weights", new float[] { 0.1f, 0.2f, 0.4f });
-
-// On external Effect
-Renderer.SetParameter("Param", value, externalEffect);
-
-// Static helper for external Effects
-Renderer.SetParameter(shapeShader, "ViewProjection", viewProjMatrix);
-```
-
-### State Configuration
-
-`Configure()` overloads set render state for subsequent draw calls:
-
-```csharp
-Renderer.Configure(BlendState.AlphaBlend);          // Blend state
-Renderer.Configure(DepthStencilState.None);          // Depth stencil
-Renderer.Configure(RasterizerState.CullNone);        // Rasterizer
-Renderer.Configure(SamplerState.LinearClamp, 0);     // Sampler at slot 0
-Renderer.Configure(SpriteSortMode.Immediate);        // Sort mode for SpriteBatch
-
-// Multiple samplers at once
-Renderer.Configure((0, SamplerState.PointClamp), (1, SamplerState.LinearWrap));
-
-// Multiple states by type detection
-Renderer.Configure(BlendState.Opaque, SamplerState.PointClamp);
-```
+**Configure** (overloads): BlendState, DepthStencilState, RasterizerState, `SamplerState + slot`, SpriteSortMode, tuple pairs `(slot, SamplerState)`, multi-type.
 
 ### Shape Rendering (GPU Instanced)
 
-Shapes are batched and rendered in a single `DrawInstancedPrimitives` call. Up to 65536 default capacity (auto-grows).
+Up to 65536 (auto-grows). Shape types: 0=rect, 1=circle, 2=triangle, 3=triangle_border.
 
 ```csharp
-// Add shapes to batch (fluent)
 Renderer.DrawRect(position, size, color);
 Renderer.DrawCircle(center, radius, color);
 Renderer.DrawTriangle(position, size, color);
 Renderer.DrawTriangleBorder(position, size, color);
 Renderer.DrawShape(customShape);
 
-// Flush all batched shapes to a render target
-Renderer.FlushShapes(target, clearColor, "Default");
-// Techniques: "Default" (AA), "Sharp" (hard), "Emissive" (for GI)
+Renderer.FlushShapes(target, clearColor, "Default");                  // "Default" (AA), "Sharp", "Emissive"
+Renderer.FlushShapesExternal(array, count, target, clearColor, tech); // Zero-copy external buffer
 
-// External buffer — zero copy, for pre-collected shapes
-Renderer.FlushShapesExternal(shapeArray, count, target, clearColor, "Emissive");
-
-// Clear without rendering
 Renderer.ClearShapes();
-
-// Current batch size
-int pending = Renderer.ShapeBatchCount;
+Renderer.ShapeBatchCount; // Current batch size
 ```
-
-Shape types: 0=rect, 1=circle, 2=triangle, 3=triangle_border.
 
 ### Parallel Shape Collection
 
-For multi-threaded shape gathering (used by Geometry system):
-
 ```csharp
-// Initialize once (typically in system Initialize)
-Renderer.InitializeParallelShapes(threadCount, capacityPerThread);
-
-// Ensure capacity for entity count growth
+Renderer.InitializeParallelShapes(threadCount, capacity);
 Renderer.EnsureParallelCapacityForEntities(entityCount);
 
-// Inside parallel work:
 Renderer.DrawShapeParallel(threadIndex, shape);
-// OR direct buffer access:
-Shape[] buffer = Renderer.GetParallelBuffer(threadIndex);
-float[] zBuffer = Renderer.GetParallelZBuffer(threadIndex);
-buffer[localIndex] = myShape;
-zBuffer[localIndex] = zValue;
-Renderer.SetParallelCount(threadIndex, count);
-
-// Sort each thread's buffer by Z (call inside parallel work)
 Renderer.SortParallelBufferByZ(threadIndex);
 
-// Collect all threads into main Shapes array (call on main thread)
-Renderer.CollectParallelShapesSorted(); // k-way merge with min-heap O(N log T)
-// OR unsorted:
-Renderer.CollectParallelShapes();       // simple Array.Copy concatenation
-
-// Clear all parallel buffers
+Renderer.CollectParallelShapesSorted(); // k-way merge
+Renderer.CollectParallelShapes();       // unsorted Array.Copy
 Renderer.ClearParallelShapes();
+
+// Direct buffer access
+Shape[] buffer = Renderer.GetParallelBuffer(threadIndex);
+float[] zBuffer = Renderer.GetParallelZBuffer(threadIndex);
+Renderer.SetParallelCount(threadIndex, count);
 ```
 
 ### Render Targets
 
 ```csharp
-// Push/pop for nested rendering (saves/restores current targets)
 Renderer.PushTargets();
-Renderer.SetTarget(myRT);         // Single target (null = backbuffer)
-// ... render ...
-Renderer.PopTargets();            // Restore previous targets
+Renderer.PopTargets();
 
-// Multiple render targets (MRT, up to 4)
-Renderer.SetTargets(rt0, rt1);                 // 2 targets
-Renderer.SetTargets(rt0, rt1, rt2);            // 3 targets
-Renderer.SetTargets(rt0, rt1, rt2, rt3);       // 4 targets
-
-// Clear current target
+Renderer.SetTarget(rt);        // null = backbuffer
+Renderer.SetTargets(rt0, rt1); // MRT up to 4
 Renderer.Clear(Color.Black);
 
-// Create render targets (factory — never use new RenderTarget2D(Device, ...) directly)
-var rt = Renderer.CreateRenderTarget(width, height, SurfaceFormat.Color,
+var rt = Renderer.CreateRenderTarget(w, h, SurfaceFormat.Color,
     DepthFormat.None, RenderTargetUsage.DiscardContents);
 
-var texture = Renderer.CreateTexture(width, height, SurfaceFormat.HalfVector4);
+var tex = Renderer.CreateTexture(w, h, SurfaceFormat.HalfVector4);
 ```
 
-Pooled binding arrays (16 pre-allocated per MRT size) to avoid GC.
-
-### Blit — SpriteBatch Convenience
+### Blit
 
 Two semantics — know the difference:
 
 ```csharp
 // STRETCH to current target's viewport (fullscreen)
-// Use for: displaying final output, fullscreen effects
-Renderer.Blit(sourceTexture, BlendState.Opaque, SamplerState.PointClamp);
+Renderer.Blit(source, BlendState.Opaque, SamplerState.PointClamp);
 
-// NATIVE SIZE at origin (no stretch)
-// Use for: RT-to-RT copies where sizes may differ
-Renderer.Blit(sourceTexture, destinationRT, clearColor, BlendState, SamplerState);
+// NATIVE SIZE at origin (no stretch) — for RT-to-RT copies
+Renderer.Blit(source, destRT, clearColor, blend, sampler);
+
+// Stretch-to-specific-target: SetTarget(t).Clear(c) then Blit(source, blend, sampler)
+
+// Subtractive mask: dest * (1 - mask.a)
+Renderer.BlitMask(mask, destRect, rotation, origin);
 ```
 
-For stretch-to-specific-target: `SetTarget(target).Clear(color)` then `Blit(source, blend, sampler)`.
-
 ### SpriteBatch Drawing
-
-For complex drawing (UI, tiles, gizmos). Must be wrapped in `BeginDraw`/`EndDraw`:
 
 ```csharp
 Renderer.BeginDraw(SpriteSortMode.Deferred, BlendState.AlphaBlend,
@@ -539,313 +305,192 @@ Renderer.BeginDraw(SpriteSortMode.Deferred, BlendState.AlphaBlend,
 
 Renderer.DrawSprite(texture, destRect, Color.White);
 Renderer.DrawSprite(texture, destRect, sourceRect, Color.White, rotation, origin);
-Renderer.DrawString(font, "Score: 100", position, Color.White);
-Renderer.DrawString(font, "Score: 100", position, Color.White, 0.5f);           // Scaled text
-Renderer.DrawString(font, "Title", position, Color.White, bold: true);           // Faux bold (1px offset)
-Renderer.DrawString(font, "Title", position, Color.White, 0.5f, bold: true);    // Scaled faux bold
+Renderer.DrawString(font, text, position, color); // Optional: scale (float), bold: true
 
 Renderer.EndDraw();
 ```
 
-### Asset Loading (all cached, shared across systems)
+### Assets (all cached)
 
 ```csharp
-Texture2D ghostTex  = Renderer.GetTexture("Ghost");          // Content pipeline asset
-SpriteFont font      = Renderer.GetFont("fonts/BaseFont");    // SpriteFont
-Texture2D whitePixel = Renderer.GetSolidTexture(Color.White); // 1x1 solid (cached by color+size)
-Texture2D circleTex  = Renderer.GetCircleTexture(64);         // AA circle (cached by diameter)
-Texture2D roundedTex = Renderer.GetRoundedRectTexture(8);     // AA rounded rect (cached by radius)
+Renderer.GetTexture("Ghost");
+Renderer.GetFont("fonts/BaseFont");
+Renderer.GetSolidTexture(Color.White);   // 1x1 solid (cached by color)
+Renderer.GetCircleTexture(64);           // AA circle (cached by diameter)
+Renderer.GetRoundedRectTexture(8);       // AA rounded rect (cached by radius)
 ```
 
-### Rounded Rectangles (9-slice)
+### Rounded Rectangles
 
 ```csharp
-// Fully rounded (all corners)
 Renderer.DrawRoundedRect(bounds, color, cornerRadius);
-
-// Selective corners (title bar with top-only rounding, window body with bottom-only)
-Renderer.DrawRoundedRect(titleBarBounds, titleColor, 8, RoundedCorners.Top);
-Renderer.DrawRoundedRect(bodyBounds, bodyColor, 8, RoundedCorners.Bottom);
-
-// Falls back to solid rect when radius <= 1 or RoundedCorners.None
+Renderer.DrawRoundedRect(bounds, color, radius, RoundedCorners.Top);
+// Flags: None, TL, TR, BL, BR, Top (TL|TR), Bottom (BL|BR), All
 ```
 
-`RoundedCorners` flags: `None`, `TL`, `TR`, `BL`, `BR`, `Top` (TL|TR), `Bottom` (BL|BR), `All` (Top|Bottom). Corner radius auto-clamps to half the smallest dimension (8px-tall slider track → pill shape).
-
-### Texture Slots (low-level)
-
-For register-bound shader textures (when named parameters aren't available):
+### Texture Slots
 
 ```csharp
-Renderer.SetTexture(0, someTexture);                         // Bind to slot 0
-Renderer.SetTexture(1, anotherTexture, SamplerState.LinearClamp); // Slot + sampler
-Renderer.SetTextures((0, texA), (1, texB));                  // Multiple slots
-Renderer.ClearTextures(4);                                   // Clear first N slots
-Renderer.UploadToTexture(target, colorData, count);           // Raw pixel upload
-Renderer.UploadToTexture(target, colorData, subRegion);       // Upload to sub-region
+Renderer.SetTexture(slot, texture);
+Renderer.SetTexture(slot, texture, sampler);
+Renderer.SetTextures((0, texA), (1, texB));
+
+Renderer.ClearTextures(count);
+
+Renderer.UploadToTexture(target, data, count);
+Renderer.UploadToTexture(target, data, subRegion);
 ```
 
-### Ping-Pong Rendering
-
-For multi-pass effects that alternate between two render targets:
+### Ping-Pong
 
 ```csharp
-RenderTarget2D finalOutput = Renderer.PingPong(
-    rtA, rtB, passCount,
-    beforePass: (passIndex, inputTexture) => { /* set shader params */ },
-    afterPass: (passIndex) => { /* optional */ },
-    clearColor: Color.Black
-);
-```
-
-### Subtractive Mask
-
-Erases pixels where mask has alpha: `dest * (1 - mask.alpha)`:
-
-```csharp
-Renderer.BlitMask(maskTexture, destRect, rotation, origin);
+RenderTarget2D output = Renderer.PingPong(rtA, rtB, passCount,
+    beforePass: (index, inputTexture) => { },
+    afterPass: (index) => { },
+    clearColor: Color.Black);
 ```
 
 ### Screen Properties
 
 ```csharp
-Renderer.ScreenWidth / ScreenHeight / ScreenSize    // Current viewport (pixels)
-Renderer.VirtualWidth / VirtualHeight / VirtualSize  // Fixed 3840x2160 world coords
-Renderer.AspectRatio / InverseAspectRatio
-Renderer.ScreenDiagonal / ScreenArea
-Renderer.ScreenLowerPowerOfTwo / ScreenHigherPowerOfTwo
+Renderer.ScreenWidth / ScreenHeight / ScreenSize   // Current viewport (pixels)
+Renderer.VirtualWidth / VirtualHeight / VirtualSize // Fixed 3840x2160 world coords
 
-// Dynamic resolution
-Renderer.RenderScale = 0.5f;              // 0.25 to 1.0
-Renderer.ScaledWidth / ScaledHeight        // Scaled viewport
-Renderer.RenderScaleChanged += (scale) => { /* resize RTs */ };
+Renderer.RenderScale = 0.5f; // 0.25 to 1.0
+Renderer.ScaledWidth / ScaledHeight;
+Renderer.RenderScaleChanged += (scale) => {};
 
-// Coordinate conversion
-Vector2 worldPos = Renderer.ScreenToWorld(mouseScreenPos);
-Vector2 screenPos = Renderer.WorldToScreen(entityWorldPos);
-Vector2 scale = Renderer.VirtualToScreenScale;              // Cached (ScreenSize / VirtualSize)
-Rectangle rect = Renderer.VirtualToScreenRect(x, y, w, h); // Edge-snapped (no sub-pixel gaps)
+Renderer.ScreenToWorld(screenPos);
+Renderer.WorldToScreen(worldPos);
+Renderer.VirtualToScreenScale;
+Renderer.VirtualToScreenRect(x, y, w, h);
 
-// Window state
-Renderer.IsActive          // Window focused?
-Renderer.GameLoop           // Timing info (FPS, etc.)
-Renderer.ViewportBounds     // Current viewport Rectangle
-Renderer.HasPendingResize   // True when window was resized → call HandleResize()
-Renderer.HandleResize();    // Clears flag + updates screen info
+Renderer.IsActive;         // True when window is focused
+Renderer.ViewportBounds;
+Renderer.HasPendingResize;
+Renderer.HandleResize();
+
 Renderer.ClearBackBuffer(Color.Black);
+
+Renderer.Reset();
+Renderer.Begin();
+Renderer.Commit();
 ```
-
-### Flow Control
-
-```csharp
-Renderer.Reset();    // Clear all state (blend, shader, drawing flag)
-Renderer.Begin();    // Mark as actively drawing
-Renderer.Commit();   // End any pending SpriteBatch + mark drawing complete
-```
-
----
 
 ## Rendering Pipeline
 
-### Geometry System (Geometry.cs)
+### Geometry System
 
-Collects all entity shapes each frame and produces the textures that feed GI:
+Collects entity shapes → produces textures for GI:
 
-1. **Background blit** — If `BackgroundEmissive`/`BackgroundAbsorption` are set, blit them first (used by PacmanMazeBuilder for static maze walls)
-2. **Double-buffered collection** — Write buffer (background threads) / Read buffer (render) swapped each frame
-3. **Z-layer bucketing** — 65536 layers x ThreadCount buckets, flattened to render arrays via Array.Copy
-4. **Shape rendering** — Emissive shapes → EmissiveTexture, Absorption shapes → AbsorptionTexture (append mode when backgrounds exist)
-5. **SDF generation** — Jump Flooding Algorithm (JFA) on absorption → SDFTexture (HalfVector2)
-6. **Motion vectors** — Per-entity velocity encoded as color → MotionVectorTexture (HalfVector2)
-7. **Texture draws** — Material.Texture entities drawn via SpriteBatch (separate from instanced shapes)
+1. Background blit (BackgroundEmissive/BackgroundAbsorption if set)
+2. Double-buffered write/read swap each frame
+3. Z-layer bucketing (65536 layers x threads)
+4. Shape rendering → EmissiveTexture + AbsorptionTexture (append mode with backgrounds)
+5. JFA → SDFTexture (HalfVector2)
+6. Motion vectors → MotionVectorTexture (HalfVector2)
+7. Material.Texture entities via SpriteBatch
 
-Debug mode properties:
-- `IsDebugging` — true when any debug visualization is active
-- `IsDebugHidingGameplay` — true for debug modes that replace gameplay visuals (SDF, JFA, MotionVectors). False for Emissive/Absorption debug (gameplay eyes still render). Used by PacmanGhostAI, RainbowGhostAI, PacmanPlayer to hide eyes in non-gameplay debug views.
+Debug: `IsDebugging` (any debug active), `IsDebugHidingGameplay` (SDF/JFA/MotionVectors replace gameplay).
 
-### HRCGI System (HRCGI.cs)
+### HRCGI System
 
-Hierarchical Radiance Caching — based on Rouli Freeman (arXiv:2505.02041). 4-frustum cascade GI:
-
-1. **FrustumSeed** — Seed cascade 0 from Emissive/Absorption textures
-2. **Extensions** — Extend rays cascade N-1 → N (merge radiance/transmittance)
-3. **MergingCones** — Backward pass N → 0, cone merging for angular coverage
-4. **FluenceSum** — Average 4 frustums → FinalTexture
-
-Quality presets via Inspector: ProbeScale 4/3/2/1 (Performance → Native).
+HRC GI (arXiv:2505.02041). 4-frustum cascades:
+FrustumSeed → Extensions → MergingCones → FluenceSum → FinalTexture.
+Quality: ProbeScale 4/3/2/1.
 
 ### Render Target Formats
 
 | Target | Format | Notes |
 |--------|--------|-------|
-| EmissiveTexture | Color | Screen-sized |
-| AbsorptionTexture | Color | Screen-sized, **PreserveContents** |
-| SDFTexture | HalfVector2 | Screen-sized |
-| MotionVectorTexture | HalfVector2 | Screen-sized |
-| JFATexture1/2 | Vector4 | Reduced (SDFScale=0.25) |
-| Vrays/Merge Radiance/Transmittance | HalfVector4 | Per-cascade |
-| FrustumRadiance/Transmittance | HalfVector4 | Per-frustum (4) |
-| FinalTexture (HRCGI) | HalfVector4 | World-sized, raw linear GI |
+| Emissive/AbsorptionTexture | Color | AbsorptionTexture uses **PreserveContents** |
+| SDF/MotionVectorTexture | HalfVector2 | Screen-sized |
+| JFATexture1/2 | Vector4 | SDFScale=0.25 |
+| Cascade/Frustum RTs | HalfVector4 | Per-cascade/frustum |
+| FinalTexture (HRCGI) | HalfVector4 | World-sized, raw linear |
 | ColorManagement Output | Color | Tonemapped sRGB |
 
-**RenderTargetUsage.PreserveContents**: MonoGame WindowsDX discards render target contents on target switch by default. Use PreserveContents for any RT read later (e.g., AbsorptionTexture).
-
----
+**PreserveContents**: MonoGame WindowsDX discards RT on target switch by default. Use for any RT read later.
 
 ## Shaders
 
-### Critical Rules
+1. **Register collision**: InstancedShapes.fx must NOT overlap Geometry.fx registers (t0-t3, s0-s1). Use t4+/s2+. Auto-assign defaults to t0 = collision. Pink SDF = register collision.
+2. **SM4.0+ only**: `Texture2D`, `SamplerState`, `.Sample()` — no `tex2D()`.
+3. **MGFX dead-code elimination**: Unused texture params per-technique eliminated. Default/Sharp don't reference ShapeTexture → pass.Apply() skips t4/s2.
+4. **Premultiplied alpha**: `texColor.rgb = origRGB * texColor.a`. Don't double-premultiply.
+   Correct: `result.rgb = texPremul.rgb * tint.rgb * (tintA * sdfAlpha); result.a = texA * tintA * sdfAlpha;`
 
-1. **Register collision**: InstancedShapes.fx must NOT overlap Geometry.fx registers (t0-t3, s0-s1). Use t4+/s2+ for InstancedShapes texture params. Auto-assign defaults to t0, which collides. Pink SDF = register collision.
+**InstancedShapes.fx**: Default (AA), Sharp (hard), Emissive (GI feed).
 
-2. **SM4.0+ style only**: `Texture2D`, `SamplerState`, `.Sample()` — no legacy `tex2D()`.
+**Geometry.fx**: InitializeJFA, InitializeJFAInterior, JFAPass, GenerateSDFFromJFA, DebugSDFVisible, DebugJFA, DebugJFARaw, DebugEmissive, DebugMotionVectors, ClearMotion.
 
-3. **MGFX dead-code elimination**: Unused texture params per-technique get eliminated at compile time. Default/Sharp techniques don't reference ShapeTexture → `pass.Apply()` won't touch t4/s2 for those techniques. No dummy texture needed.
+## Inspector (UI)
 
-4. **Premultiplied alpha**: Content pipeline sets `PremultiplyAlpha=True`, meaning `texColor.rgb = originalRGB * texColor.a`. Correct compositing:
-   ```hlsl
-   result.rgb = texPremul.rgb * tint.rgb * (tintA * sdfAlpha);
-   result.a   = texA * tintA * sdfAlpha;
-   ```
-   Do NOT do `color.rgb *= color.a` after sampling a premultiplied texture — that double-premultiplies.
+Static API — safe even if Inspector not registered. Retained-mode windows, 375px default width, HD text (InspectorFont 42pt at 1/3 scale). Default theme: Radiant.
 
-### InstancedShapes.fx Techniques
-
-| Technique | Description |
-|-----------|-------------|
-| `Default` | SDF shapes with smoothstep AA (fwidth) |
-| `Sharp` | Pixel-perfect, hard discard (no anti-aliasing) |
-| `Emissive` | Sharp SDF for GI light source feeding |
-
-### Geometry.fx Techniques
-
-InitializeJFA, InitializeJFAInterior, JFAPass, GenerateSDFFromJFA, DebugSDFVisible, DebugJFA, DebugJFARaw, DebugEmissive, DebugMotionVectors, ClearMotion
-
----
-
-## UI System (Inspector)
-
-Retained-mode window system: draggable panels, title bars, close buttons, and interactive widgets with rounded corners (via `Renderer.DrawRoundedRect`). **Static API** — safe to call even if Inspector system isn't registered (calls silently ignored). Renders in `LateRender()` before GizmosRenderer. Default window width: 375. HD text via InspectorFont (42pt rendered at 1/3 scale). Default theme: Radiant (golden accent).
-
-### Window Management
+### Windows
 
 ```csharp
-Inspector.CreateWindow("myWindow", "Window Title");     // Create auto-positioned window (LayoutOrder=100)
-Inspector.CreateWindow("myWindow", "Window Title", 0);  // Explicit layout order (lower = first)
-Inspector.DestroyWindow("myWindow");                 // Remove window entirely
-Inspector.ShowWindow("myWindow");                    // Make visible
-Inspector.HideWindow("myWindow");                    // Make invisible
-Inspector.ToggleWindow("myWindow");                  // Toggle visibility
-bool visible = Inspector.IsWindowVisible("myWindow");
+Inspector.CreateWindow("id", "Title");
+Inspector.CreateWindow("id", "Title", layoutOrder);
+
+Inspector.DestroyWindow("id");
+
+Inspector.ShowWindow("id");
+Inspector.HideWindow("id");
+Inspector.ToggleWindow("id");
+
+Inspector.IsWindowVisible("id");
 ```
 
 ### Widgets (call in Initialize or SetupScene)
 
 ```csharp
-// Static text label (can display stats)
-Inspector.AddLabel("myWindow", "fpsLabel", "FPS: 0");
-
-// Clickable button
-Inspector.AddButton("myWindow", "resetBtn", "Reset", () =>
-{
-    // callback when clicked
-});
-
-// Boolean toggle with initial value
-Inspector.AddToggle("myWindow", "debugToggle", "Show Debug", false, (isEnabled) =>
-{
-    // callback with new bool value
-});
-
-// Float slider with range
-Inspector.AddSlider("myWindow", "speedSlider", "Speed", 0f, 10f, 5f, (value) =>
-{
-    // callback with new float value
-});
-
-// Dropdown selector with options
-Inspector.AddDropdown("myWindow", "themeSelect", "Theme", ["Dark", "Light", "Blue"], 0, (index) =>
-{
-    // callback with selected index
-});
-
-// Remove a widget
-Inspector.RemoveWidget("myWindow", "oldWidget");
+Inspector.AddLabel("win", "id", "text");
+Inspector.AddButton("win", "id", "text", () => {});
+Inspector.AddToggle("win", "id", "text", initialValue, (bool value) => {});
+Inspector.AddSlider("win", "id", "text", min, max, initial, (float value) => {});
+Inspector.AddDropdown("win", "id", "text", options, initialIndex, (int index) => {});
+Inspector.RemoveWidget("win", "id");
 ```
 
-### Updating Widget Values (call in Update)
+### Updating Widgets (call in Update)
 
 ```csharp
-Inspector.SetLabel("myWindow", "fpsLabel", $"FPS: {currentFps:F0}");
-Inspector.SetSliderValue("myWindow", "speedSlider", newSpeed);
-Inspector.SetToggleValue("myWindow", "debugToggle", true);
-Inspector.SetDropdownValue("myWindow", "themeSelect", 2);
-Inspector.SetDropdownOptions("myWindow", "themeSelect", ["A", "B", "C"]);
+Inspector.SetLabel("win", "id", "new text");
+Inspector.SetSliderValue("win", "id", value);
+Inspector.SetToggleValue("win", "id", value);
+Inspector.SetDropdownValue("win", "id", index);
+Inspector.SetDropdownOptions("win", "id", newOptions);
 ```
 
-### Input Gating
+### Input & Themes
 
 ```csharp
-// Prevent world clicks when mouse is over UI
-if (!Inspector.IsMouseOverUI())
-{
-    // Handle world interaction (clicks, painting, etc.)
-}
+Inspector.IsMouseOverUI(); // Input gating
+
+Inspector.RegisterTheme("name", new InspectorTheme { ... });
+Inspector.ApplyTheme("name");
+Inspector.GetThemeNames();
+
+Inspector.WindowsRestored += () => {}; // F1 restore event
 ```
 
-### Theme API
-
-Registry-based theme system — built-in themes registered at startup, external code can add custom themes.
-
-```csharp
-// Register a custom theme
-Inspector.RegisterTheme("MyTheme", new InspectorTheme
-{
-    WindowBg = new(20, 20, 30, 220), TitleBarColor = new(40, 40, 60, 240), TitleBarHover = new(50, 50, 70, 240),
-    ButtonColor = new(45, 45, 65, 220), ButtonHover = new(60, 60, 80, 240),
-    SliderTrack = new(35, 35, 50, 200), SliderFill = new(80, 120, 200, 255), SliderHandle = new(150, 150, 170, 255),
-    ToggleOn = new(80, 80, 170, 255), ToggleOff = new(55, 55, 60, 200),
-    CloseColor = new(180, 60, 60, 255), CloseHover = new(220, 80, 80, 255),
-    TextColor = new(220, 220, 230, 255), CloseText = new(220, 220, 230, 255), LabelDim = new(160, 160, 170, 255)
-});
-
-// Apply by name or index
-Inspector.ApplyTheme("MyTheme");
-Inspector.ApplyTheme(0);  // Index into registered theme list
-
-// Get all registered theme names
-string[] names = Inspector.GetThemeNames();
-```
-
-Built-in themes: Radiant (default, golden accent), Dark, Light, Monokai, Nord, Solarized, Gruvbox.
-
-### Events
-
-```csharp
-// Fired when F1 restores all windows to visible
-Inspector.WindowsRestored += () => { /* update window visibility */ };
-```
-
----
+Built-in themes: Radiant, Dark, Light, Monokai, Nord, Solarized, Gruvbox.
 
 ## GizmosRenderer
 
-Debug visual overlay. Add gizmo primitives from any system; they render in `LateRender()`. Queues are cleared each frame in `Update()`.
-
 ```csharp
 var gizmos = ECS.GetSystem<GizmosRenderer>();
-gizmos.ToggleGizmos();  // Toggle visibility
 
-gizmos.AddGizmoLine(start, end, Color.Red, thickness);
-gizmos.AddGizmoCircle(center, radius, Color.Green);
-gizmos.AddGizmoArc(center, radius, startAngle, endAngle, Color.Blue);
-gizmos.AddGizmoRect(rectangle, Color.Yellow, filled);
-gizmos.AddGizmoText(position, "debug text", Color.White);
+gizmos.ToggleGizmos();
+
+gizmos.AddGizmoLine(start, end, color, thickness);
+gizmos.AddGizmoCircle(center, radius, color);
+gizmos.AddGizmoArc(center, radius, startAngle, endAngle, color);
+gizmos.AddGizmoRect(rect, color, filled);
+gizmos.AddGizmoText(position, text, color);
 ```
-
-Always renders build tag in bottom-left corner regardless of toggle state.
-
----
 
 ## Scene System
 
@@ -854,96 +499,41 @@ public class MyScene : Scene
 {
     public override void SetupECS()
     {
-        // Register systems — order doesn't matter, RunAfter/RunBefore handles it
         ECS.AddSystem<Inspector>();
-        ECS.AddSystem<PerformanceMonitor>();
         ECS.AddSystem<Geometry>();
         ECS.AddSystem<HRCGI>();
-        ECS.AddSystem<ColorManagement>();
-        ECS.AddSystem<Bilinear>();
-        ECS.AddSystem<GizmosRenderer>();
-        base.SetupECS(); // triggers topological sort + Initialize() on all systems
+        // ... register systems (order irrelevant, RunAfter/RunBefore handles it)
+        base.SetupECS(); // topological sort + Initialize()
     }
 
     public override void SetupScene()
     {
-        // Create entities and configure the world
-        int lightId = LightFactory.CreateLight(ECS,
-            new Vector2(1920, 1080), 50f,    // position, radius
-            Color.White,                      // albedo
-            new Color(255, 200, 100, 200));   // emissive (A = intensity)
-
+        int light = LightFactory.CreateLight(ECS, new Vector2(1920, 1080), 50f,
+            Color.White, new Color(255, 200, 100, 200));
         base.SetupScene();
     }
 
-    // Optional overrides
-    public override void Update() { }       // Called before ECS.Update
-    public override void FixedUpdate() { }  // Called before ECS.FixedUpdate
-    public override void Render() { }       // Called before ECS.Render
-    public override void LateRender() { }   // Called before ECS.LateRender
+    // Optional: Update(), FixedUpdate(), Render(), LateRender() — called before ECS.*
 }
 ```
 
-`Scene` properties: `ECS`, `Renderer`, `GameTime`, `DeltaTime`.
+Properties: `ECS`, `Renderer`, `GameTime`, `DeltaTime`.
 
----
-
-## LightFactory — Entity Creation Helper
+## LightFactory
 
 ```csharp
-// Create a light entity (Transform + Circle2D + Material + optional texture)
-int lightId = LightFactory.CreateLight(ECS,
-    position,     // Vector2
-    radius,       // float
-    albedo,       // Color — body color
-    emissive,     // Color — glow color (A = intensity)
-    z,            // float? — Z layer (default = entity ID)
-    texture);     // Texture2D? — modulates emissive
-
-// Spawn many random lights
+LightFactory.CreateLight(ECS, position, radius, albedo, emissive, z?, texture?);
 LightFactory.SpawnRandom(ECS, count, screenSize, radius);
-
-// Hue (0-1) to RGB
-Color saturated = LightFactory.HueToRGB(0.5f);
+LightFactory.HueToRGB(0.5f);
 ```
-
----
 
 ## Game Loop
 
-- **144 FPS** render, **64 UPS** fixed update
-- Sleep + spin-wait frame pacing (avoids 15ms Windows scheduler quantum)
-- Fixed update accumulator with 8-iteration cap (spiral-of-death prevention)
-- FPS tracking: EMA smoothing (0.9 factor), 0.5s update interval
-
----
+144 FPS render, 64 UPS fixed update. Sleep + spin-wait pacing. Accumulator with 8-iteration cap.
 
 ## Controls
 
-| Key | Action |
-|-----|--------|
-| F1 | Toggle all Inspector windows (restore closed windows on show) |
-| Arrow keys | Move Pac-Man player + collect coins |
-| ESC | Exit application |
-
-All other controls (debug modes, quality cycling, GI/upscaler toggle, level cycling, light spawning, tonemapping) are exposed via Inspector windows with buttons, sliders, and toggles. Each system creates its own window in `Initialize()`.
-
----
-
-## Key Design Patterns
-
-- **Struct components** — `Component` marker interface, ECS constrains `where T : struct, Component`
-- **Reference fields in structs** — `Material.Texture`, `Chunk3D.Tiles` — safe because ECS uses managed `Array.Copy`/`Array.Resize`
-- **Double-buffering** — Geometry and Tileset swap read/write buffers each frame to avoid contention
-- **Zero-allocation hot paths** — PagedBitSet (1 bit/entity), span-based spatial queries, pooled RT binding arrays, StringBuilder reuse, cycle sort for in-place reordering
-- **GPU instancing** — Single `DrawInstancedPrimitives` call for up to 65k shapes via DynamicVertexBuffer
-- **Centralized assets** — All textures via `Renderer.GetTexture()`, fonts via `Renderer.GetFont()`, shaders via `Renderer.SetShader()`/`GetShaderEffect()`. Never access `Window.Content` directly
-- **Renderer wraps all MonoGame** — `Window`, `Device`, `SpriteBatch` are `[Obsolete]`. Systems use Renderer API exclusively. Never create `Texture2D` or GPU resources in systems — add to Renderer API instead
-- **Inspector for all UI** — Static API, each system creates its own window in `Initialize()`. Silently ignored if Inspector not registered. `Inspector.IsMouseOverUI()` for input gating
-- **GizmosRenderer** — Visual overlay only. Lines/circles/arcs/rects/text. No stats display (all stats in Inspector windows)
-- **Fluent API** — Design system APIs as fluent interfaces when possible (method chaining, clear return types)
-
----
+F1 = toggle Inspector windows. Arrow keys = Pac-Man movement. ESC = exit. All other controls via Inspector.
 
 ## Not Implemented
 
