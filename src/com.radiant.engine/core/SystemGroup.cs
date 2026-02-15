@@ -9,6 +9,8 @@ public class SystemGroup
 
     public string ActiveName => Entries[ActiveIndex].Name;
     public System Active => Entries[ActiveIndex].System;
+    public int ActiveIdx => ActiveIndex;
+    public string[] Names => Array.ConvertAll(Entries, e => e.Name);
 
     public SystemGroup(params (string name, System system)[] entries)
     {
@@ -19,11 +21,18 @@ public class SystemGroup
 
     public void Toggle()
     {
+        SetActive((ActiveIndex + 1) % Entries.Length);
+    }
+
+    public void SetActive(int index)
+    {
+        if (index == ActiveIndex || index < 0 || index >= Entries.Length) return;
+
         var old = Entries[ActiveIndex].System;
         old.Dispose();
         old.Enabled = false;
 
-        ActiveIndex = (ActiveIndex + 1) % Entries.Length;
+        ActiveIndex = index;
 
         var next = Entries[ActiveIndex].System;
         next.Initialize();

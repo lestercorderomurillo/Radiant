@@ -68,7 +68,7 @@ public class RCGI : core.System
         if (Geometry != null)
             Geometry.EnableSDF = true;
 
-        Inspector.CreateWindow("rcgi", "RCGI");
+        Inspector.CreateWindow("rcgi", "Radiance Cascades");
         Inspector.AddLabel("rcgi", "info", "...");
     }
 

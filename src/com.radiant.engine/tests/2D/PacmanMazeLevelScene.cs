@@ -192,8 +192,8 @@ public class PacmanMazeLevelScene : Scene
         ECS.AddSystem<Geometry>();
 
         GIGroup = new SystemGroup(
-            ("HRCGI", ECS.AddSystem<HRCGI>()),
-            ("RCGI", ECS.AddSystem<RCGI>(enabled: false))
+            ("Holographic Radiance Cascades", ECS.AddSystem<HRCGI>()),
+            ("Radiance Cascades", ECS.AddSystem<RCGI>(enabled: false))
         );
 
         Tonemapper = ECS.AddSystem<ColorManagement>();
@@ -229,29 +229,27 @@ public class PacmanMazeLevelScene : Scene
         Inspector.CreateWindow("scene", "Scene", 2);
 
         Inspector.AddLabel("scene", "level", $"Level: 1/{Levels.Length}");
-        Inspector.AddLabel("scene", "gi", $"GI: {GIGroup.ActiveName}");
-        Inspector.AddLabel("scene", "upscaler", $"Upscaler: {UpscalerGroup.ActiveName}");
 
         Inspector.AddButton("scene", "restartLevel", "Restart Level", () => RestartLevel());
         Inspector.AddButton("scene", "nextLevel", "Next Level", () => LoadLevel((CurrentLevel + 1) % Levels.Length));
         Inspector.AddButton("scene", "spawnLights", "Spawn Lights", () => LightFactory.SpawnRandom(ECS, 100_000, Renderer.VirtualSize));
-
-        Inspector.AddButton("scene", "toggleGI", "Toggle GI", () =>
-        {
-            GIGroup.Toggle();
-            UpdateUpscalerInput();
-            UpdateWindowVisibility();
-        });
-
-        Inspector.AddButton("scene", "toggleUpscaler", "Toggle Upscaler", () =>
-        {
-            UpscalerGroup.Toggle();
-            UpdateUpscalerInput();
-            UpdateWindowVisibility();
-        });
-
-        Inspector.AddButton("scene", "toggleGizmos", "Toggle Gizmos", () => Gizmos.ToggleGizmos());
         Inspector.AddToggle("scene", "pause", "Pause", false, (paused) => ECS.Paused = paused);
+
+        Inspector.AddDropdown("pipeline", "lighting", "Lighting", GIGroup.Names, GIGroup.ActiveIdx, (index) =>
+        {
+            GIGroup.SetActive(index);
+            UpdateUpscalerInput();
+            UpdateWindowVisibility();
+        });
+
+        Inspector.AddDropdown("pipeline", "upscaler", "Upscaler", UpscalerGroup.Names, UpscalerGroup.ActiveIdx, (index) =>
+        {
+            UpscalerGroup.SetActive(index);
+            UpdateUpscalerInput();
+            UpdateWindowVisibility();
+        });
+
+        Inspector.AddToggle("pipeline", "gizmos", "Gizmos", Gizmos.Enabled, (enabled) => Gizmos.Enabled = enabled);
 
         Inspector.WindowsRestored += UpdateWindowVisibility;
         UpdateWindowVisibility();
@@ -492,8 +490,6 @@ public class PacmanMazeLevelScene : Scene
 
         // Update HUD labels
         Inspector.SetLabel("scene", "level", $"Level: {CurrentLevel + 1}/{Levels.Length}");
-        Inspector.SetLabel("scene", "gi", $"GI: {GIGroup.ActiveName}");
-        Inspector.SetLabel("scene", "upscaler", $"Upscaler: {UpscalerGroup.ActiveName}");
     }
 
     private void UpdateUpscalerInput()

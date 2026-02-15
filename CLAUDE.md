@@ -58,7 +58,8 @@ Note: PascalCase applies to fields, properties, methods, parameters, and constan
 ```
 radiant/
 ├── Content/
-│   ├── fonts/BaseFont.spritefont
+│   ├── fonts/BaseFont.spritefont           # Tahoma 14pt (Gizmos, general)
+│   ├── fonts/InspectorFont.spritefont     # Tahoma 42pt (Inspector HD, drawn at 1/3 scale)
 │   ├── Ghost.png, Eyes.png              # Pac-Man textures (premultiplied alpha)
 │   ├── shaders/
 │   │   ├── Geometry.fx                  # SDF/JFA generation + debug visualization
@@ -539,6 +540,9 @@ Renderer.BeginDraw(SpriteSortMode.Deferred, BlendState.AlphaBlend,
 Renderer.DrawSprite(texture, destRect, Color.White);
 Renderer.DrawSprite(texture, destRect, sourceRect, Color.White, rotation, origin);
 Renderer.DrawString(font, "Score: 100", position, Color.White);
+Renderer.DrawString(font, "Score: 100", position, Color.White, 0.5f);           // Scaled text
+Renderer.DrawString(font, "Title", position, Color.White, bold: true);           // Faux bold (1px offset)
+Renderer.DrawString(font, "Title", position, Color.White, 0.5f, bold: true);    // Scaled faux bold
 
 Renderer.EndDraw();
 ```
@@ -721,12 +725,13 @@ InitializeJFA, InitializeJFAInterior, JFAPass, GenerateSDFFromJFA, DebugSDFVisib
 
 ## UI System (Inspector)
 
-Retained-mode window system: draggable panels, title bars, close buttons, and interactive widgets. **Static API** — safe to call even if Inspector system isn't registered (calls silently ignored). Renders in `LateRender()` before GizmosRenderer. Default window width: 375.
+Retained-mode window system: draggable panels, title bars, close buttons, and interactive widgets with rounded corners (via `Renderer.DrawRoundedRect`). **Static API** — safe to call even if Inspector system isn't registered (calls silently ignored). Renders in `LateRender()` before GizmosRenderer. Default window width: 375. HD text via InspectorFont (42pt rendered at 1/3 scale). Default theme: Radiant (golden accent).
 
 ### Window Management
 
 ```csharp
-Inspector.CreateWindow("myWindow", "Window Title"); // Create auto-positioned window
+Inspector.CreateWindow("myWindow", "Window Title");     // Create auto-positioned window (LayoutOrder=100)
+Inspector.CreateWindow("myWindow", "Window Title", 0);  // Explicit layout order (lower = first)
 Inspector.DestroyWindow("myWindow");                 // Remove window entirely
 Inspector.ShowWindow("myWindow");                    // Make visible
 Inspector.HideWindow("myWindow");                    // Make invisible
@@ -812,7 +817,7 @@ Inspector.ApplyTheme(0);  // Index into registered theme list
 string[] names = Inspector.GetThemeNames();
 ```
 
-Built-in themes: Dark, Light, Monokai, Nord, Dracula, Solarized, Gruvbox.
+Built-in themes: Radiant (default, golden accent), Dark, Light, Monokai, Nord, Solarized, Gruvbox.
 
 ### Events
 

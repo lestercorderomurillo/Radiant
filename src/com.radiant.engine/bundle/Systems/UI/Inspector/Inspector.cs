@@ -21,6 +21,8 @@ public class Inspector : core.System
     }
 
     private SpriteFont Font;
+    private const float FontScale = 14f / 84f;
+    private float LineHeight;
     private Dictionary<string, WindowData> Windows = new();
     private List<WindowData> RenderOrder = new();
     private int NextZOrder;
@@ -53,7 +55,7 @@ public class Inspector : core.System
     private const int WidgetHeight = 36;
     private const int WidgetSpacing = 6;
     private const int Padding = 12;
-    private const int CloseButtonSize = 26;
+    private const int CloseButtonSize = 22;
     private const int CloseButtonWidth = 36;
     private const int AutoLayoutGap = 20;
     private const int SliderTrackHeight = 8;
@@ -407,7 +409,8 @@ public class Inspector : core.System
 
     public override void Initialize()
     {
-        Font = Renderer.GetFont("fonts/BaseFont");
+        Font = Renderer.GetFont("fonts/InspectorFont");
+        LineHeight = Font.LineSpacing * FontScale;
         PrevMouse = Mouse.GetState();
         PrevKeyState = Keyboard.GetState();
 
@@ -429,12 +432,12 @@ public class Inspector : core.System
 
         RegisterTheme("Radiant", new InspectorTheme
         {
-            WindowBg = new(28, 30, 40, 230), TitleBarColor = new(50, 53, 70, 245), TitleBarHover = new(70, 74, 98, 245),
-            ButtonColor = new(52, 55, 74, 225), ButtonHover = new(82, 86, 115, 245),
-            SliderTrack = new(36, 38, 52, 210), SliderFill = new(255, 184, 108, 255), SliderHandle = new(255, 210, 150, 255),
-            ToggleOn = new(220, 170, 80, 255), ToggleOff = new(42, 44, 58, 210),
+            WindowBg = new(22, 21, 20, 230), TitleBarColor = new(36, 34, 30, 245), TitleBarHover = new(50, 47, 40, 245),
+            ButtonColor = new(38, 36, 32, 225), ButtonHover = new(55, 52, 44, 245),
+            SliderTrack = new(28, 27, 24, 210), SliderFill = new(255, 184, 108, 255), SliderHandle = new(255, 210, 150, 255),
+            ToggleOn = new(220, 155, 80, 255), ToggleOff = new(32, 31, 28, 210),
             CloseColor = new(220, 155, 80, 255), CloseHover = new(255, 184, 108, 255),
-            TextColor = new(248, 248, 242, 255), CloseText = new(248, 248, 242, 255), LabelDim = new(118, 134, 180, 255)
+            TextColor = new(248, 248, 242, 255), CloseText = new(248, 248, 242, 255), LabelDim = new(140, 135, 120, 255)
         });
         RegisterTheme("Dark", new InspectorTheme
         {
@@ -770,17 +773,17 @@ public class Inspector : core.System
     private int MeasureWrappedHeight(string Text, int AvailableWidth)
     {
         int MaxWidth = AvailableWidth - 8;
-        if (Font.MeasureString(Text).X <= MaxWidth)
+        if (MeasureText(Text).X <= MaxWidth)
             return WidgetHeight;
 
         string[] Words = Text.Split(' ');
-        float SpaceWidth = Font.MeasureString(" ").X;
+        float SpaceWidth = MeasureText(" ").X;
         int Lines = 1;
         float LineWidth = 0;
 
         for (int I = 0; I < Words.Length; I++)
         {
-            float WordWidth = Font.MeasureString(Words[I]).X;
+            float WordWidth = MeasureText(Words[I]).X;
             float AddWidth = LineWidth == 0 ? WordWidth : SpaceWidth + WordWidth;
 
             if (LineWidth + AddWidth > MaxWidth && LineWidth > 0)
@@ -794,7 +797,7 @@ public class Inspector : core.System
             }
         }
 
-        return Lines * Font.LineSpacing + 8;
+        return (int)(Lines * LineHeight + 8);
     }
 
 
@@ -826,6 +829,14 @@ public class Inspector : core.System
         Renderer.EndDraw();
     }
 
+    private Vector2 MeasureText(string text) => Font.MeasureString(text) * FontScale;
+
+    private void DrawText(string text, Vector2 position, Color color)
+        => Renderer.DrawString(Font, text, position, color, FontScale);
+
+    private void DrawTextBold(string text, Vector2 position, Color color)
+        => Renderer.DrawString(Font, text, position, color, FontScale, bold: true);
+
     private void DrawWindow(WindowData Window, Vector2 Mouse)
     {
         Renderer.DrawRoundedRect(Window.WindowBounds, WindowBg, CornerRadius);
@@ -834,18 +845,16 @@ public class Inspector : core.System
         Renderer.DrawRoundedRect(Window.TitleBarBounds, TitleHovered ? TitleBarHover : TitleBarColor, CornerRadius, RoundedCorners.Top);
 
         var TitlePos = new Vector2(Window.TitleBarBounds.X + Padding, Window.TitleBarBounds.Y + 8);
-        Renderer.DrawString(Font, Window.Title, TitlePos, TextColor);
-        Renderer.DrawString(Font, Window.Title, TitlePos + Vector2.UnitX, TextColor);
+        DrawTextBold(Window.Title, TitlePos, TextColor);
 
         bool CloseHovered = Window.CloseBounds.Contains((int)Mouse.X, (int)Mouse.Y);
         Renderer.DrawRoundedRect(Window.CloseBounds, CloseHovered ? CloseHover : CloseColor, CornerRadius);
-        const float CloseScale = 0.7f;
+        const float CloseScale = 0.7f * FontScale;
         var CloseTextSize = Font.MeasureString("X") * CloseScale;
         var CloseTextPos = new Vector2(
             Window.CloseBounds.X + (Window.CloseBounds.Width - CloseTextSize.X) / 2,
             Window.CloseBounds.Y + (Window.CloseBounds.Height - CloseTextSize.Y) / 2);
-        Renderer.DrawString(Font, "X", CloseTextPos, CloseText, CloseScale);
-        Renderer.DrawString(Font, "X", CloseTextPos + Vector2.UnitX, CloseText, CloseScale);
+        Renderer.DrawString(Font, "X", CloseTextPos, CloseText, CloseScale, bold: true);
 
         // Widgets
         for (int I = 0; I < Window.Widgets.Count; I++)
@@ -872,11 +881,10 @@ public class Inspector : core.System
         if (isHeader)
         {
             var Solid = Renderer.GetSolidTexture(Color.White);
-            var TextPos = new Vector2(W.Bounds.X + 4, W.Bounds.Y + (W.Bounds.Height - Font.LineSpacing) / 2);
-            Renderer.DrawString(Font, W.Text, TextPos, labelColor);
-            Renderer.DrawString(Font, W.Text, TextPos + Vector2.UnitX, labelColor);
+            var TextPos = new Vector2(W.Bounds.X + 4, W.Bounds.Y + (W.Bounds.Height - LineHeight) / 2);
+            DrawTextBold(W.Text, TextPos, labelColor);
 
-            int textRight = (int)(TextPos.X + Font.MeasureString(W.Text).X) + 8;
+            int textRight = (int)(TextPos.X + MeasureText(W.Text).X) + 8;
             int lineY = W.Bounds.Y + W.Bounds.Height / 2;
             var LineRect = new Rectangle(textRight, lineY, W.Bounds.Right - textRight, 1);
             Renderer.DrawSprite(Solid, LineRect, TextColor, 0.20f);
@@ -884,25 +892,25 @@ public class Inspector : core.System
         }
 
         int MaxWidth = W.Bounds.Width - 8;
-        if (Font.MeasureString(W.Text).X <= MaxWidth)
+        if (MeasureText(W.Text).X <= MaxWidth)
         {
-            var TextPos = new Vector2(W.Bounds.X + 4, W.Bounds.Y + (W.Bounds.Height - Font.LineSpacing) / 2);
-            Renderer.DrawString(Font, W.Text, TextPos, labelColor);
+            var TextPos = new Vector2(W.Bounds.X + 4, W.Bounds.Y + (W.Bounds.Height - LineHeight) / 2);
+            DrawText(W.Text, TextPos, labelColor);
             return;
         }
 
         string[] Words = W.Text.Split(' ');
-        float SpaceWidth = Font.MeasureString(" ").X;
+        float SpaceWidth = MeasureText(" ").X;
         float Y = W.Bounds.Y + 4;
         string CurrentLine = "";
 
         for (int I = 0; I < Words.Length; I++)
         {
             string TestLine = CurrentLine.Length == 0 ? Words[I] : CurrentLine + " " + Words[I];
-            if (Font.MeasureString(TestLine).X > MaxWidth && CurrentLine.Length > 0)
+            if (MeasureText(TestLine).X > MaxWidth && CurrentLine.Length > 0)
             {
-                Renderer.DrawString(Font, CurrentLine, new Vector2(W.Bounds.X + 4, Y), labelColor);
-                Y += Font.LineSpacing;
+                DrawText(CurrentLine, new Vector2(W.Bounds.X + 4, Y), labelColor);
+                Y += LineHeight;
                 CurrentLine = Words[I];
             }
             else
@@ -912,7 +920,7 @@ public class Inspector : core.System
         }
 
         if (CurrentLine.Length > 0)
-            Renderer.DrawString(Font, CurrentLine, new Vector2(W.Bounds.X + 4, Y), labelColor);
+            DrawText(CurrentLine, new Vector2(W.Bounds.X + 4, Y), labelColor);
     }
 
     private void DrawButton(Widget W, Vector2 Mouse)
@@ -920,11 +928,11 @@ public class Inspector : core.System
         bool Hovered = W.Bounds.Contains((int)Mouse.X, (int)Mouse.Y);
         Renderer.DrawRoundedRect(W.Bounds, Hovered ? ButtonHover : ButtonColor, CornerRadius);
 
-        var TextSize = Font.MeasureString(W.Text);
+        var TextSize = MeasureText(W.Text);
         var TextPos = new Vector2(
             W.Bounds.X + (W.Bounds.Width - TextSize.X) / 2,
             W.Bounds.Y + (W.Bounds.Height - TextSize.Y) / 2);
-        Renderer.DrawString(Font, W.Text, TextPos, TextColor);
+        DrawText(W.Text, TextPos, TextColor);
     }
 
     private void DrawToggle(Widget W, Vector2 Mouse)
@@ -943,17 +951,17 @@ public class Inspector : core.System
         }
 
         // Label text
-        var TextPos = new Vector2(W.Bounds.X + ToggleBoxSize + 8, W.Bounds.Y + (W.Bounds.Height - Font.LineSpacing) / 2);
-        Renderer.DrawString(Font, W.Text, TextPos, TextColor);
+        var TextPos = new Vector2(W.Bounds.X + ToggleBoxSize + 8, W.Bounds.Y + (W.Bounds.Height - LineHeight) / 2);
+        DrawText(W.Text, TextPos, TextColor);
     }
 
     private void DrawSlider(Widget W, Vector2 Mouse)
     {
         string ValueText = $"{W.Text}: {W.SliderValue:F2}";
         var TextPos = new Vector2(W.Bounds.X + 4, W.Bounds.Y + 2);
-        Renderer.DrawString(Font, ValueText, TextPos, TextColor);
+        DrawText(ValueText, TextPos, TextColor);
 
-        int TrackY = W.Bounds.Y + Font.LineSpacing + 8;
+        int TrackY = (int)(W.Bounds.Y + LineHeight + 8);
         int TrackLeft = W.Bounds.X + Padding;
         int TrackWidth = W.Bounds.Width - Padding * 2;
         var TrackRect = new Rectangle(TrackLeft, TrackY, TrackWidth, SliderTrackHeight);
@@ -983,17 +991,16 @@ public class Inspector : core.System
             ? W.DropdownOptions[W.DropdownSelected] : "?";
         string displayText = $"{W.Text}: {selectedLabel}";
 
-        var TextSize = Font.MeasureString(displayText);
+        var TextSize = MeasureText(displayText);
         var TextPos = new Vector2(
             W.Bounds.X + (W.Bounds.Width - TextSize.X) / 2,
             W.Bounds.Y + (W.Bounds.Height - TextSize.Y) / 2);
-        Renderer.DrawString(Font, displayText, TextPos, TextColor);
+        DrawText(displayText, TextPos, TextColor);
 
-        // Down arrow indicator
-        const float arrowScale = 0.7f;
-        var ArrowSize = Font.MeasureString("v") * arrowScale;
-        var ArrowPos = new Vector2(W.Bounds.Right - Padding - ArrowSize.X, W.Bounds.Y + (W.Bounds.Height - ArrowSize.Y) / 2);
-        Renderer.DrawString(Font, "v", ArrowPos, LabelDim, arrowScale);
+        const int triSize = 7;
+        int triX = W.Bounds.Right - Padding - triSize;
+        int triY = W.Bounds.Y + (W.Bounds.Height - triSize) / 2 + 1;
+        Renderer.DrawSprite(Renderer.GetTriangleTexture(triSize * 4), new Rectangle(triX, triY, triSize, triSize), LabelDim);
     }
 
     private void DrawDropdownPopup(Vector2 Mouse)
@@ -1018,9 +1025,9 @@ public class Inspector : core.System
                 I == 0 ? RoundedCorners.Top : I == W.DropdownOptions.Length - 1 ? RoundedCorners.Bottom : RoundedCorners.None;
             Renderer.DrawRoundedRect(OptionRect, OptionBg, CornerRadius, optionCorners);
 
-            var OptionTextSize = Font.MeasureString(W.DropdownOptions[I]);
+            var OptionTextSize = MeasureText(W.DropdownOptions[I]);
             var OptionTextPos = new Vector2(OptionRect.X + Padding, OptionRect.Y + (OptionRect.Height - OptionTextSize.Y) / 2);
-            Renderer.DrawString(Font, W.DropdownOptions[I], OptionTextPos, TextColor);
+            DrawText(W.DropdownOptions[I], OptionTextPos, TextColor);
         }
     }
 

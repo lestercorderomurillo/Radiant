@@ -173,6 +173,7 @@ public class Renderer : IDisposable
     private Dictionary<string, SpriteFont> FontCache = new();
     private Dictionary<(Color, int, int), Texture2D> SolidTextureCache = new();
     private Dictionary<int, Texture2D> CircleTextureCache = new();
+    private Dictionary<int, Texture2D> TriangleTextureCache = new();
     private Dictionary<int, Texture2D> RoundedRectCache = new();
     private VertexBuffer QuadVertexBuffer;
     private IndexBuffer QuadIndexBuffer;
@@ -1434,6 +1435,51 @@ public class Renderer : IDisposable
     }
 
     /// <summary>
+    /// Gets or creates a cached anti-aliased downward-pointing triangle texture.
+    /// </summary>
+    /// <param name="size">Texture size in pixels (square).</param>
+    /// <returns>Cached white triangle texture with premultiplied alpha.</returns>
+    public Texture2D GetTriangleTexture(int size)
+    {
+        if (size < 4) size = 4;
+        if (!TriangleTextureCache.TryGetValue(size, out var texture))
+        {
+            texture = new Texture2D(Device, size, size);
+            var data = new Color[size * size];
+            float half = size / 2f;
+            Vector2 a = new(half, size - 0.5f);
+            Vector2 b = new(0.5f, 0.5f);
+            Vector2 c = new(size - 0.5f, 0.5f);
+
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    Vector2 p = new(x + 0.5f, y + 0.5f);
+                    float d0 = EdgeDist(p, b, c);
+                    float d1 = EdgeDist(p, c, a);
+                    float d2 = EdgeDist(p, a, b);
+                    float dist = MathF.Max(d0, MathF.Max(d1, d2));
+                    float alpha = MathHelper.Clamp(0.5f - dist, 0f, 1f);
+                    byte val = (byte)(alpha * 255f + 0.5f);
+                    data[y * size + x] = new Color(val, val, val, val);
+                }
+            }
+            texture.SetData(data);
+            TriangleTextureCache[size] = texture;
+        }
+        return texture;
+
+        static float EdgeDist(Vector2 p, Vector2 v0, Vector2 v1)
+        {
+            Vector2 edge = v1 - v0;
+            Vector2 normal = new(edge.Y, -edge.X);
+            float len = normal.Length();
+            return (normal.X * (p.X - v0.X) + normal.Y * (p.Y - v0.Y)) / len;
+        }
+    }
+
+    /// <summary>
     /// Gets or creates a cached anti-aliased rounded rectangle texture for 9-slice rendering.
     /// The texture is (radius*2+2) pixels square with premultiplied alpha SDF corners.
     /// </summary>
@@ -1926,16 +1972,11 @@ public class Renderer : IDisposable
         SpriteBatch.Draw(texture, destination, source, color, rotation, origin, effects, 0);
     }
 
-    /// <summary>Draws text during a BeginDraw/EndDraw session.</summary>
-    public void DrawString(SpriteFont font, string text, Vector2 position, Color color)
-    {
-        SpriteBatch.DrawString(font, text, position, color);
-    }
-
-    /// <summary>Draws scaled text during a BeginDraw/EndDraw session.</summary>
-    public void DrawString(SpriteFont font, string text, Vector2 position, Color color, float scale)
+    /// <summary>Draws text during a BeginDraw/EndDraw session. Set bold for faux-bold (double-draw with 1px offset).</summary>
+    public void DrawString(SpriteFont font, string text, Vector2 position, Color color, float scale = 1f, bool bold = false)
     {
         SpriteBatch.DrawString(font, text, position, color, 0f, Vector2.Zero, scale, SpriteEffects.None, 0f);
+        if (bold) SpriteBatch.DrawString(font, text, position + Vector2.UnitX, color, 0f, Vector2.Zero, scale, SpriteEffects.None, 0f);
     }
 
     /// <summary>Ends a SpriteBatch drawing session started by BeginDraw.</summary>
@@ -1992,6 +2033,10 @@ public class Renderer : IDisposable
         foreach (var texture in CircleTextureCache.Values)
             texture?.Dispose();
         CircleTextureCache.Clear();
+
+        foreach (var texture in TriangleTextureCache.Values)
+            texture?.Dispose();
+        TriangleTextureCache.Clear();
 
         foreach (var texture in RoundedRectCache.Values)
             texture?.Dispose();
