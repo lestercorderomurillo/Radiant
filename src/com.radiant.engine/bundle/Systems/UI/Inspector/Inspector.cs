@@ -21,7 +21,8 @@ public class Inspector : core.System
     }
 
     private SpriteFont Font;
-    private const float FontScale = 14f / 84f;
+    private SpriteFont FontBold;
+    private const float FontScale = 15.4f / 84f;
     private float LineHeight;
     private Dictionary<string, WindowData> Windows = new();
     private List<WindowData> RenderOrder = new();
@@ -52,18 +53,18 @@ public class Inspector : core.System
     public static event Action WindowsRestored;
 
     // Layout constants
-    private const int DefaultWindowWidth = 375;
-    private const int TitleBarHeight = 40;
-    private const int WidgetHeight = 36;
-    private const int WidgetSpacing = 6;
-    private const int Padding = 12;
-    private const int CloseButtonSize = 22;
-    private const int CloseButtonWidth = 36;
-    private const int AutoLayoutGap = 20;
-    private const int SliderTrackHeight = 8;
-    private const int SliderHandleSize = 14;
-    private const int ToggleBoxSize = 22;
-    private const int CornerRadius = 6;
+    private const int DefaultWindowWidth = 412;
+    private const int TitleBarHeight = 44;
+    private const int WidgetHeight = 40;
+    private const int WidgetSpacing = 7;
+    private const int Padding = 13;
+    private const int CloseButtonSize = 24;
+    private const int CloseButtonWidth = 40;
+    private const int AutoLayoutGap = 22;
+    private const int SliderTrackHeight = 9;
+    private const int SliderHandleSize = 15;
+    private const int ToggleBoxSize = 24;
+    private const int CornerRadius = 7;
     private const int MaxVisibleDropdownItems = 4;
 
     private static readonly Dictionary<string, InspectorTheme> Themes = new();
@@ -377,7 +378,7 @@ public class Inspector : core.System
 
             int GroupHeight = ComputeWindowHeight(Window);
 
-            float maxY = Renderer.VirtualHeight / UIScale - AutoLayoutGap;
+            float maxY = Renderer.VirtualHeight / UIScale - 64;
             if (Y + GroupHeight > maxY && Y > AutoLayoutGap)
             {
                 X += DefaultWindowWidth + AutoLayoutGap;
@@ -413,6 +414,7 @@ public class Inspector : core.System
     public override void Initialize()
     {
         Font = Renderer.GetFont("fonts/InspectorFont");
+        FontBold = Renderer.GetFont("fonts/InspectorFontBold");
         LineHeight = Font.LineSpacing * FontScale;
         PrevMouse = Mouse.GetState();
         PrevKeyState = Keyboard.GetState();
@@ -886,7 +888,7 @@ public class Inspector : core.System
         => Renderer.DrawString(Font, text, position, color, FontScale);
 
     private void DrawTextBold(string text, Vector2 position, Color color)
-        => Renderer.DrawString(Font, text, position, color, FontScale, bold: true);
+        => Renderer.DrawString(FontBold, text, position, color, FontScale);
 
     private void DrawWindow(WindowData Window, Vector2 Mouse, bool HoverBlocked)
     {
@@ -905,7 +907,7 @@ public class Inspector : core.System
         var CloseTextPos = new Vector2(
             Window.CloseBounds.X + (Window.CloseBounds.Width - CloseTextSize.X) / 2,
             Window.CloseBounds.Y + (Window.CloseBounds.Height - CloseTextSize.Y) / 2);
-        Renderer.DrawString(Font, "X", CloseTextPos, CloseText, CloseScale, bold: true);
+        Renderer.DrawString(FontBold, "X", CloseTextPos, CloseText, CloseScale);
 
         // Widgets
         for (int I = 0; I < Window.Widgets.Count; I++)

@@ -40,7 +40,8 @@ ref var t = ref ECS.GetComponent<Transform>(id);                     // WRONG
 ```
 radiant/
 ├── Content/
-│   ├── fonts/BaseFont.spritefont, InspectorFont.spritefont (42pt, drawn at 1/3 scale)
+│   ├── fonts/BaseFont.spritefont (Tahoma 14pt), InspectorFont.spritefont (Inter 84pt, 1/6 scale)
+│   ├── fonts/Inter-Regular.ttf
 │   ├── Ghost.png, Eyes.png (premultiplied alpha)
 │   ├── shaders/
 │   │   ├── Geometry.fx, InstancedShapes.fx, ColorManagement.fx
