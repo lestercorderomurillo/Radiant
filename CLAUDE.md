@@ -28,6 +28,7 @@ MonoGame C# 2D engine: ECS + GPU-instanced shapes + HRC global illumination.
 | No decorative/banner comments | Never `// --- Section ---`, `// ═══`, `// ======`. Blank lines suffice |
 | `/// <summary>` for public API docs | Standard C# XML doc comments on public methods/classes |
 | **Descriptive local variable names** | `transform`, `material`, `circle` — never `t`, `m`, `c` |
+| **No dead code** | Remove fields/variables set but never read, unused usings, unreachable code. Public API awaiting callers is fine — dead internal wiring is not |
 
 The last rule is critical: **never use single-letter or abbreviated variable names**. Use the full type name (lowercased) for local component refs to avoid shadowing the type:
 

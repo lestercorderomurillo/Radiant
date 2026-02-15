@@ -30,7 +30,6 @@ public struct Widget
     public string[] DropdownOptions;
     public int DropdownSelected;
     public Action<int> DropdownCallback;
-    public bool DropdownOpen;
 }
 
 public struct InspectorTheme

@@ -175,15 +175,21 @@ public class Geometry : core.System
         ReadBuffer = 1;
 
         Inspector.CreateWindow("pipeline", "Pipeline Controller");
-        var debugModeNames = Enum.GetNames<DebugMode>();
-        Inspector.AddDropdown("pipeline", "debugMode", "Debug", debugModeNames, 0, (index) => CurrentDebug = (DebugMode)index);
-        Inspector.AddLabel("pipeline", "emissive", "Emissive Objects: 0");
-        Inspector.AddLabel("pipeline", "absorption", "Absorption Objects: 0");
-        Inspector.AddLabel("pipeline", "buffers", "Buffers: -");
-        Inspector.AddLabel("pipeline", "timing", "Timing: -");
+
+        Inspector.AddLabel("pipeline", "sceneHeader", "Scene");
+        Inspector.AddLabel("pipeline", "emissive", "Emissive: 0");
+        Inspector.AddLabel("pipeline", "absorption", "Absorption: 0");
+        Inspector.AddLabel("pipeline", "buffers", "World: -");
+
+        Inspector.AddLabel("pipeline", "perfHeader", "Performance");
+        Inspector.AddLabel("pipeline", "timing", "Collect: - | Flatten: - | Render: -");
         Inspector.AddLabel("pipeline", "gpu", "GPU: -");
         Inspector.AddLabel("pipeline", "sdf", "SDF: -");
         Inspector.AddLabel("pipeline", "jfa", "JFA: -");
+
+        Inspector.AddLabel("pipeline", "controlsHeader", "Controls");
+        var debugModeNames = Enum.GetNames<DebugMode>();
+        Inspector.AddDropdown("pipeline", "debugMode", "Debug", debugModeNames, 0, (index) => CurrentDebug = (DebugMode)index);
     }
 
     private void InitializeJFA()

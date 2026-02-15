@@ -1820,6 +1820,17 @@ public class Renderer : IDisposable
         SpriteBatch.Draw(texture, destination, color);
     }
 
+    /// <summary>Draws a texture with opacity (premultiplied alpha) during a BeginDraw/EndDraw session.</summary>
+    public void DrawSprite(Texture2D texture, Rectangle destination, Color color, float opacity)
+    {
+        var premul = new Color(
+            (byte)(color.R * opacity),
+            (byte)(color.G * opacity),
+            (byte)(color.B * opacity),
+            (byte)(color.A * opacity));
+        SpriteBatch.Draw(texture, destination, premul);
+    }
+
     /// <summary>Draws a texture region to a destination rectangle during a BeginDraw/EndDraw session.</summary>
     public void DrawSprite(Texture2D texture, Rectangle destination, Rectangle? source,
         Color color, float rotation = 0f, Vector2 origin = default, SpriteEffects effects = SpriteEffects.None)

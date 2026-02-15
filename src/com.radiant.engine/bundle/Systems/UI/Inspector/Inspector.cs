@@ -61,7 +61,6 @@ public class Inspector : core.System
 
     private static readonly Dictionary<string, InspectorTheme> Themes = new();
     private static readonly List<string> ThemeNameList = new();
-    private static string CurrentThemeName;
     private static float UIScale = 1.0f;
 
     // Colors (mutable for theme switching)
@@ -148,7 +147,6 @@ public class Inspector : core.System
     public static void ApplyTheme(string Name)
     {
         if (!Themes.TryGetValue(Name, out var theme)) return;
-        CurrentThemeName = Name;
         WindowBg = theme.WindowBg;
         TitleBarColor = theme.TitleBarColor;
         TitleBarHover = theme.TitleBarHover;
@@ -485,7 +483,6 @@ public class Inspector : core.System
             TextColor = new(235, 219, 178, 255), CloseText = new(235, 219, 178, 255), LabelDim = new(168, 153, 132, 255)
         });
 
-        CurrentThemeName = "Dark";
     }
 
     public override void Update()
@@ -515,7 +512,6 @@ public class Inspector : core.System
 
         var CurrentMouse = Mouse.GetState();
         var VirtualMouse = ScreenToVirtual(new Vector2(CurrentMouse.X, CurrentMouse.Y));
-        var PrevVirtual = ScreenToVirtual(new Vector2(PrevMouse.X, PrevMouse.Y));
 
         bool LeftPressed = CurrentMouse.LeftButton == ButtonState.Pressed && PrevMouse.LeftButton == ButtonState.Released;
         bool LeftHeld = CurrentMouse.LeftButton == ButtonState.Pressed;
@@ -691,16 +687,6 @@ public class Inspector : core.System
 
     private void CloseDropdown()
     {
-        if (OpenDropdownWindowId == null) return;
-        if (Windows.TryGetValue(OpenDropdownWindowId, out var Window))
-        {
-            if (Window.WidgetIndex.TryGetValue(OpenDropdownWidgetId, out int Index))
-            {
-                var W = Window.Widgets[Index];
-                W.DropdownOpen = false;
-                Window.Widgets[Index] = W;
-            }
-        }
         OpenDropdownWindowId = null;
         OpenDropdownWidgetId = null;
     }
@@ -843,9 +829,10 @@ public class Inspector : core.System
         bool TitleHovered = Window.TitleBarBounds.Contains((int)Mouse.X, (int)Mouse.Y);
         Renderer.DrawSprite(Solid, Window.TitleBarBounds, TitleHovered ? TitleBarHover : TitleBarColor);
 
-        // Title text
+        // Title text (double-draw for bold)
         var TitlePos = new Vector2(Window.TitleBarBounds.X + Padding, Window.TitleBarBounds.Y + 8);
         Renderer.DrawString(Font, Window.Title, TitlePos, TextColor);
+        Renderer.DrawString(Font, Window.Title, TitlePos + Vector2.UnitX, TextColor);
 
         // Close button
         bool CloseHovered = Window.CloseBounds.Contains((int)Mouse.X, (int)Mouse.Y);
@@ -877,11 +864,28 @@ public class Inspector : core.System
 
     private void DrawLabel(Widget W, Vector2 Mouse)
     {
+        bool isHeader = W.Id.EndsWith("Header");
+        Color labelColor = isHeader ? TextColor : LabelDim;
+
+        if (isHeader)
+        {
+            var Solid = Renderer.GetSolidTexture(Color.White);
+            var TextPos = new Vector2(W.Bounds.X + 4, W.Bounds.Y + (W.Bounds.Height - Font.LineSpacing) / 2);
+            Renderer.DrawString(Font, W.Text, TextPos, labelColor);
+            Renderer.DrawString(Font, W.Text, TextPos + Vector2.UnitX, labelColor);
+
+            int textRight = (int)(TextPos.X + Font.MeasureString(W.Text).X) + 8;
+            int lineY = W.Bounds.Y + W.Bounds.Height / 2;
+            var LineRect = new Rectangle(textRight, lineY, W.Bounds.Right - textRight, 1);
+            Renderer.DrawSprite(Solid, LineRect, TextColor, 0.20f);
+            return;
+        }
+
         int MaxWidth = W.Bounds.Width - 8;
         if (Font.MeasureString(W.Text).X <= MaxWidth)
         {
             var TextPos = new Vector2(W.Bounds.X + 4, W.Bounds.Y + (W.Bounds.Height - Font.LineSpacing) / 2);
-            Renderer.DrawString(Font, W.Text, TextPos, LabelDim);
+            Renderer.DrawString(Font, W.Text, TextPos, labelColor);
             return;
         }
 
@@ -895,7 +899,7 @@ public class Inspector : core.System
             string TestLine = CurrentLine.Length == 0 ? Words[I] : CurrentLine + " " + Words[I];
             if (Font.MeasureString(TestLine).X > MaxWidth && CurrentLine.Length > 0)
             {
-                Renderer.DrawString(Font, CurrentLine, new Vector2(W.Bounds.X + 4, Y), LabelDim);
+                Renderer.DrawString(Font, CurrentLine, new Vector2(W.Bounds.X + 4, Y), labelColor);
                 Y += Font.LineSpacing;
                 CurrentLine = Words[I];
             }
@@ -906,7 +910,7 @@ public class Inspector : core.System
         }
 
         if (CurrentLine.Length > 0)
-            Renderer.DrawString(Font, CurrentLine, new Vector2(W.Bounds.X + 4, Y), LabelDim);
+            Renderer.DrawString(Font, CurrentLine, new Vector2(W.Bounds.X + 4, Y), labelColor);
     }
 
     private void DrawButton(Widget W, Vector2 Mouse)
