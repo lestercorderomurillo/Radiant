@@ -46,6 +46,8 @@ public class Inspector : core.System
     private string OpenDropdownWindowId;
     private string OpenDropdownWidgetId;
     private Rectangle OpenDropdownPopupBounds;
+    private int DropdownScrollOffset;
+    private int DropdownTotalOptions;
 
     public static event Action WindowsRestored;
 
@@ -62,6 +64,7 @@ public class Inspector : core.System
     private const int SliderHandleSize = 14;
     private const int ToggleBoxSize = 22;
     private const int CornerRadius = 6;
+    private const int MaxVisibleDropdownItems = 4;
 
     private static readonly Dictionary<string, InspectorTheme> Themes = new();
     private static readonly List<string> ThemeNameList = new();
@@ -432,12 +435,12 @@ public class Inspector : core.System
 
         RegisterTheme("Radiant", new InspectorTheme
         {
-            WindowBg = new(22, 21, 20, 230), TitleBarColor = new(36, 34, 30, 245), TitleBarHover = new(50, 47, 40, 245),
-            ButtonColor = new(38, 36, 32, 225), ButtonHover = new(55, 52, 44, 245),
-            SliderTrack = new(28, 27, 24, 210), SliderFill = new(255, 184, 108, 255), SliderHandle = new(255, 210, 150, 255),
-            ToggleOn = new(220, 155, 80, 255), ToggleOff = new(50, 48, 42, 230),
+            WindowBg = new(16, 15, 14, 235), TitleBarColor = new(32, 30, 26, 250), TitleBarHover = new(48, 44, 36, 250),
+            ButtonColor = new(34, 32, 28, 230), ButtonHover = new(52, 48, 40, 250),
+            SliderTrack = new(24, 22, 18, 220), SliderFill = new(255, 184, 108, 255), SliderHandle = new(255, 210, 150, 255),
+            ToggleOn = new(220, 155, 80, 255), ToggleOff = new(42, 40, 34, 235),
             CloseColor = new(220, 155, 80, 255), CloseHover = new(255, 184, 108, 255),
-            TextColor = new(248, 248, 242, 255), CloseText = new(248, 248, 242, 255), LabelDim = new(140, 135, 120, 255)
+            TextColor = new(252, 250, 245, 255), CloseText = new(252, 250, 245, 255), LabelDim = new(155, 148, 130, 255)
         });
         RegisterTheme("Dark", new InspectorTheme
         {
@@ -558,6 +561,18 @@ public class Inspector : core.System
         // Compute layout for hit testing
         ComputeAllLayouts();
 
+        // Handle scroll wheel on open dropdown popup
+        if (OpenDropdownWindowId != null)
+        {
+            int scrollDelta = CurrentMouse.ScrollWheelValue - PrevMouse.ScrollWheelValue;
+            if (scrollDelta != 0 && OpenDropdownPopupBounds.Contains((int)VirtualMouse.X, (int)VirtualMouse.Y))
+            {
+                int maxScroll = Math.Max(0, DropdownTotalOptions - MaxVisibleDropdownItems);
+                DropdownScrollOffset = Math.Clamp(DropdownScrollOffset - Math.Sign(scrollDelta), 0, maxScroll);
+                MouseOverUI = true;
+            }
+        }
+
         // Hit test open dropdown popup first (renders on top of everything)
         if (!Dragging && !DraggingSlider && OpenDropdownWindowId != null && LeftPressed)
         {
@@ -568,8 +583,11 @@ public class Inspector : core.System
                 PrevMouse = CurrentMouse;
                 return;
             }
-            // Click outside popup closes it
+            // Click outside popup closes it — consume the click
             CloseDropdown();
+            MouseOverUI = true;
+            PrevMouse = CurrentMouse;
+            return;
         }
 
         // Hit test windows back-to-front (reverse order = highest Z first)
@@ -692,14 +710,18 @@ public class Inspector : core.System
     {
         OpenDropdownWindowId = WindowId;
         OpenDropdownWidgetId = WidgetId;
+        DropdownScrollOffset = 0;
         int optionCount = W.DropdownOptions?.Length ?? 0;
-        OpenDropdownPopupBounds = new Rectangle(W.Bounds.X, W.Bounds.Bottom, W.Bounds.Width, optionCount * WidgetHeight);
+        DropdownTotalOptions = optionCount;
+        int visibleCount = Math.Min(optionCount, MaxVisibleDropdownItems);
+        OpenDropdownPopupBounds = new Rectangle(W.Bounds.X, W.Bounds.Bottom, W.Bounds.Width, visibleCount * WidgetHeight);
     }
 
     private void CloseDropdown()
     {
         OpenDropdownWindowId = null;
         OpenDropdownWidgetId = null;
+        DropdownScrollOffset = 0;
     }
 
     private void HandleDropdownPopupClick(Vector2 Mouse)
@@ -708,7 +730,8 @@ public class Inspector : core.System
         if (!Window.WidgetIndex.TryGetValue(OpenDropdownWidgetId, out int Index)) return;
 
         var W = Window.Widgets[Index];
-        int optionIndex = ((int)Mouse.Y - OpenDropdownPopupBounds.Y) / WidgetHeight;
+        int localIndex = ((int)Mouse.Y - OpenDropdownPopupBounds.Y) / WidgetHeight;
+        int optionIndex = localIndex + DropdownScrollOffset;
         if (W.DropdownOptions != null && optionIndex >= 0 && optionIndex < W.DropdownOptions.Length)
         {
             W.DropdownSelected = optionIndex;
@@ -815,12 +838,28 @@ public class Inspector : core.System
         var CurrentMouse = Mouse.GetState();
         var VirtualMouse = ScreenToVirtual(new Vector2(CurrentMouse.X, CurrentMouse.Y));
 
+        // Only the topmost window under the mouse gets hover. Null = all blocked.
+        string hoveredWindowId = null;
+        if (!Dragging && !DraggingSlider && OpenDropdownWindowId == null)
+        {
+            for (int I = RenderOrder.Count - 1; I >= 0; I--)
+            {
+                var Win = RenderOrder[I];
+                if (!Win.Visible) continue;
+                if (Win.WindowBounds.Contains((int)VirtualMouse.X, (int)VirtualMouse.Y))
+                {
+                    hoveredWindowId = Win.Id;
+                    break;
+                }
+            }
+        }
+
         Renderer.BeginDraw(SpriteSortMode.Deferred, BlendState.AlphaBlend, transform: Scale);
 
         foreach (var Window in RenderOrder)
         {
             if (!Window.Visible) continue;
-            DrawWindow(Window, VirtualMouse);
+            DrawWindow(Window, VirtualMouse, Window.Id != hoveredWindowId);
         }
 
         // Second pass: dropdown popup overlay (renders on top of everything)
@@ -831,23 +870,35 @@ public class Inspector : core.System
 
     private Vector2 MeasureText(string text) => Font.MeasureString(text) * FontScale;
 
+    private string TruncateText(string text, float maxWidth)
+    {
+        if (MeasureText(text).X <= maxWidth) return text;
+        float ellipsisWidth = MeasureText("...").X;
+        for (int i = text.Length - 1; i > 0; i--)
+        {
+            if (MeasureText(text[..i]).X + ellipsisWidth <= maxWidth)
+                return text[..i] + "...";
+        }
+        return "...";
+    }
+
     private void DrawText(string text, Vector2 position, Color color)
         => Renderer.DrawString(Font, text, position, color, FontScale);
 
     private void DrawTextBold(string text, Vector2 position, Color color)
         => Renderer.DrawString(Font, text, position, color, FontScale, bold: true);
 
-    private void DrawWindow(WindowData Window, Vector2 Mouse)
+    private void DrawWindow(WindowData Window, Vector2 Mouse, bool HoverBlocked)
     {
         Renderer.DrawRoundedRect(Window.WindowBounds, WindowBg, CornerRadius);
 
-        bool TitleHovered = Window.TitleBarBounds.Contains((int)Mouse.X, (int)Mouse.Y);
+        bool TitleHovered = !HoverBlocked && Window.TitleBarBounds.Contains((int)Mouse.X, (int)Mouse.Y);
         Renderer.DrawRoundedRect(Window.TitleBarBounds, TitleHovered ? TitleBarHover : TitleBarColor, CornerRadius, RoundedCorners.Top);
 
         var TitlePos = new Vector2(Window.TitleBarBounds.X + Padding, Window.TitleBarBounds.Y + 8);
         DrawTextBold(Window.Title, TitlePos, TextColor);
 
-        bool CloseHovered = Window.CloseBounds.Contains((int)Mouse.X, (int)Mouse.Y);
+        bool CloseHovered = !HoverBlocked && Window.CloseBounds.Contains((int)Mouse.X, (int)Mouse.Y);
         Renderer.DrawRoundedRect(Window.CloseBounds, CloseHovered ? CloseHover : CloseColor, CornerRadius);
         const float CloseScale = 0.7f * FontScale;
         var CloseTextSize = Font.MeasureString("X") * CloseScale;
@@ -865,10 +916,10 @@ public class Inspector : core.System
             switch (W.Type)
             {
                 case WidgetType.Label: DrawLabel(W, Mouse); break;
-                case WidgetType.Button: DrawButton(W, Mouse); break;
+                case WidgetType.Button: DrawButton(W, Mouse, HoverBlocked); break;
                 case WidgetType.Toggle: DrawToggle(W, Mouse); break;
                 case WidgetType.Slider: DrawSlider(W, Mouse); break;
-                case WidgetType.Dropdown: DrawDropdown(W, Mouse); break;
+                case WidgetType.Dropdown: DrawDropdown(W, Mouse, HoverBlocked); break;
             }
         }
     }
@@ -923,9 +974,9 @@ public class Inspector : core.System
             DrawText(CurrentLine, new Vector2(W.Bounds.X + 4, Y), labelColor);
     }
 
-    private void DrawButton(Widget W, Vector2 Mouse)
+    private void DrawButton(Widget W, Vector2 Mouse, bool HoverBlocked)
     {
-        bool Hovered = W.Bounds.Contains((int)Mouse.X, (int)Mouse.Y);
+        bool Hovered = !HoverBlocked && W.Bounds.Contains((int)Mouse.X, (int)Mouse.Y);
         Renderer.DrawRoundedRect(W.Bounds, Hovered ? ButtonHover : ButtonColor, CornerRadius);
 
         var TextSize = MeasureText(W.Text);
@@ -983,22 +1034,25 @@ public class Inspector : core.System
         Renderer.DrawSprite(Renderer.GetCircleTexture(SliderHandleSize * 4), HandleRect, SliderHandle);
     }
 
-    private void DrawDropdown(Widget W, Vector2 Mouse)
+    private void DrawDropdown(Widget W, Vector2 Mouse, bool HoverBlocked)
     {
-        bool Hovered = W.Bounds.Contains((int)Mouse.X, (int)Mouse.Y);
+        bool Hovered = !HoverBlocked && W.Bounds.Contains((int)Mouse.X, (int)Mouse.Y);
         Renderer.DrawRoundedRect(W.Bounds, Hovered ? ButtonHover : ButtonColor, CornerRadius);
 
         string selectedLabel = W.DropdownOptions != null && W.DropdownSelected < W.DropdownOptions.Length
             ? W.DropdownOptions[W.DropdownSelected] : "?";
         string displayText = $"{W.Text}: {selectedLabel}";
 
+        const int triSize = 7;
+        float availableWidth = W.Bounds.Width - Padding * 2 - triSize - 4;
+        displayText = TruncateText(displayText, availableWidth);
+
         var TextSize = MeasureText(displayText);
         var TextPos = new Vector2(
-            W.Bounds.X + (W.Bounds.Width - TextSize.X) / 2,
+            W.Bounds.X + (W.Bounds.Width - TextSize.X - triSize - 4) / 2,
             W.Bounds.Y + (W.Bounds.Height - TextSize.Y) / 2);
         DrawText(displayText, TextPos, TextColor);
 
-        const int triSize = 7;
         int triX = W.Bounds.Right - Padding - triSize;
         int triY = W.Bounds.Y + (W.Bounds.Height - triSize) / 2 + 1;
         Renderer.DrawSprite(Renderer.GetTriangleTexture(triSize * 4), new Rectangle(triX, triY, triSize, triSize), LabelDim);
@@ -1015,20 +1069,43 @@ public class Inspector : core.System
 
         Renderer.DrawRoundedRect(OpenDropdownPopupBounds, WindowBg, CornerRadius);
 
-        for (int I = 0; I < W.DropdownOptions.Length; I++)
+        int visibleCount = Math.Min(W.DropdownOptions.Length - DropdownScrollOffset, MaxVisibleDropdownItems);
+        bool scrollable = W.DropdownOptions.Length > MaxVisibleDropdownItems;
+        int scrollbarReserved = scrollable ? 10 : 0;
+
+        for (int I = 0; I < visibleCount; I++)
         {
-            var OptionRect = new Rectangle(OpenDropdownPopupBounds.X, OpenDropdownPopupBounds.Y + I * WidgetHeight, OpenDropdownPopupBounds.Width, WidgetHeight);
+            int optionIndex = I + DropdownScrollOffset;
+            int optionWidth = OpenDropdownPopupBounds.Width - scrollbarReserved;
+            var OptionRect = new Rectangle(OpenDropdownPopupBounds.X, OpenDropdownPopupBounds.Y + I * WidgetHeight, optionWidth, WidgetHeight);
             bool OptionHovered = OptionRect.Contains((int)Mouse.X, (int)Mouse.Y);
-            bool IsSelected = I == W.DropdownSelected;
+            bool IsSelected = optionIndex == W.DropdownSelected;
 
             Color OptionBg = IsSelected ? SliderFill : (OptionHovered ? ButtonHover : ButtonColor);
-            RoundedCorners optionCorners = W.DropdownOptions.Length == 1 ? RoundedCorners.All :
-                I == 0 ? RoundedCorners.Top : I == W.DropdownOptions.Length - 1 ? RoundedCorners.Bottom : RoundedCorners.None;
+            RoundedCorners optionCorners = visibleCount == 1 ? RoundedCorners.All :
+                I == 0 ? RoundedCorners.Top : I == visibleCount - 1 ? RoundedCorners.Bottom : RoundedCorners.None;
             Renderer.DrawRoundedRect(OptionRect, OptionBg, CornerRadius, optionCorners);
 
-            var OptionTextSize = MeasureText(W.DropdownOptions[I]);
+            string optionText = TruncateText(W.DropdownOptions[optionIndex], OptionRect.Width - Padding * 2);
+            var OptionTextSize = MeasureText(optionText);
             var OptionTextPos = new Vector2(OptionRect.X + Padding, OptionRect.Y + (OptionRect.Height - OptionTextSize.Y) / 2);
-            DrawText(W.DropdownOptions[I], OptionTextPos, TextColor);
+            DrawText(optionText, OptionTextPos, TextColor);
+        }
+
+        if (scrollable)
+        {
+            int trackWidth = 4;
+            int trackMargin = 3;
+            int trackX = OpenDropdownPopupBounds.Right - trackMargin - trackWidth;
+            int trackY = OpenDropdownPopupBounds.Y;
+            int trackHeight = OpenDropdownPopupBounds.Height;
+            float thumbRatio = (float)MaxVisibleDropdownItems / DropdownTotalOptions;
+            int thumbHeight = Math.Max(8, (int)(trackHeight * thumbRatio));
+            int scrollRange = trackHeight - thumbHeight;
+            int maxScroll = Math.Max(1, DropdownTotalOptions - MaxVisibleDropdownItems);
+            int thumbY = trackY + (int)(scrollRange * ((float)DropdownScrollOffset / maxScroll));
+            Renderer.DrawRoundedRect(new Rectangle(trackX, trackY, trackWidth, trackHeight), ButtonColor, trackWidth / 2);
+            Renderer.DrawRoundedRect(new Rectangle(trackX, thumbY, trackWidth, thumbHeight), SliderFill, trackWidth / 2);
         }
     }
 

@@ -327,43 +327,6 @@ public class SpatialIndex
         return new ReadOnlySpan<int>(ResultArray, 0, ResultCount);
     }
 
-    public ReadOnlySpan<int> InRadius2D(float cx, float cz, float radius, float y = 0)
-    {
-        ResultCount = 0;
-        float radiusSq = radius * radius;
-
-        int minX = (int)MathF.Floor((cx - radius) * InverseCellSize);
-        int maxX = (int)MathF.Floor((cx + radius) * InverseCellSize);
-        int minZ = (int)MathF.Floor((cz - radius) * InverseCellSize);
-        int maxZ = (int)MathF.Floor((cz + radius) * InverseCellSize);
-        int cellY = (int)MathF.Floor(y * InverseCellSize);
-
-        for (int x = minX; x <= maxX; x++)
-        {
-            for (int z = minZ; z <= maxZ; z++)
-            {
-                long key = PackCell(x, cellY, z);
-                if (!Cells.TryGetValue(key, out var cell)) continue;
-
-                EnsureResultCapacity(ResultCount + cell.Count);
-
-                for (int i = 0; i < cell.Count; i++)
-                {
-                    int entity = cell.Entities[i];
-                    ref var data = ref EntityDataArray[entity];
-
-                    float dx = data.PosX - cx;
-                    float dz = data.PosZ - cz;
-
-                    if (dx * dx + dz * dz <= radiusSq)
-                        ResultArray[ResultCount++] = entity;
-                }
-            }
-        }
-
-        return new ReadOnlySpan<int>(ResultArray, 0, ResultCount);
-    }
-
     public ReadOnlySpan<int> InBox(Vector3 min, Vector3 max)
     {
         return InBox(min.X, min.Y, min.Z, max.X, max.Y, max.Z);

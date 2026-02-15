@@ -109,7 +109,6 @@ ECS.InBox(min, max);
 ECS.AtExact(position);                    // 0.01 precision
 
 ECS.Nearest(center, count, maxRadius);
-ECS.InRadius2D(centerX, centerZ, radius); // Ignores Y
 ```
 
 ### Pausing & System Retrieval
