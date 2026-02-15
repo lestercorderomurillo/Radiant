@@ -39,7 +39,8 @@ public class ECS : IGameObject
     private static readonly int CachedThreadCount = Environment.ProcessorCount;
 
     public int EntityCount => EntityCount_;
-    public bool Paused { get; set; }
+    public bool GameplayPaused { get; set; }
+    public bool AnimationPaused { get; set; }
     public Scene Scene { get; set; }
     public Renderer Renderer { get; private set; }
     public SpatialIndex Spatial { get; private set; }
@@ -169,7 +170,8 @@ public class ECS : IGameObject
         system.Renderer = Scene.Renderer;
         system.GameTime = Scene.GameTime;
         system.Enabled = enabled;
-        system.IsPausable = Attribute.IsDefined(typeof(T), typeof(PausableAttribute));
+        var pauseAttr = (PausableAttribute)Attribute.GetCustomAttribute(typeof(T), typeof(PausableAttribute));
+        system.PauseGroups = pauseAttr?.Groups ?? PauseGroup.None;
         Systems.Add(system);
         SystemCache[typeof(T)] = system;
         return system;
@@ -605,7 +607,7 @@ public class ECS : IGameObject
         for (int i = 0; i < Systems.Count; i++)
         {
             if (!Systems[i].Enabled) continue;
-            if (Paused && Systems[i].IsPausable) continue;
+            if (IsSystemPaused(Systems[i])) continue;
             Systems[i].GameTime = Scene.GameTime;
             Systems[i].Update();
         }
@@ -616,10 +618,20 @@ public class ECS : IGameObject
         for (int i = 0; i < Systems.Count; i++)
         {
             if (!Systems[i].Enabled) continue;
-            if (Paused && Systems[i].IsPausable) continue;
+            if (IsSystemPaused(Systems[i])) continue;
             Systems[i].GameTime = Scene.GameTime;
             Systems[i].FixedUpdate();
         }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private bool IsSystemPaused(System system)
+    {
+        var groups = system.PauseGroups;
+        if (groups == PauseGroup.None) return false;
+        if (GameplayPaused && (groups & PauseGroup.Gameplay) != 0) return true;
+        if (AnimationPaused && (groups & PauseGroup.Animation) != 0) return true;
+        return false;
     }
 
     public void Render()

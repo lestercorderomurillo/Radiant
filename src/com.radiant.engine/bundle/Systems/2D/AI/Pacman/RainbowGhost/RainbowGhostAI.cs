@@ -7,7 +7,7 @@ namespace com.radiant.engine.bundle;
 
 public enum RainbowPhase : byte { Solo, Duo, Trio, Merging }
 
-[Pausable]
+[Pausable(PauseGroup.Gameplay | PauseGroup.Animation)]
 [RunAfter(typeof(PacmanMazeBuilder), typeof(PacmanPlayer))]
 [RunBefore(typeof(GizmosRenderer))]
 public class RainbowGhostAI : core.System

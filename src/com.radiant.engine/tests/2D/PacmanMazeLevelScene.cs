@@ -233,7 +233,13 @@ public class PacmanMazeLevelScene : Scene
         Inspector.AddButton("scene", "restartLevel", "Restart Level", () => RestartLevel());
         Inspector.AddButton("scene", "nextLevel", "Next Level", () => LoadLevel((CurrentLevel + 1) % Levels.Length));
         Inspector.AddButton("scene", "spawnLights", "Spawn Lights", () => LightFactory.SpawnRandom(ECS, 100_000, Renderer.VirtualSize));
-        Inspector.AddToggle("scene", "pause", "Pause", false, (paused) => ECS.Paused = paused);
+        Inspector.AddToggle("scene", "pauseGameplay", "Pause Gameplay", false, (paused) => ECS.GameplayPaused = paused);
+        Inspector.AddToggle("scene", "pauseAll", "Pause Gameplay + Animations", false, (paused) =>
+        {
+            ECS.AnimationPaused = paused;
+            ECS.GameplayPaused = paused;
+            Inspector.SetToggleValue("scene", "pauseGameplay", paused);
+        });
 
         Inspector.AddDropdown("pipeline", "lighting", "Lighting", GIGroup.Names, GIGroup.ActiveIdx, (index) =>
         {
@@ -394,6 +400,8 @@ public class PacmanMazeLevelScene : Scene
             LoadLevel((CurrentLevel + 1) % Levels.Length);
             return;
         }
+
+        if (ECS.AnimationPaused) return;
 
         CoinWaveTime += (float)GameTime.ElapsedGameTime.TotalSeconds;
         var playerPos = PlayerSystem.WorldPosition;

@@ -6,7 +6,7 @@ using System;
 
 namespace com.radiant.engine.bundle;
 
-[Pausable]
+[Pausable(PauseGroup.Gameplay | PauseGroup.Animation)]
 [RunAfter(typeof(PacmanMazeBuilder))]
 [RunBefore(typeof(PacmanGhostAI))]
 public class PacmanPlayer : core.System

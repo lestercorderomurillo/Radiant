@@ -19,11 +19,26 @@ public class RunBeforeAttribute : Attribute
     public RunBeforeAttribute(params Type[] systemTypes) => SystemTypes = systemTypes;
 }
 
+[Flags]
+public enum PauseGroup : byte
+{
+    None = 0,
+    Gameplay = 1,
+    Animation = 2
+}
+
 /// <summary>
-/// Marks a system as pausable. Only systems with this attribute are skipped when ECS.Paused is true.
+/// Marks a system as pausable. Specify which pause groups affect this system.
+/// Systems with Gameplay are skipped when ECS.GameplayPaused is true.
+/// Systems with Animation are skipped when ECS.AnimationPaused is true.
 /// </summary>
 [AttributeUsage(AttributeTargets.Class)]
-public class PausableAttribute : Attribute { }
+public class PausableAttribute : Attribute
+{
+    public PauseGroup Groups { get; }
+    public PausableAttribute() => Groups = PauseGroup.Gameplay;
+    public PausableAttribute(PauseGroup groups) => Groups = groups;
+}
 
 public enum RenderLayer : byte { World = 0, Gameplay = 1, Overlay = 2, UI = 3 }
 
@@ -36,7 +51,7 @@ public abstract class System
     public Renderer Renderer;
 
     public bool Enabled = true;
-    internal bool IsPausable;
+    internal PauseGroup PauseGroups;
 
     public virtual RenderLayer RenderLayer => RenderLayer.Gameplay;
 

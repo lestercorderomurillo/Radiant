@@ -435,7 +435,7 @@ public class Inspector : core.System
             WindowBg = new(22, 21, 20, 230), TitleBarColor = new(36, 34, 30, 245), TitleBarHover = new(50, 47, 40, 245),
             ButtonColor = new(38, 36, 32, 225), ButtonHover = new(55, 52, 44, 245),
             SliderTrack = new(28, 27, 24, 210), SliderFill = new(255, 184, 108, 255), SliderHandle = new(255, 210, 150, 255),
-            ToggleOn = new(220, 155, 80, 255), ToggleOff = new(32, 31, 28, 210),
+            ToggleOn = new(220, 155, 80, 255), ToggleOff = new(50, 48, 42, 230),
             CloseColor = new(220, 155, 80, 255), CloseHover = new(255, 184, 108, 255),
             TextColor = new(248, 248, 242, 255), CloseText = new(248, 248, 242, 255), LabelDim = new(140, 135, 120, 255)
         });
@@ -939,7 +939,8 @@ public class Inspector : core.System
     {
         int BoxY = W.Bounds.Y + (W.Bounds.Height - ToggleBoxSize) / 2;
         var BoxRect = new Rectangle(W.Bounds.X, BoxY, ToggleBoxSize, ToggleBoxSize);
-        Renderer.DrawRoundedRect(BoxRect, W.ToggleValue ? ToggleOn : ToggleOff, CornerRadius);
+        var solid = Renderer.GetSolidTexture(Color.White);
+        Renderer.DrawSprite(solid, BoxRect, W.ToggleValue ? ToggleOn : ToggleOff);
 
         if (W.ToggleValue)
         {
@@ -947,7 +948,7 @@ public class Inspector : core.System
             var InnerRect = new Rectangle(
                 BoxRect.X + Inset, BoxRect.Y + Inset,
                 BoxRect.Width - Inset * 2, BoxRect.Height - Inset * 2);
-            Renderer.DrawRoundedRect(InnerRect, TextColor, CornerRadius);
+            Renderer.DrawSprite(solid, InnerRect, TextColor);
         }
 
         // Label text

@@ -1,16 +1,22 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Threading;
 using com.radiant.engine.core;
 using Microsoft.Xna.Framework;
-using System.Collections.Generic;
-using System;
 using Microsoft.Xna.Framework.Graphics;
-using System.Linq;
-using System.Diagnostics;
-using System.Threading;
 
 namespace com.radiant.engine.runtime;
 
-public class GameLoop : IGameObject
+public partial class GameLoop : IGameObject
 {
+    [LibraryImport("winmm.dll")]
+    private static partial uint timeBeginPeriod(uint period);
+
+    [LibraryImport("winmm.dll")]
+    private static partial uint timeEndPeriod(uint period);
+
     private const int NO_SCENE = -1;
 
     private Scene[] Scenes = [];
@@ -45,6 +51,7 @@ public class GameLoop : IGameObject
     private long LastUpdateTicks;
 
     private long LastFrameTicks;
+    private long LastFrameTimingTicks;
 
     private double FixedUpdateAccumulator;
 
@@ -55,6 +62,8 @@ public class GameLoop : IGameObject
     public float FramesPerSecond { get; private set; }
     public float FrameTimeMs { get; private set; }
     public float FrameTimeSmoothed { get; private set; }
+    public float RenderTimeMs { get; private set; }
+    public float RenderTimeSmoothed { get; private set; }
 
     private int FrameCount;
 
@@ -70,11 +79,13 @@ public class GameLoop : IGameObject
     public void Initialize()
     {
         UpdateInterval = 1.0 / TargetUpdatesPerSecond;
-        FrameInterval = 1.0 / TargetFramesPerSecond;
+        FrameInterval = TargetFramesPerSecond > 0 ? 1.0 / TargetFramesPerSecond : 0;
 
+        timeBeginPeriod(1);
         GlobalTimer.Start();
         LastUpdateTicks = GlobalTimer.ElapsedTicks;
         LastFrameTicks = GlobalTimer.ElapsedTicks;
+        LastFrameTimingTicks = GlobalTimer.ElapsedTicks;
         LastFpsUpdate = GlobalTimer.Elapsed.TotalSeconds;
     }
 
@@ -86,6 +97,7 @@ public class GameLoop : IGameObject
 
     public void Dispose()
     {
+        timeEndPeriod(1);
         GC.SuppressFinalize(this);
     }
 
@@ -134,7 +146,7 @@ public class GameLoop : IGameObject
             if (SceneId != NO_SCENE)
             {
                 Scenes[SceneId].GameTime = GameTime;
-                Scenes[SceneId].DeltaTime = (float)(1.0f / TargetUpdatesPerSecond);
+                Scenes[SceneId].DeltaTime = (float)(1.0 / TargetUpdatesPerSecond);
                 Scenes[SceneId].InternalFixedUpdate();
             }
 
@@ -147,9 +159,11 @@ public class GameLoop : IGameObject
 
         // Variable update with precise delta time
         if (SceneId != NO_SCENE)
+        {
             Scenes[SceneId].GameTime = GameTime;
-        Scenes[SceneId].DeltaTime = (float)deltaTime;
-        Scenes[SceneId].InternalUpdate();
+            Scenes[SceneId].DeltaTime = (float)deltaTime;
+            Scenes[SceneId].InternalUpdate();
+        }
 
         if (NextSceneId != NO_SCENE && NextSceneId != SceneId)
             TransitionScene(NextSceneId);
@@ -159,7 +173,7 @@ public class GameLoop : IGameObject
     {
         long frameStartTicks = GlobalTimer.ElapsedTicks;
 
-        // Frame pacing - yield-based sleep with short spin-wait finish
+        // Frame pacing at START — waits for ideal target, accounts for all inter-frame overhead
         bool focused = Window.IsActive;
         double activeInterval = (!focused && ThrottleUnfocused) ? UnfocusedFrameInterval : FrameInterval;
         if (activeInterval > 0)
@@ -168,8 +182,7 @@ public class GameLoop : IGameObject
 
             if (frameStartTicks < targetTicks)
             {
-                long remainingTicks = targetTicks - frameStartTicks;
-                double remainingMs = remainingTicks * 1000.0 / Stopwatch.Frequency;
+                double remainingMs = (targetTicks - frameStartTicks) * 1000.0 / Stopwatch.Frequency;
 
                 // Yield in small chunks instead of sleeping (avoids 15ms scheduler quantum)
                 while (remainingMs > 2.0)
@@ -182,11 +195,12 @@ public class GameLoop : IGameObject
                 while (GlobalTimer.ElapsedTicks < targetTicks)
                     Thread.SpinWait(10);
 
+                // Anchor to ideal target — prevents drift from overshoot accumulation
                 LastFrameTicks = targetTicks;
             }
             else
             {
-                // We're behind - reset to NOW, don't try to catch up
+                // Behind schedule — reset to NOW, don't try to catch up
                 LastFrameTicks = frameStartTicks;
             }
         }
@@ -195,15 +209,14 @@ public class GameLoop : IGameObject
             LastFrameTicks = frameStartTicks;
         }
 
-        // Per-frame timing (actual frame time including wait)
-        long afterWaitTicks = GlobalTimer.ElapsedTicks;
-        FrameTimeMs = (float)((afterWaitTicks - frameStartTicks) * 1000.0 / Stopwatch.Frequency);
+        // Frame-to-frame timing (measured before pacing wait, includes all overhead)
+        FrameTimeMs = (float)((frameStartTicks - LastFrameTimingTicks) * 1000.0 / Stopwatch.Frequency);
         FrameTimeSmoothed = FrameTimeSmoothed * FrameTimeSmoothing + FrameTimeMs * (1f - FrameTimeSmoothing);
+        LastFrameTimingTicks = frameStartTicks;
 
-        // FPS calculation (0.5s window for faster updates)
+        // FPS calculation (0.5s window)
         FrameCount++;
         double now = GlobalTimer.Elapsed.TotalSeconds;
-
         if (now - LastFpsUpdate >= 0.5)
         {
             FramesPerSecond = (float)(FrameCount / (now - LastFpsUpdate));
@@ -212,6 +225,7 @@ public class GameLoop : IGameObject
         }
 
         // Actual rendering
+        long renderStartTicks = GlobalTimer.ElapsedTicks;
         if (SceneId != NO_SCENE)
         {
             Scenes[SceneId].Renderer.ClearBackBuffer(Color.Black);
@@ -219,6 +233,10 @@ public class GameLoop : IGameObject
             Scenes[SceneId].InternalRender();
             Scenes[SceneId].InternalLateRender();
         }
+
+        long renderEndTicks = GlobalTimer.ElapsedTicks;
+        RenderTimeMs = (float)((renderEndTicks - renderStartTicks) * 1000.0 / Stopwatch.Frequency);
+        RenderTimeSmoothed = RenderTimeSmoothed * FrameTimeSmoothing + RenderTimeMs * (1f - FrameTimeSmoothing);
     }
 
     public void FixedUpdate() { }
