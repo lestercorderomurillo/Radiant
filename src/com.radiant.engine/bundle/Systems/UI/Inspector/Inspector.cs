@@ -20,9 +20,7 @@ public class Inspector : core.System
         Instance = this;
     }
 
-    private SpriteFont Font;
-    private SpriteFont FontBold;
-    private const float FontScale = 15.4f / 84f;
+    private const float FontSize = 20f;
     private float LineHeight;
     private Dictionary<string, WindowData> Windows = new();
     private List<WindowData> RenderOrder = new();
@@ -423,16 +421,15 @@ public class Inspector : core.System
 
     public override void Initialize()
     {
-        Font = Renderer.GetFont("fonts/InspectorFont");
-        FontBold = Renderer.GetFont("fonts/InspectorFontBold");
-        LineHeight = Font.LineSpacing * FontScale;
+        LineHeight = Renderer.GetLineHeight("Inter", FontSize);
         PrevMouse = Mouse.GetState();
         PrevKeyState = Keyboard.GetState();
 
         RegisterBuiltInThemes();
 
+        UIScale = ComputeAutoScale();
         CreateWindow("inspector", "Inspector", 0);
-        AddSlider("inspector", "uiScale", "UI Scale", 0.5f, 2.0f, 1.0f, (value) => UIScale = value);
+        AddSlider("inspector", "uiScale", "UI Scale", 0.5f, 3.0f, UIScale, (value) => UIScale = value);
         ApplyTheme(0);
         AddDropdown("inspector", "theme", "Theme", GetThemeNames(), 0, (index) => ApplyTheme(index));
 
@@ -502,6 +499,19 @@ public class Inspector : core.System
 
 
 
+    }
+
+    private float ComputeAutoScale()
+    {
+        float scale = 2160f / Renderer.ScreenHeight;
+        return MathF.Round(scale * 10f) / 10f;
+    }
+
+    public override void OnResize()
+    {
+        UIScale = ComputeAutoScale();
+        SetSliderValue("inspector", "uiScale", UIScale);
+        LayoutDone = false;
     }
 
     public override void Update()
@@ -880,7 +890,7 @@ public class Inspector : core.System
         Renderer.EndDraw();
     }
 
-    private Vector2 MeasureText(string text) => Font.MeasureString(text) * FontScale;
+    private Vector2 MeasureText(string text) => Renderer.MeasureString("Inter", FontSize, text);
 
     private string TruncateText(string text, float maxWidth)
     {
@@ -895,10 +905,10 @@ public class Inspector : core.System
     }
 
     private void DrawText(string text, Vector2 position, Color color)
-        => Renderer.DrawString(Font, text, position, color, FontScale);
+        => Renderer.DrawString("Inter", FontSize, text, position, color);
 
     private void DrawTextBold(string text, Vector2 position, Color color)
-        => Renderer.DrawString(FontBold, text, position, color, FontScale);
+        => Renderer.DrawString("Inter-Bold", FontSize, text, position, color);
 
     private void DrawWindow(WindowData Window, Vector2 Mouse, bool HoverBlocked)
     {
@@ -909,17 +919,18 @@ public class Inspector : core.System
         if (BlurResult != null) titleBg = GlassTint(titleBg);
         Renderer.DrawRoundedRect(Window.TitleBarBounds, titleBg, CornerRadius, RoundedCorners.Top);
 
-        var TitlePos = new Vector2(Window.TitleBarBounds.X + Padding, Window.TitleBarBounds.Y + 8);
+        float TitleTextHeight = Renderer.MeasureString("Inter-Bold", FontSize, Window.Title).Y;
+        var TitlePos = new Vector2(Window.TitleBarBounds.X + Padding, Window.TitleBarBounds.Y + (TitleBarHeight - TitleTextHeight) / 2);
         DrawTextBold(Window.Title, TitlePos, TextColor);
 
         bool CloseHovered = !HoverBlocked && Window.CloseBounds.Contains((int)Mouse.X, (int)Mouse.Y);
         Renderer.DrawRoundedRect(Window.CloseBounds, CloseHovered ? CloseHover : CloseColor, CornerRadius);
-        const float CloseScale = 0.7f * FontScale;
-        var CloseTextSize = Font.MeasureString("X") * CloseScale;
+        const float CloseFontSize = FontSize * 0.7f;
+        var CloseTextSize = Renderer.MeasureString("Inter-Bold", CloseFontSize, "X");
         var CloseTextPos = new Vector2(
             Window.CloseBounds.X + (Window.CloseBounds.Width - CloseTextSize.X) / 2,
             Window.CloseBounds.Y + (Window.CloseBounds.Height - CloseTextSize.Y) / 2);
-        Renderer.DrawString(FontBold, "X", CloseTextPos, CloseText, CloseScale);
+        Renderer.DrawString("Inter-Bold", CloseFontSize, "X", CloseTextPos, CloseText);
 
         // Widgets
         for (int I = 0; I < Window.Widgets.Count; I++)

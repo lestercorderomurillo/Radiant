@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using com.radiant.engine.runtime;
+using FontStashSharp;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
@@ -173,7 +175,7 @@ public class Renderer : IDisposable
     private GameWindow NativeWindow => Window.Window;
     private Dictionary<string, Effect> ShaderCache = new();
     private Dictionary<string, Texture2D> TextureCache = new();
-    private Dictionary<string, SpriteFont> FontCache = new();
+    private Dictionary<string, FontSystem> FontSystems = new();
     private Dictionary<(Color, int, int), Texture2D> SolidTextureCache = new();
     private Dictionary<int, Texture2D> CircleTextureCache = new();
     private Dictionary<int, Texture2D> TriangleTextureCache = new();
@@ -260,6 +262,7 @@ public class Renderer : IDisposable
 
         InitializeQuad();
         InitializeShapes();
+        InitializeFonts();
         UpdateScreenInfo();
         UpdateScaledScreenInfo();
 
@@ -274,6 +277,13 @@ public class Renderer : IDisposable
             UpdateScreenInfo();
             UpdateScaledScreenInfo();
         };
+    }
+
+    private void InitializeFonts()
+    {
+        LoadFont("Inter", "fonts/Inter-Regular.ttf");
+        LoadFont("Inter-Bold", "fonts/Inter-Bold.ttf");
+        LoadFont("PressStart2P", "fonts/PressStart2P.ttf");
     }
 
     #endregion
@@ -1900,17 +1910,52 @@ public class Renderer : IDisposable
     }
 
     /// <summary>
-    /// Loads and caches a SpriteFont by name. Returns the same instance for repeated calls.
+    /// Supersample multiplier for font rendering. Fonts rasterize at size * FontRenderScale
+    /// and draw scaled down for sharp, anti-aliased text.
     /// </summary>
-    /// <param name="name">Asset name relative to Content root (e.g., "fonts/BaseFont").</param>
-    public SpriteFont GetFont(string name)
+    public float FontRenderScale { get; set; } = 3f;
+
+    /// <summary>
+    /// Loads a TTF font family into the font system. Path is relative to Content root.
+    /// </summary>
+    public void LoadFont(string name, string path)
     {
-        if (!FontCache.TryGetValue(name, out var font))
-        {
-            font = Window.Content.Load<SpriteFont>(name);
-            FontCache[name] = font;
-        }
-        return font;
+        if (FontSystems.ContainsKey(name)) return;
+        var system = new FontSystem();
+        system.AddFont(File.ReadAllBytes(Path.Combine(Window.Content.RootDirectory, path)));
+        FontSystems[name] = system;
+    }
+
+    /// <summary>
+    /// Gets a dynamic font at a specific pixel size (raw, no supersampling applied).
+    /// </summary>
+    public SpriteFontBase GetFont(string name, float size) => FontSystems[name].GetFont(size);
+
+    /// <summary>
+    /// Measures text dimensions using a dynamic font at a specific pixel size.
+    /// Accounts for FontRenderScale internally — returns dimensions at the requested size.
+    /// </summary>
+    public Vector2 MeasureString(string fontName, float size, string text)
+    {
+        var font = FontSystems[fontName].GetFont(size * FontRenderScale);
+        return font.MeasureString(text) / FontRenderScale;
+    }
+
+    /// <summary>
+    /// Gets the line height for a font at a specific size, accounting for FontRenderScale.
+    /// </summary>
+    public float GetLineHeight(string fontName, float size) => FontSystems[fontName].GetFont(size * FontRenderScale).LineHeight / FontRenderScale;
+
+    /// <summary>
+    /// Draws text using a dynamic font at a specific size. Call between BeginDraw/EndDraw.
+    /// Supersampled via FontRenderScale for sharp rendering.
+    /// </summary>
+    public void DrawString(string fontName, float size, string text, Vector2 position, Color color, bool bold = false)
+    {
+        float scale = 1f / FontRenderScale;
+        var font = FontSystems[fontName].GetFont(size * FontRenderScale);
+        SpriteBatch.DrawString(font, text, position, color, scale: new Vector2(scale));
+        if (bold) SpriteBatch.DrawString(font, text, position + Vector2.UnitX, color, scale: new Vector2(scale));
     }
 
     /// <summary>
@@ -1992,13 +2037,6 @@ public class Renderer : IDisposable
         SpriteBatch.Draw(texture, destination, source, color, rotation, origin, effects, 0);
     }
 
-    /// <summary>Draws text during a BeginDraw/EndDraw session. Set bold for faux-bold (double-draw with 1px offset).</summary>
-    public void DrawString(SpriteFont font, string text, Vector2 position, Color color, float scale = 1f, bool bold = false)
-    {
-        SpriteBatch.DrawString(font, text, position, color, 0f, Vector2.Zero, scale, SpriteEffects.None, 0f);
-        if (bold) SpriteBatch.DrawString(font, text, position + Vector2.UnitX, color, 0f, Vector2.Zero, scale, SpriteEffects.None, 0f);
-    }
-
     /// <summary>Ends a SpriteBatch drawing session started by BeginDraw.</summary>
     public void EndDraw()
     {
@@ -2045,7 +2083,9 @@ public class Renderer : IDisposable
             texture?.Dispose();
         TextureCache.Clear();
 
-        FontCache.Clear();
+        foreach (var fontSystem in FontSystems.Values)
+            fontSystem.Dispose();
+        FontSystems.Clear();
 
         foreach (var texture in SolidTextureCache.Values)
             texture?.Dispose();

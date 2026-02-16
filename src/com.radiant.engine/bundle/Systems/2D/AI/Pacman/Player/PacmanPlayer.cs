@@ -1,8 +1,8 @@
+using System;
 using com.radiant.engine.core;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
-using System;
 
 namespace com.radiant.engine.bundle;
 
@@ -30,7 +30,8 @@ public class PacmanPlayer : core.System
     public float Speed { get; set; } = 200f;
     float Z;
     bool Tracked;
-    SpriteFont HudFont;
+    const string HudFontName = "PressStart2P";
+    const float HudFontSize = 24f;
     (int x, int y) PrevCell = (-1, -1);
 
     (int x, int y) TargetCell;
@@ -97,7 +98,6 @@ public class PacmanPlayer : core.System
     {
         Maze = Scene.ECS.GetSystem<PacmanMazeBuilder>();
         Geometry = Scene.ECS.GetSystem<Geometry>();
-        HudFont = Renderer.GetFont("fonts/HudFont");
         PlayerEyesTexture = Renderer.GetTexture("Eyes");
         MouthTexture = CreateMouthTexture(RTSize);
         CircleTex = Renderer.GetCircleTexture(RTSize);
@@ -294,8 +294,6 @@ public class PacmanPlayer : core.System
 
     void DrawHUD()
     {
-        if (HudFont == null) return;
-
         var Scale = Matrix.CreateScale(
             Renderer.ScreenWidth / Renderer.VirtualWidth,
             Renderer.ScreenHeight / Renderer.VirtualHeight,
@@ -309,32 +307,28 @@ public class PacmanPlayer : core.System
         float MazeRight = Maze.OffsetX + Maze.Cols * Maze.CellSize - 40f;
         float Y = Maze.OffsetY - 45f;
 
-        // Measure room tag
-        var TagSize = HudFont.MeasureString(LevelTag);
+        var TagSize = Renderer.MeasureString(HudFontName, HudFontSize, LevelTag);
         float TagBlockWidth = TagSize.X;
         float TextHeight = TagSize.Y;
 
-        // Measure coins
         string Collected = CoinsCollected.ToString();
         string Separator = " / ";
         string Total = CoinsTotal.ToString();
-        var CollectedSize = HudFont.MeasureString(Collected);
-        var SeparatorSize = HudFont.MeasureString(Separator);
-        var TotalSize = HudFont.MeasureString(Total);
+        var CollectedSize = Renderer.MeasureString(HudFontName, HudFontSize, Collected);
+        var SeparatorSize = Renderer.MeasureString(HudFontName, HudFontSize, Separator);
+        var TotalSize = Renderer.MeasureString(HudFontName, HudFontSize, Total);
         float CoinTextWidth = CollectedSize.X + SeparatorSize.X + TotalSize.X;
         float CoinBlockWidth = IconSize + Gap + CoinTextWidth;
 
         Renderer.BeginDraw(SpriteSortMode.Deferred, BlendState.AlphaBlend, transform: Scale);
 
-        // Left of maze: room tag
         float TagX = MazeLeft;
         var TagBg = new Rectangle(
             (int)(TagX - Padding), (int)(Y - Padding * 0.6f),
             (int)(TagBlockWidth + Padding * 2f), (int)(TextHeight + Padding * 1.2f));
         Renderer.DrawSprite(Renderer.GetSolidTexture(Color.White), TagBg, new Color(0, 0, 0, 180));
-        Renderer.DrawString(HudFont, LevelTag, new Vector2(TagX, Y), new Color(255, 255, 255));
+        Renderer.DrawString(HudFontName, HudFontSize, LevelTag, new Vector2(TagX, Y), new Color(255, 255, 255));
 
-        // Right of maze: coins
         float CoinX = MazeRight - CoinBlockWidth;
         var CoinBg = new Rectangle(
             (int)(CoinX - Padding), (int)(Y - Padding * 0.6f),
@@ -348,11 +342,11 @@ public class PacmanPlayer : core.System
         Renderer.DrawSprite(CoinTex, IconRect, CoinColor);
 
         float TextX = CoinX + IconSize + Gap;
-        Renderer.DrawString(HudFont, Collected, new Vector2(TextX, Y), CoinColor);
+        Renderer.DrawString(HudFontName, HudFontSize, Collected, new Vector2(TextX, Y), CoinColor);
         TextX += CollectedSize.X;
-        Renderer.DrawString(HudFont, Separator, new Vector2(TextX, Y), new Color(200, 200, 200));
+        Renderer.DrawString(HudFontName, HudFontSize, Separator, new Vector2(TextX, Y), new Color(200, 200, 200));
         TextX += SeparatorSize.X;
-        Renderer.DrawString(HudFont, Total, new Vector2(TextX, Y), new Color(255, 255, 255));
+        Renderer.DrawString(HudFontName, HudFontSize, Total, new Vector2(TextX, Y), new Color(255, 255, 255));
 
         Renderer.EndDraw();
     }

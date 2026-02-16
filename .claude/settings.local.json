@@ -21,7 +21,8 @@
       "WebFetch(domain:shaunlebron.github.io)",
       "Bash(bc:*)",
       "mcp__ide__getDiagnostics",
-      "Bash(unzip:*)"
+      "Bash(unzip:*)",
+      "WebFetch(domain:community.monogame.net)"
     ]
   }
 }

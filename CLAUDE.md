@@ -1,7 +1,7 @@
 # Radiant Engine
 
 MonoGame C# 2D engine: ECS + GPU-instanced shapes + HRC global illumination.
-.NET 8.0 WindowsDX. MonoGame 3.8.5-preview.1. Unsafe enabled. SQLite 1.0.118.
+.NET 8.0 WindowsDX. MonoGame 3.8.5-preview.1. Unsafe enabled. SQLite 1.0.118. FontStashSharp 1.5.4.
 
 ## Rules
 
@@ -40,8 +40,7 @@ ref var t = ref ECS.GetComponent<Transform>(id);                     // WRONG
 ```
 radiant/
 ├── Content/
-│   ├── fonts/BaseFont.spritefont (Tahoma 14pt), InspectorFont.spritefont (Inter 84pt, 1/6 scale)
-│   ├── fonts/Inter-Regular.ttf
+│   ├── fonts/Inter-Regular.ttf, Inter-Bold.ttf, PressStart2P.ttf (loaded by FontStashSharp at runtime)
 │   ├── Ghost.png, Eyes.png (premultiplied alpha)
 │   ├── shaders/
 │   │   ├── Geometry.fx, InstancedShapes.fx, ColorManagement.fx, GlassBlur.fx
@@ -305,16 +304,31 @@ Renderer.BeginDraw(SpriteSortMode.Deferred, BlendState.AlphaBlend,
 
 Renderer.DrawSprite(texture, destRect, Color.White);
 Renderer.DrawSprite(texture, destRect, sourceRect, Color.White, rotation, origin);
-Renderer.DrawString(font, text, position, color); // Optional: scale (float), bold: true
+Renderer.DrawString("Inter", 16f, text, position, color);        // Dynamic font by name + size
+Renderer.DrawString("Inter-Bold", 16f, text, position, color);  // Bold variant
+Renderer.MeasureString("Inter", 16f, text);                     // Returns Vector2
 
 Renderer.EndDraw();
 ```
+
+### Fonts (FontStashSharp)
+
+TTF fonts loaded at runtime — no content pipeline. Request any size dynamically.
+
+```csharp
+Renderer.LoadFont("MyFont", "fonts/MyFont.ttf");               // Load a TTF (path relative to Content root)
+Renderer.GetFont("Inter", 24f);                                // Get SpriteFontBase at specific size
+Renderer.DrawString("Inter", 24f, text, position, color);      // Measure + draw in one call
+Renderer.DrawString("Inter-Bold", 24f, text, position, color, bold: true); // Faux-bold (double-draw)
+Renderer.MeasureString("Inter", 24f, text);                    // Returns Vector2 dimensions
+```
+
+Pre-loaded fonts: `"Inter"` (Inter-Regular.ttf), `"Inter-Bold"` (Inter-Bold.ttf), `"PressStart2P"` (PressStart2P.ttf).
 
 ### Assets (all cached)
 
 ```csharp
 Renderer.GetTexture("Ghost");
-Renderer.GetFont("fonts/BaseFont");
 Renderer.GetSolidTexture(Color.White);   // 1x1 solid (cached by color)
 Renderer.GetCircleTexture(64);           // AA circle (cached by diameter)
 Renderer.GetRoundedRectTexture(8);       // AA rounded rect (cached by radius)
@@ -431,7 +445,7 @@ Quality: ProbeScale 4/3/2/1.
 
 ## Inspector (UI)
 
-Static API — safe even if Inspector not registered. Retained-mode windows, 375px default width, HD text (InspectorFont 42pt at 1/3 scale). Default theme: Radiant.
+Static API — safe even if Inspector not registered. Retained-mode windows, 375px default width, Inter font at 16px via FontStashSharp. Default theme: Radiant.
 
 ### Windows
 

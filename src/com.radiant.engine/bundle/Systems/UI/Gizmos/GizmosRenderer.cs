@@ -10,7 +10,7 @@ namespace com.radiant.engine.bundle;
 public class GizmosRenderer : core.System
 {
     public override RenderLayer RenderLayer => RenderLayer.Overlay;
-    private SpriteFont BaseFont;
+    private const float FontSize = 14f;
 
     private List<LineGizmo> LineQueue = new();
     private List<CircleGizmo> CircleQueue = new();
@@ -24,10 +24,7 @@ public class GizmosRenderer : core.System
 
     public void ToggleGizmos() => Enabled = !Enabled;
 
-    public override void Initialize()
-    {
-        BaseFont = Renderer.GetFont("fonts/BaseFont");
-    }
+    public override void Initialize() { }
 
     public override void Update()
     {
@@ -86,7 +83,7 @@ public class GizmosRenderer : core.System
 
         // Always render build number in bottom-left corner
         var BuildText = Window.BuildTag;
-        var TextSize = BaseFont.MeasureString(BuildText);
+        var TextSize = Renderer.MeasureString("Inter", FontSize, BuildText);
         var BuildPos = new Vector2(15, Renderer.VirtualHeight - TextSize.Y - 15);
 
         Renderer.BeginDraw(SpriteSortMode.Deferred, BlendState.AlphaBlend, transform: Scale);
@@ -116,7 +113,7 @@ public class GizmosRenderer : core.System
     {
         if (string.IsNullOrEmpty(text.Text)) return;
 
-        Vector2 textSize = BaseFont.MeasureString(text.Text);
+        Vector2 textSize = Renderer.MeasureString("Inter", FontSize, text.Text);
 
         Rectangle backgroundRect = new(
             (int)(text.Position.X - TextPadding),
@@ -126,7 +123,7 @@ public class GizmosRenderer : core.System
         );
 
         Renderer.DrawSprite(Renderer.GetSolidTexture(Color.White), backgroundRect, TextBackgroundColor);
-        Renderer.DrawString(BaseFont, text.Text, text.Position, text.Color);
+        Renderer.DrawString("Inter", FontSize, text.Text, text.Position, text.Color);
     }
 
     private void RenderLine(LineGizmo line)
