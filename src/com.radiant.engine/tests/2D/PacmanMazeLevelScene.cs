@@ -10,6 +10,7 @@ public class PacmanMazeLevelScene : Scene
 {
     private SystemGroup GIGroup;
     private SystemGroup UpscalerGroup;
+    private bool UpscalerEnabled = true;
     private ColorManagement Tonemapper;
     private GizmosRenderer Gizmos;
 
@@ -199,7 +200,6 @@ public class PacmanMazeLevelScene : Scene
         Tonemapper = ECS.AddSystem<ColorManagement>();
 
         UpscalerGroup = new SystemGroup(
-            ("Raw", ECS.AddSystem<Bilinear>(enabled: false)),
             ("UDR1.0", ECS.AddSystem<UDR1>(enabled: false)),
             ("UDR2.0", ECS.AddSystem<UDR2>(enabled: false)),
             ("UDR3.0", ECS.AddSystem<UDR3>())
@@ -241,14 +241,19 @@ public class PacmanMazeLevelScene : Scene
         Inspector.AddDropdown("scene", "pauseType", "Pause Type", ["Gameplay", "Gameplay + Animations"], 1, (index) => ApplyPause(true, index));
         Inspector.SetWidgetEnabled("scene", "pauseType", false);
 
+        Inspector.AddSectionLabel("pipeline", "techniquesHeader", "Techniques");
+        Inspector.AddToggle("pipeline", "upscalerToggle", "Enable Upscaler", UpscalerEnabled, (enabled) =>
+        {
+            UpscalerEnabled = enabled;
+            Inspector.SetWidgetEnabled("pipeline", "upscaler", enabled);
+            SetUpscalerEnabled(enabled);
+        });
         Inspector.AddDropdown("pipeline", "upscaler", "Upscaler", UpscalerGroup.Names, UpscalerGroup.ActiveIdx, (index) =>
         {
             UpscalerGroup.SetActive(index);
             UpdateUpscalerInput();
             UpdateWindowVisibility();
         });
-
-        Inspector.AddSectionLabel("pipeline", "techniquesHeader", "Techniques");
         Inspector.AddDropdown("pipeline", "lighting", "Lighting", GIGroup.Names, GIGroup.ActiveIdx, (index) =>
         {
             GIGroup.SetActive(index);
@@ -256,7 +261,7 @@ public class PacmanMazeLevelScene : Scene
             UpdateWindowVisibility();
         });
 
-        Inspector.AddToggle("inspector", "gizmos", "Gizmos", Gizmos.Enabled, (enabled) => Gizmos.Enabled = enabled);
+        Inspector.AddToggle("inspector", "gizmos", "Show Gizmos", Gizmos.Enabled, (enabled) => Gizmos.Enabled = enabled);
 
         Inspector.WindowsRestored += UpdateWindowVisibility;
         UpdateWindowVisibility();
@@ -521,12 +526,28 @@ public class PacmanMazeLevelScene : Scene
         {
             switch (system)
             {
-                case Bilinear bilinear: bilinear.SetInputSource(colorOutput); break;
                 case UDR1 udr1: udr1.SetInputSource(colorOutput); break;
                 case UDR2 udr2: udr2.SetInputSource(colorOutput); break;
                 case UDR3 udr3: udr3.SetInputSource(colorOutput); break;
             }
         });
+    }
+
+    private void SetUpscalerEnabled(bool enabled)
+    {
+        if (enabled)
+        {
+            UpscalerGroup.Active.Initialize();
+            UpscalerGroup.Active.Enabled = true;
+            UpdateUpscalerInput();
+        }
+        else
+        {
+            UpscalerGroup.Active.Dispose();
+            UpscalerGroup.Active.Enabled = false;
+            Renderer.RenderScale = 1.0f;
+        }
+        UpdateWindowVisibility();
     }
 
     private void UpdateWindowVisibility()
@@ -543,16 +564,15 @@ public class PacmanMazeLevelScene : Scene
             Inspector.ShowWindow("rcgi");
         }
 
-        // Upscaler: show active, hide rest
-        string[] upscalerWindows = ["bilinear", "udr1", "udr2", "udr3"];
-        string activeWindow = UpscalerGroup.Active switch
+        // Upscaler: show active, hide rest (hide all if disabled)
+        string[] upscalerWindows = ["udr1", "udr2", "udr3"];
+        string activeWindow = UpscalerEnabled ? UpscalerGroup.Active switch
         {
-            Bilinear => "bilinear",
             UDR1 => "udr1",
             UDR2 => "udr2",
             UDR3 => "udr3",
             _ => ""
-        };
+        } : "";
 
         foreach (var windowId in upscalerWindows)
         {

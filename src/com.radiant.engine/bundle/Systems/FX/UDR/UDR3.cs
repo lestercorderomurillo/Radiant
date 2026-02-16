@@ -8,9 +8,9 @@ namespace com.radiant.engine.bundle;
 public class UDR3 : core.System
 {
     public override RenderLayer RenderLayer => RenderLayer.World;
-    // Temporal parameters
-    public int FramesToAccumulate = 4;
-
+    public float Sharpness = 0.5f;
+    public bool EdgeCorrection = true;
+    public int FramesToAccumulate = 6;
 
     private int DebugEdges = 0;
 
@@ -39,9 +39,11 @@ public class UDR3 : core.System
         Inspector.AddLabel("udr3", "quality", "...");
         Inspector.AddLabel("udr3", "input", "...");
         Inspector.AddLabel("udr3", "output", "...");
-        Inspector.AddLabel("udr3", "frames", "...");
         Inspector.AddDropdown("udr3", "qualityDrop", "Quality", UDRQuality.Names, UDRQuality.Index, UDRQuality.Set);
         UDRQuality.Changed += _ => Inspector.SetDropdownValue("udr3", "qualityDrop", UDRQuality.Index);
+        Inspector.AddSlider("udr3", "sharpness", "Sharpness", 0f, 2f, Sharpness, V => Sharpness = V);
+        Inspector.AddSlider("udr3", "frames", "Frames to Accumulate", 1, 16, FramesToAccumulate, V => { FramesToAccumulate = (int)V; FrameIndex = 0; });
+        Inspector.AddToggle("udr3", "edgeCorr", "Detail Reconstruction", EdgeCorrection, V => EdgeCorrection = V);
         Inspector.AddToggle("udr3", "debugEdges", "Debug Edges", false, (enabled) => DebugEdges = enabled ? 1 : 0);
     }
 
@@ -111,6 +113,7 @@ public class UDR3 : core.System
             .SetParameter("AbsorptionTexture", Geometry?.AbsorptionTexture)
             .SetParameter("InputSize", inputSize)
             .SetParameter("OutputSize", OutputSize)
+            .SetParameter("EdgeCorrection", EdgeCorrection ? 1f : 0f)
             .SetParameter("DebugEdges", (float)DebugEdges)
             .Draw()
             .Commit()
@@ -159,6 +162,7 @@ public class UDR3 : core.System
             .Clear(Color.Black)
             .SetParameter("InputTexture", TemporalTexture)
             .SetParameter("OutputSize", OutputSize)
+            .SetParameter("Sharpness", Sharpness)
             .Draw()
             .Commit()
             .SetTarget(null);
@@ -169,7 +173,6 @@ public class UDR3 : core.System
         Inspector.SetLabel("udr3", "quality", $"Quality: {UDRQuality.Names[UDRQuality.Index]} ({UDRQuality.ScaleNormalized:P0})");
         Inspector.SetLabel("udr3", "input", $"Input Size: {input.Width}x{input.Height}");
         Inspector.SetLabel("udr3", "output", $"Output Size: {OutputSize.X}x{OutputSize.Y}");
-        Inspector.SetLabel("udr3", "frames", $"Frames to Accumulate: {FramesToAccumulate} (current: {effectiveFrames})");
     }
 
     public override void Render()

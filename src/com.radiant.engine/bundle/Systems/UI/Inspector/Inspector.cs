@@ -20,7 +20,7 @@ public partial class Inspector : core.System
 
     public Inspector() => Instance = this;
 
-    private const float FontSize = 20f;
+    private const float FontSize = 24f;
     private float LineHeight;
     private Dictionary<string, WindowData> Windows = new();
     private List<WindowData> RenderOrder = new();
@@ -48,19 +48,19 @@ public partial class Inspector : core.System
     /// <summary> Raised when F1 restores all windows to visible. </summary>
     public static event Action WindowsRestored;
 
-    private const int DefaultWindowWidth = 412;
-    private const int TitleBarHeight = 44;
-    private const int WidgetHeight = 40;
-    private const int WidgetSpacing = 12;
+    private const int DefaultWindowWidth = 480;
+    private const int TitleBarHeight = 52;
+    private const int WidgetHeight = 48;
+    private const int WidgetSpacing = 14;
     private const int LabelSpacing = 4;
-    private const int Padding = 14;
-    private const int CloseButtonSize = 24;
-    private const int CloseButtonWidth = 40;
-    private const int AutoLayoutGap = 22;
-    private const int SliderTrackHeight = 9;
-    private const int SliderHandleSize = 12;
-    private const int ToggleBoxSize = 24;
-    private const int CornerRadius = 7;
+    private const int Padding = 16;
+    private const int CloseButtonSize = 28;
+    private const int CloseButtonWidth = 48;
+    private const int AutoLayoutGap = 26;
+    private const int SliderTrackHeight = 10;
+    private const int SliderHandleSize = 14;
+    private const int ToggleBoxSize = 28;
+    private const int CornerRadius = 8;
     private const int MaxVisibleDropdownItems = 4;
 
     private static float UIScale = 1.0f;

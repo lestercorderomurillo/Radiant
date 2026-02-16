@@ -17,6 +17,7 @@ public class ColorManagement : core.System
 
     public override void Initialize()
     {
+        Inspector.AddSectionLabel("pipeline", "colorHeader", "Color Profile");
         Inspector.AddDropdown("pipeline", "tonemap", "Tonemapping", TechniqueNames, TechniqueIndex, (index) => TechniqueIndex = index);
     }
 

@@ -15,6 +15,8 @@ float FrameCount;
 float CurrentWeight;
 
 float DebugEdges;
+float EdgeCorrection;
+float Sharpness;
 
 static const float PI = 3.14159265359;
 
@@ -161,6 +163,10 @@ float4 EdgeReconstruct_PS(PixelShaderInput input) : SV_Target0
     float2 texelSize = 1.0 / OutputSize;
 
     float3 upsampled = InputTexture.Sample(Sampler, uv).rgb;
+
+    if (EdgeCorrection <= 0.0)
+        return float4(upsampled, 1.0);
+
     float4 emissive = EmissiveTexture.Sample(Sampler, uv);
 
     bool onSurface = emissive.a > 0.5;
@@ -264,8 +270,6 @@ float4 Copy_PS(PixelShaderInput input) : SV_Target0
 }
 
 // RCAS - Robust Contrast-Adaptive Sharpening (simple unsharp mask style)
-static const float RCAS_STRENGTH = 0.9;
-
 float4 RCAS_PS(PixelShaderInput input) : SV_Target0
 {
     float2 uv = input.UV;
@@ -282,7 +286,7 @@ float4 RCAS_PS(PixelShaderInput input) : SV_Target0
     float3 avg = (n + s + e + w) * 0.25;
 
     // Sharpen: center + (center - average) * strength
-    float3 result = c + (c - avg) * RCAS_STRENGTH;
+    float3 result = c + (c - avg) * Sharpness;
 
     return float4(max(result, 0.0), 1.0);
 }
