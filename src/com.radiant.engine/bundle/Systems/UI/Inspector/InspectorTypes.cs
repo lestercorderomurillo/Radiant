@@ -14,6 +14,7 @@ public struct Widget
     public WidgetType Type;
     public string Text;
     public bool Visible;
+    public bool Disabled;
     public bool Section;
     public Rectangle Bounds;
 

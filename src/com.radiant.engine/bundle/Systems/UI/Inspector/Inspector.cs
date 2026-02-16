@@ -8,7 +8,7 @@ using Microsoft.Xna.Framework.Input;
 namespace com.radiant.engine.bundle;
 
 /// <summary>
-/// Retained-mode UI system with draggable windows, themes, and frosted glass.
+/// Retained-mode UI system with draggable windows, themes, and blurry glass.
 /// All public methods are static and null-safe (no-op if Inspector is not registered).
 /// </summary>
 [RunAfter(typeof(Geometry))]
@@ -112,6 +112,10 @@ public partial class Inspector : core.System
     /// <summary> Removes a widget from a window. </summary>
     public static void RemoveWidget(string WindowId, string WidgetId)
         => Instance?.RemoveWidgetInternal(WindowId, WidgetId);
+
+    /// <summary> Enables or disables a widget. Disabled widgets are greyed out and non-interactive. </summary>
+    public static void SetWidgetEnabled(string WindowId, string WidgetId, bool Enabled)
+        => Instance?.SetWidgetEnabledInternal(WindowId, WidgetId, Enabled);
 
     /// <summary> Updates the text of a label widget. </summary>
     public static void SetLabel(string WindowId, string WidgetId, string Text)
@@ -307,6 +311,15 @@ public partial class Inspector : core.System
         window.Widgets[widgetIdx] = widget;
     }
 
+    private void SetWidgetEnabledInternal(string WindowId, string WidgetId, bool Enabled)
+    {
+        if (!Windows.TryGetValue(WindowId, out var window)) return;
+        if (!window.WidgetIndex.TryGetValue(WidgetId, out int index)) return;
+        var widget = window.Widgets[index];
+        widget.Disabled = !Enabled;
+        window.Widgets[index] = widget;
+    }
+
     private void SortRenderOrder() => RenderOrder.Sort((a, b) => a.ZOrder.CompareTo(b.ZOrder));
 
     private void BringToFront(WindowData Window)
@@ -475,7 +488,7 @@ public partial class Inspector : core.System
         for (int i = 0; i < Window.Widgets.Count; i++)
         {
             var widget = Window.Widgets[i];
-            if (!widget.Visible) continue;
+            if (!widget.Visible || widget.Disabled) continue;
             if (!widget.Bounds.Contains((int)Mouse.X, (int)Mouse.Y)) continue;
 
             switch (widget.Type)

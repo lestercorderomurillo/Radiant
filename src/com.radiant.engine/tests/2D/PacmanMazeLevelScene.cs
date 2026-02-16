@@ -233,13 +233,13 @@ public class PacmanMazeLevelScene : Scene
         Inspector.AddButton("scene", "restartLevel", "Restart Level", RestartLevel);
         Inspector.AddButton("scene", "nextLevel", "Next Level", () => LoadLevel((CurrentLevel + 1) % Levels.Length));
         Inspector.AddButton("scene", "spawnLights", "Spawn Lights", () => LightFactory.SpawnRandom(ECS, 100_000, Renderer.VirtualSize));
-        Inspector.AddToggle("scene", "pauseGameplay", "Pause Gameplay", false, (paused) => ECS.GameplayPaused = paused);
-        Inspector.AddToggle("scene", "pauseAll", "Pause Gameplay + Animations", false, (paused) =>
+        Inspector.AddToggle("scene", "pause", "Pause", false, (paused) =>
         {
-            ECS.AnimationPaused = paused;
-            ECS.GameplayPaused = paused;
-            Inspector.SetToggleValue("scene", "pauseGameplay", paused);
+            Inspector.SetWidgetEnabled("scene", "pauseType", paused);
+            ApplyPause(paused, paused ? 1 : -1);
         });
+        Inspector.AddDropdown("scene", "pauseType", "Pause Type", ["Gameplay", "Gameplay + Animations"], 1, (index) => ApplyPause(true, index));
+        Inspector.SetWidgetEnabled("scene", "pauseType", false);
 
         Inspector.AddDropdown("pipeline", "upscaler", "Upscaler", UpscalerGroup.Names, UpscalerGroup.ActiveIdx, (index) =>
         {
@@ -262,6 +262,12 @@ public class PacmanMazeLevelScene : Scene
         UpdateWindowVisibility();
 
         base.SetupScene();
+    }
+
+    private void ApplyPause(bool paused, int pauseType)
+    {
+        ECS.GameplayPaused = paused;
+        ECS.AnimationPaused = paused && pauseType == 1;
     }
 
     private void RestartLevel()

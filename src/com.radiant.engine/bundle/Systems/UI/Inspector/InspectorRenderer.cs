@@ -246,8 +246,9 @@ public partial class Inspector
     /// <summary> Draws a dropdown widget showing the selected option with a triangle indicator. </summary>
     private void DrawDropdown(Widget Widget, Vector2 Mouse, bool HoverBlocked)
     {
-        bool hovered = !HoverBlocked && Widget.Bounds.Contains((int)Mouse.X, (int)Mouse.Y);
-        Renderer.DrawRoundedRect(Widget.Bounds, hovered ? ButtonHover : ButtonColor, CornerRadius);
+        bool hovered = !Widget.Disabled && !HoverBlocked && Widget.Bounds.Contains((int)Mouse.X, (int)Mouse.Y);
+        Color bgColor = Widget.Disabled ? Dim(ButtonColor) : (hovered ? ButtonHover : ButtonColor);
+        Renderer.DrawRoundedRect(Widget.Bounds, bgColor, CornerRadius);
 
         string selectedLabel = Widget.DropdownOptions != null && Widget.DropdownSelected < Widget.DropdownOptions.Length
             ? Widget.DropdownOptions[Widget.DropdownSelected] : "?";
@@ -257,16 +258,20 @@ public partial class Inspector
         float availableWidth = Widget.Bounds.Width - Padding * 2 - triSize - 4;
         displayText = TruncateText(displayText, availableWidth);
 
+        Color textColor = Widget.Disabled ? Dim(LabelDim) : TextColor;
         var textSize = MeasureText(displayText);
         var textPos = new Vector2(
             Widget.Bounds.X + (Widget.Bounds.Width - textSize.X - triSize - 4) / 2,
             Widget.Bounds.Y + (Widget.Bounds.Height - textSize.Y) / 2);
-        DrawText(displayText, textPos, TextColor);
+        DrawText(displayText, textPos, textColor);
 
         int triX = Widget.Bounds.Right - Padding - triSize;
         int triY = Widget.Bounds.Y + (Widget.Bounds.Height - triSize) / 2 + 1;
-        Renderer.DrawSprite(Renderer.GetTriangleTexture(triSize * 4), new Rectangle(triX, triY, triSize, triSize), LabelDim);
+        Renderer.DrawSprite(Renderer.GetTriangleTexture(triSize * 4), new Rectangle(triX, triY, triSize, triSize), Widget.Disabled ? Dim(LabelDim) : LabelDim);
     }
+
+    /// <summary> Dims a color by halving its alpha, used for disabled widget rendering. </summary>
+    private static Color Dim(Color color) => new(color.R, color.G, color.B, (byte)(color.A / 2));
 
     /// <summary> Draws the open dropdown popup with scrollable options and a scrollbar. </summary>
     private void DrawDropdownPopup(Vector2 Mouse)

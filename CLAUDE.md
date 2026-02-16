@@ -481,6 +481,7 @@ Inspector.SetSliderValue("win", "id", value);
 Inspector.SetToggleValue("win", "id", value);
 Inspector.SetDropdownValue("win", "id", index);
 Inspector.SetDropdownOptions("win", "id", newOptions);
+Inspector.SetWidgetEnabled("win", "id", enabled); // Greyed out + non-interactive when disabled
 ```
 
 ### Input & Themes
