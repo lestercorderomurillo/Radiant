@@ -43,12 +43,12 @@ public class UDR2 : core.System
         Inspector.AddLabel("udr2", "quality", "...");
         Inspector.AddLabel("udr2", "input", "...");
         Inspector.AddLabel("udr2", "output", "...");
-        Inspector.AddDropdown("udr2", "qualityDrop", "Quality", UDRQuality.Names, UDRQuality.Index, (index) => UDRQuality.Set(index));
+        Inspector.AddDropdown("udr2", "qualityDrop", "Quality", UDRQuality.Names, UDRQuality.Index, UDRQuality.Set);
         UDRQuality.Changed += _ => Inspector.SetDropdownValue("udr2", "qualityDrop", UDRQuality.Index);
         Inspector.AddSlider("udr2", "sharpness", "Sharpness", 0f, 2f, Sharpness, V => Sharpness = V);
         Inspector.AddSlider("udr2", "frames", "Frames to Accumulate", 1, 16, FramesToAccumulate, V => { FramesToAccumulate = (int)V; FrameIndex = 0; });
         Inspector.AddToggle("udr2", "edgeCorr", "Detail Reconstruction", EdgeCorrection, V => EdgeCorrection = V);
-        Inspector.AddToggle("udr2", "debugRays", "Debug Rays", DebugRays, V => DebugRays = V);
+        Inspector.AddToggle("udr2", "debugRays", "Debug Edges", DebugRays, V => DebugRays = V);
     }
 
     public void SetInputSource(Func<Texture2D> source)

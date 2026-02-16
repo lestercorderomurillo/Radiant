@@ -75,7 +75,8 @@ public class HRCGI : core.System
         Renderer.RenderScaleChanged += OnRenderScaleChanged;
 
         Inspector.CreateWindow("hrcgi", "Holographic Radiance Cascades");
-        Inspector.AddLabel("hrcgi", "info", "...");
+        Inspector.AddLabel("hrcgi", "world", "World Size: ...");
+        Inspector.AddLabel("hrcgi", "cascades", "Number of Cascades: ...");
         Inspector.AddDropdown("hrcgi", "quality", "Quality", QualityNames, ProbeScaleIndex, (index) =>
         {
             ProbeScaleIndex = index;
@@ -170,7 +171,8 @@ public class HRCGI : core.System
 
         Renderer.PopTargets();
 
-        Inspector.SetLabel("hrcgi", "info", $"World: {(int)WorldSize.X} | Cascades: {CascadeCount} | Quality: {QualityNames[ProbeScaleIndex]}");
+        Inspector.SetLabel("hrcgi", "world", $"World Size: {(int)WorldSize.X}");
+        Inspector.SetLabel("hrcgi", "cascades", $"Number of Cascades: {CascadeCount}");
     }
 
     private void RenderFrustumSeed(int frustum, Texture2D emissive, Texture2D absorption)

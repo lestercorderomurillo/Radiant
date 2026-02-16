@@ -23,7 +23,7 @@ public class SimpleLightScene : Scene
     public override void SetupScene()
     {
         CreateCenterLight();
-        BilinearSystem.SetInputSource(() => HRCGISystem.GetOutput());
+        BilinearSystem.SetInputSource(HRCGISystem.GetOutput);
 
         base.SetupScene();
     }

@@ -190,7 +190,7 @@ public class Geometry : core.System
 
         Inspector.CreateWindow("pipeline", "Rendering");
         Inspector.AddSectionLabel("pipeline", "outputHeader", "Output");
-        var debugModeNames = Enum.GetNames<DebugMode>();
+        string[] debugModeNames = ["Composite", "Emissive", "Absorption", "Signed Distance Field", "JFA Direction", "JFA Raw", "Motion Vectors"];
         Inspector.AddDropdown("pipeline", "debugMode", "Buffer", debugModeNames, 0, (index) => CurrentDebug = (DebugMode)index);
     }
 

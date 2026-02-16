@@ -40,7 +40,7 @@ public class UDR3 : core.System
         Inspector.AddLabel("udr3", "input", "...");
         Inspector.AddLabel("udr3", "output", "...");
         Inspector.AddLabel("udr3", "frames", "...");
-        Inspector.AddDropdown("udr3", "qualityDrop", "Quality", UDRQuality.Names, UDRQuality.Index, (index) => UDRQuality.Set(index));
+        Inspector.AddDropdown("udr3", "qualityDrop", "Quality", UDRQuality.Names, UDRQuality.Index, UDRQuality.Set);
         UDRQuality.Changed += _ => Inspector.SetDropdownValue("udr3", "qualityDrop", UDRQuality.Index);
         Inspector.AddToggle("udr3", "debugEdges", "Debug Edges", false, (enabled) => DebugEdges = enabled ? 1 : 0);
     }

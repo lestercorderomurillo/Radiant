@@ -69,7 +69,8 @@ public class RCGI : core.System
             Geometry.EnableSDF = true;
 
         Inspector.CreateWindow("rcgi", "Radiance Cascades");
-        Inspector.AddLabel("rcgi", "info", "...");
+        Inspector.AddLabel("rcgi", "screen", "Screen Size: ...");
+        Inspector.AddLabel("rcgi", "cascades", "Number of Cascades: ...");
     }
 
     private void OnRenderScaleChanged(float newScale)
@@ -204,7 +205,8 @@ public class RCGI : core.System
 
         Renderer.PopTargets();
 
-        Inspector.SetLabel("rcgi", "info", $"Screen: {(int)ScreenSize.X}x{(int)ScreenSize.Y} | Cascades: {ActiveCascades}");
+        Inspector.SetLabel("rcgi", "screen", $"Screen Size: {(int)ScreenSize.X}x{(int)ScreenSize.Y}");
+        Inspector.SetLabel("rcgi", "cascades", $"Number of Cascades: {ActiveCascades}");
     }
 
     private void RenderCascade(int cascadeIndex, Texture2D emissive, Texture2D sdf)

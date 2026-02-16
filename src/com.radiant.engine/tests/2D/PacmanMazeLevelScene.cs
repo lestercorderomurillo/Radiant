@@ -230,7 +230,7 @@ public class PacmanMazeLevelScene : Scene
 
         Inspector.AddLabel("scene", "level", $"Level: 1/{Levels.Length}");
 
-        Inspector.AddButton("scene", "restartLevel", "Restart Level", () => RestartLevel());
+        Inspector.AddButton("scene", "restartLevel", "Restart Level", RestartLevel);
         Inspector.AddButton("scene", "nextLevel", "Next Level", () => LoadLevel((CurrentLevel + 1) % Levels.Length));
         Inspector.AddButton("scene", "spawnLights", "Spawn Lights", () => LightFactory.SpawnRandom(ECS, 100_000, Renderer.VirtualSize));
         Inspector.AddToggle("scene", "pauseGameplay", "Pause Gameplay", false, (paused) => ECS.GameplayPaused = paused);
@@ -509,7 +509,7 @@ public class PacmanMazeLevelScene : Scene
 
         Tonemapper.SetInputSource(giSource);
 
-        Func<Texture2D> colorOutput = () => Tonemapper.GetOutput();
+        Func<Texture2D> colorOutput = Tonemapper.GetOutput;
 
         UpscalerGroup.ForEach(system =>
         {

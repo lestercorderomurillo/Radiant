@@ -31,11 +31,11 @@ public class UDR1 : core.System
         Inspector.AddLabel("udr1", "quality", "...");
         Inspector.AddLabel("udr1", "input", "...");
         Inspector.AddLabel("udr1", "output", "...");
-        Inspector.AddDropdown("udr1", "qualityDrop", "Quality", UDRQuality.Names, UDRQuality.Index, (index) => UDRQuality.Set(index));
+        Inspector.AddDropdown("udr1", "qualityDrop", "Quality", UDRQuality.Names, UDRQuality.Index, UDRQuality.Set);
         UDRQuality.Changed += _ => Inspector.SetDropdownValue("udr1", "qualityDrop", UDRQuality.Index);
         Inspector.AddSlider("udr1", "sharpness", "Sharpness", 0f, 2f, Sharpness, V => Sharpness = V);
         Inspector.AddToggle("udr1", "edgeCorr", "Detail Reconstruction", EdgeCorrection, V => EdgeCorrection = V);
-        Inspector.AddToggle("udr1", "debugRays", "Debug Rays", DebugRays, V => DebugRays = V);
+        Inspector.AddToggle("udr1", "debugRays", "Debug Edges", DebugRays, V => DebugRays = V);
     }
 
     public void SetInputSource(Func<Texture2D> source)

@@ -19,7 +19,7 @@ public class Bilinear : core.System
         Inspector.AddLabel("bilinear", "quality", "...");
         Inspector.AddLabel("bilinear", "input", "...");
         Inspector.AddLabel("bilinear", "output", "...");
-        Inspector.AddDropdown("bilinear", "qualityDrop", "Quality", UDRQuality.Names, UDRQuality.Index, (index) => UDRQuality.Set(index));
+        Inspector.AddDropdown("bilinear", "qualityDrop", "Quality", UDRQuality.Names, UDRQuality.Index, UDRQuality.Set);
         UDRQuality.Changed += _ => Inspector.SetDropdownValue("bilinear", "qualityDrop", UDRQuality.Index);
     }
 

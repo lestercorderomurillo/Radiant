@@ -495,7 +495,7 @@ Inspector.GetThemeNames();
 Inspector.WindowsRestored += () => {}; // F1 restore event
 ```
 
-Built-in themes: Radiant, Obsidian, Midnight, Frost, Neon, Glacier.
+Built-in themes: Solaris, Carbon, Midnight, Sentinel, Neon, Nord.
 
 ## GizmosRenderer
 
