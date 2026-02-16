@@ -221,8 +221,7 @@ public class PacmanPlayer : core.System
 
         // Render circle-with-mouth to the player RT (feeds into Geometry texture path → GI)
         Renderer.PushTargets();
-        Renderer.SetTarget(PlayerRT);
-        Renderer.ClearBackBuffer(Color.Transparent);
+        Renderer.SetTarget(PlayerRT).Clear(Color.Transparent);
 
         // White circle — Material's EmissiveScaled/Absorption provide the color tint
         Renderer.BeginDraw(SpriteSortMode.Immediate, BlendState.AlphaBlend);

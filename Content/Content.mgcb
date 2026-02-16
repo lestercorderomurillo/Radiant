@@ -85,6 +85,12 @@
 /processorParam:DebugMode=Auto
 /build:shaders/ColorManagement.fx
 
+#begin GlassBlur.fx
+/importer:EffectImporter
+/processor:EffectProcessor
+/processorParam:DebugMode=Auto
+/build:shaders/GlassBlur.fx
+
 #begin UDR1.fx
 /importer:EffectImporter
 /processor:EffectProcessor

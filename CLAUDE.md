@@ -44,7 +44,7 @@ radiant/
 │   ├── fonts/Inter-Regular.ttf
 │   ├── Ghost.png, Eyes.png (premultiplied alpha)
 │   ├── shaders/
-│   │   ├── Geometry.fx, InstancedShapes.fx, ColorManagement.fx
+│   │   ├── Geometry.fx, InstancedShapes.fx, ColorManagement.fx, GlassBlur.fx
 │   │   ├── HRC/ (HRC_Extensions, HRC_FluenceSum, HRC_FrustumSeed, HRC_MergingCones)
 │   │   ├── RCGI/RCGI.fx, UDR/UDR1-3.fx
 │   └── Content.mgcb (HiDef, Windows)
@@ -370,7 +370,10 @@ Renderer.ViewportBounds;
 Renderer.HasPendingResize;
 Renderer.HandleResize();
 
-Renderer.ClearBackBuffer(Color.Black);
+Renderer.ClearBackBuffer(Color.Black);   // Routes to SceneRT (creates/resizes as needed)
+Renderer.PresentToBackBuffer();           // Copies SceneRT → actual backbuffer
+
+Renderer.SceneRT;             // Scene render target (all rendering goes here, not backbuffer)
 
 Renderer.Reset();
 Renderer.Begin();
@@ -423,6 +426,8 @@ Quality: ProbeScale 4/3/2/1.
 **InstancedShapes.fx**: Default (AA), Sharp (hard), Emissive (GI feed).
 
 **Geometry.fx**: InitializeJFA, InitializeJFAInterior, JFAPass, GenerateSDFFromJFA, DebugSDFVisible, DebugJFA, DebugJFARaw, DebugEmissive, DebugMotionVectors, ClearMotion.
+
+**GlassBlur.fx**: Kawase blur (4-pass diagonal sampling). Used by Inspector for frosted glass window backgrounds. Params: `InputTexture`, `TexelSize`, `BlurOffset`.
 
 ## Inspector (UI)
 

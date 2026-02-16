@@ -232,6 +232,7 @@ public partial class GameLoop : IGameObject
             Scenes[SceneId].GameTime = GameTime;
             Scenes[SceneId].InternalRender();
             Scenes[SceneId].InternalLateRender();
+            Scenes[SceneId].Renderer.PresentToBackBuffer();
         }
 
         long renderEndTicks = GlobalTimer.ElapsedTicks;

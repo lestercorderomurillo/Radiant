@@ -69,6 +69,9 @@ public class Renderer : IDisposable
     [Obsolete("Use Renderer API (Blit, BeginDraw/EndDraw, DrawSprite, DrawString, etc.) instead of accessing SpriteBatch directly.")]
     public SpriteBatch SpriteBatch { get; }
 
+    /// <summary>Scene render target that replaces the backbuffer as the main render surface.</summary>
+    public RenderTarget2D SceneRT { get; private set; }
+
     /// <summary>True if currently between Begin/Draw and Commit calls.</summary>
     public bool IsDrawing { get; private set; }
 
@@ -496,7 +499,7 @@ public class Renderer : IDisposable
     {
         CommitTextures();
 
-        Device.SetRenderTarget(target);
+        Device.SetRenderTarget(target ?? SceneRT);
 
         if (clearColor.HasValue)
             Device.Clear(clearColor.Value);
@@ -555,7 +558,7 @@ public class Renderer : IDisposable
     {
         CommitTextures();
 
-        Device.SetRenderTarget(target);
+        Device.SetRenderTarget(target ?? SceneRT);
 
         if (clearColor.HasValue)
             Device.Clear(clearColor.Value);
@@ -1110,7 +1113,7 @@ public class Renderer : IDisposable
             var targets = RenderTargetStack.Pop();
             CommitTextures();
             if (targets == null)
-                Device.SetRenderTarget(null);
+                Device.SetRenderTarget(SceneRT);
             else
                 Device.SetRenderTargets(targets);
             CurrentTargets = targets;
@@ -1118,11 +1121,11 @@ public class Renderer : IDisposable
         return this;
     }
 
-    /// <summary>Sets a single render target (or null for backbuffer).</summary>
+    /// <summary>Sets a single render target (or null for SceneRT).</summary>
     public Renderer SetTarget(RenderTarget2D target)
     {
         CommitTextures();
-        Device.SetRenderTarget(target);
+        Device.SetRenderTarget(target ?? SceneRT);
         CurrentTargets = target != null ? [new RenderTargetBinding(target)] : null;
         return this;
     }
@@ -1803,7 +1806,7 @@ public class Renderer : IDisposable
             (input, output) = (output, input);
         }
 
-        Device.SetRenderTarget(null);
+        Device.SetRenderTarget(SceneRT);
         return input;
     }
 
@@ -1873,10 +1876,27 @@ public class Renderer : IDisposable
         UpdateScreenInfo();
     }
 
-    /// <summary>Clears the backbuffer with the specified color.</summary>
+    /// <summary>Clears the backbuffer with the specified color. Routes rendering to SceneRT.</summary>
     public void ClearBackBuffer(Color color)
     {
+        if (SceneRT == null || SceneRT.Width != ScreenWidth || SceneRT.Height != ScreenHeight)
+        {
+            SceneRT?.Dispose();
+            SceneRT = new RenderTarget2D(Device, ScreenWidth, ScreenHeight, false,
+                SurfaceFormat.Color, DepthFormat.None, 0, RenderTargetUsage.PreserveContents);
+        }
+        Device.SetRenderTarget(SceneRT);
         Device.Clear(color);
+    }
+
+    /// <summary>Copies SceneRT to the actual backbuffer for presentation.</summary>
+    public void PresentToBackBuffer()
+    {
+        if (SceneRT == null) return;
+        Device.SetRenderTarget(null);
+        SpriteBatch.Begin(SpriteSortMode.Deferred, BlendState.Opaque, SamplerState.PointClamp);
+        SpriteBatch.Draw(SceneRT, Device.Viewport.Bounds, Color.White);
+        SpriteBatch.End();
     }
 
     /// <summary>
@@ -1930,7 +1950,7 @@ public class Renderer : IDisposable
         BlendState blend = null, SamplerState sampler = null)
     {
         CommitTextures();
-        Device.SetRenderTarget(target);
+        Device.SetRenderTarget(target ?? SceneRT);
         if (clearColor.HasValue)
             Device.Clear(clearColor.Value);
         SpriteBatch.Begin(SpriteSortMode.Immediate, blend ?? BlendState.Opaque, sampler ?? SamplerState.PointClamp);
@@ -2016,6 +2036,7 @@ public class Renderer : IDisposable
         QuadIndexBuffer?.Dispose();
         SpriteBatch?.Dispose();
 
+        SceneRT?.Dispose();
         ShapeQuadBuffer?.Dispose();
         ShapeIndexBuffer?.Dispose();
         ShapeInstanceBuffer?.Dispose();

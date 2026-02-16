@@ -88,6 +88,13 @@ public class Inspector : core.System
     private static Color CloseText = new(220, 220, 230, 255);
     private static Color LabelDim = new(160, 160, 170, 255);
 
+    private RenderTarget2D BlurRT_A;
+    private RenderTarget2D BlurRT_B;
+    private RenderTarget2D BlurResult;
+    private const int BlurDownscale = 4;
+    private const int BlurPasses = 4;
+    private const float GlassTintOpacity = 0.65f;
+
 
     public static void CreateWindow(string Id, string Title, int LayoutOrder = 100)
         => Instance?.CreateWindowInternal(Id, Title, LayoutOrder);
@@ -856,17 +863,22 @@ public class Inspector : core.System
             }
         }
 
-        Renderer.BeginDraw(SpriteSortMode.Deferred, BlendState.AlphaBlend, transform: Scale);
+        UpdateBlurPipeline();
 
         foreach (var Window in RenderOrder)
         {
             if (!Window.Visible) continue;
+
+            if (BlurResult != null)
+                DrawWindowBlurQuad(Window);
+
+            Renderer.BeginDraw(SpriteSortMode.Deferred, BlendState.AlphaBlend, transform: Scale);
             DrawWindow(Window, VirtualMouse, Window.Id != hoveredWindowId);
+            Renderer.EndDraw();
         }
 
-        // Second pass: dropdown popup overlay (renders on top of everything)
+        Renderer.BeginDraw(SpriteSortMode.Deferred, BlendState.AlphaBlend, transform: Scale);
         DrawDropdownPopup(VirtualMouse);
-
         Renderer.EndDraw();
     }
 
@@ -892,10 +904,12 @@ public class Inspector : core.System
 
     private void DrawWindow(WindowData Window, Vector2 Mouse, bool HoverBlocked)
     {
-        Renderer.DrawRoundedRect(Window.WindowBounds, WindowBg, CornerRadius);
+        Renderer.DrawRoundedRect(Window.WindowBounds, BlurResult != null ? GlassTint(WindowBg) : WindowBg, CornerRadius);
 
         bool TitleHovered = !HoverBlocked && Window.TitleBarBounds.Contains((int)Mouse.X, (int)Mouse.Y);
-        Renderer.DrawRoundedRect(Window.TitleBarBounds, TitleHovered ? TitleBarHover : TitleBarColor, CornerRadius, RoundedCorners.Top);
+        Color titleBg = TitleHovered ? TitleBarHover : TitleBarColor;
+        if (BlurResult != null) titleBg = GlassTint(titleBg);
+        Renderer.DrawRoundedRect(Window.TitleBarBounds, titleBg, CornerRadius, RoundedCorners.Top);
 
         var TitlePos = new Vector2(Window.TitleBarBounds.X + Padding, Window.TitleBarBounds.Y + 8);
         DrawTextBold(Window.Title, TitlePos, TextColor);
@@ -1111,8 +1125,74 @@ public class Inspector : core.System
         }
     }
 
+    private void UpdateBlurPipeline()
+    {
+        if (Renderer.SceneRT == null)
+        {
+            BlurResult = null;
+            return;
+        }
+
+        int blurW = Math.Max(1, Renderer.ScreenWidth / BlurDownscale);
+        int blurH = Math.Max(1, Renderer.ScreenHeight / BlurDownscale);
+        if (BlurRT_A == null || BlurRT_A.Width != blurW || BlurRT_A.Height != blurH)
+        {
+            BlurRT_A?.Dispose();
+            BlurRT_B?.Dispose();
+            BlurRT_A = Renderer.CreateRenderTarget(blurW, blurH);
+            BlurRT_B = Renderer.CreateRenderTarget(blurW, blurH);
+        }
+
+        Renderer.SetTarget(BlurRT_A).Clear(Color.Black);
+        Renderer.Blit(Renderer.SceneRT, BlendState.Opaque, SamplerState.LinearClamp);
+
+        var texelSize = new Vector2(1f / blurW, 1f / blurH);
+        Renderer
+            .Reset()
+            .SetShader("GlassBlur")
+            .SetTechnique("Blur")
+            .Configure(BlendState.Opaque)
+            .Configure(SamplerState.LinearClamp, 0);
+
+        BlurResult = Renderer.PingPong(BlurRT_A, BlurRT_B, BlurPasses,
+            (passIndex, input) =>
+            {
+                Renderer.SetParameter("InputTexture", input);
+                Renderer.SetParameter("TexelSize", texelSize);
+                Renderer.SetParameter("BlurOffset", (float)passIndex);
+            },
+            clearColor: Color.Black);
+    }
+
+    private void DrawWindowBlurQuad(WindowData Window)
+    {
+        var wb = Window.WindowBounds;
+        float scaleX = UIScale * Renderer.VirtualToScreenScale.X;
+        float scaleY = UIScale * Renderer.VirtualToScreenScale.Y;
+        var windowRect = new Vector4(wb.X * scaleX, wb.Y * scaleY, wb.Width * scaleX, wb.Height * scaleY);
+        float windowRadius = CornerRadius * Math.Min(scaleX, scaleY);
+
+        Renderer
+            .Reset()
+            .SetShader("GlassBlur")
+            .SetTechnique("RoundedBlit")
+            .Configure(BlendState.AlphaBlend)
+            .Configure(SamplerState.LinearClamp, 0)
+            .SetParameter("InputTexture", BlurResult)
+            .SetParameter("ScreenSize", Renderer.ScreenSize)
+            .SetParameter("WindowRect", windowRect)
+            .SetParameter("WindowRadius", windowRadius)
+            .Draw()
+            .Commit();
+    }
+
+    private static Color GlassTint(Color color) =>
+        new(color.R, color.G, color.B, (byte)(color.A * GlassTintOpacity));
+
     public override void Dispose()
     {
+        BlurRT_A?.Dispose();
+        BlurRT_B?.Dispose();
         if (Instance == this)
             Instance = null;
     }
