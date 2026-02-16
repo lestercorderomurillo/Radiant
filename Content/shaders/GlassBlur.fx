@@ -6,6 +6,9 @@ float BlurOffset;
 float2 ScreenSize;
 float4 WindowRect;
 float WindowRadius;
+float2 ShadowOffset;
+float ShadowSpread;
+float ShadowOpacity;
 
 struct VertexShaderInput
 {
@@ -67,11 +70,31 @@ technique Blur
     }
 }
 
+float4 PS_Shadow(PixelShaderInput input) : SV_Target0
+{
+    float2 pixel = input.UV * ScreenSize;
+    float2 center = WindowRect.xy + WindowRect.zw * 0.5 + ShadowOffset;
+    float2 halfSize = WindowRect.zw * 0.5;
+    float dist = RoundedRectSDF(pixel - center, halfSize, WindowRadius);
+    float alpha = 1.0 - smoothstep(0.0, ShadowSpread, dist);
+    if (alpha <= 0.0) discard;
+    return float4(0, 0, 0, ShadowOpacity * alpha);
+}
+
 technique RoundedBlit
 {
     pass P0
     {
         VertexShader = compile vs_5_0 MainVS();
         PixelShader  = compile ps_5_0 PS_RoundedBlit();
+    }
+}
+
+technique Shadow
+{
+    pass P0
+    {
+        VertexShader = compile vs_5_0 MainVS();
+        PixelShader  = compile ps_5_0 PS_Shadow();
     }
 }

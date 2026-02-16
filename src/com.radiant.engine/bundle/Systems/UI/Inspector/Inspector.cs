@@ -94,6 +94,9 @@ public class Inspector : core.System
     private const int BlurDownscale = 4;
     private const int BlurPasses = 4;
     private const float GlassTintOpacity = 0.65f;
+    private const float ShadowOffsetY = 3f;
+    private const float ShadowSpreadSize = 12f;
+    private const float ShadowAlpha = 0.25f;
 
 
     public static void CreateWindow(string Id, string Title, int LayoutOrder = 100)
@@ -627,7 +630,6 @@ public class Inspector : core.System
                         Dragging = true;
                         DragWindowId = Window.Id;
                         DragOffset = VirtualMouse - Window.Position;
-                        BringToFront(Window);
                         break;
                     }
 
@@ -868,6 +870,8 @@ public class Inspector : core.System
         foreach (var Window in RenderOrder)
         {
             if (!Window.Visible) continue;
+
+            DrawWindowShadow(Window);
 
             if (BlurResult != null)
                 DrawWindowBlurQuad(Window);
@@ -1182,6 +1186,29 @@ public class Inspector : core.System
             .SetParameter("ScreenSize", Renderer.ScreenSize)
             .SetParameter("WindowRect", windowRect)
             .SetParameter("WindowRadius", windowRadius)
+            .Draw()
+            .Commit();
+    }
+
+    private void DrawWindowShadow(WindowData Window)
+    {
+        var wb = Window.WindowBounds;
+        float scaleX = UIScale * Renderer.VirtualToScreenScale.X;
+        float scaleY = UIScale * Renderer.VirtualToScreenScale.Y;
+        var windowRect = new Vector4(wb.X * scaleX, wb.Y * scaleY, wb.Width * scaleX, wb.Height * scaleY);
+        float windowRadius = CornerRadius * Math.Min(scaleX, scaleY);
+
+        Renderer
+            .Reset()
+            .SetShader("GlassBlur")
+            .SetTechnique("Shadow")
+            .Configure(BlendState.AlphaBlend)
+            .SetParameter("ScreenSize", Renderer.ScreenSize)
+            .SetParameter("WindowRect", windowRect)
+            .SetParameter("WindowRadius", windowRadius)
+            .SetParameter("ShadowOffset", new Vector2(0, ShadowOffsetY * scaleY))
+            .SetParameter("ShadowSpread", ShadowSpreadSize * Math.Min(scaleX, scaleY))
+            .SetParameter("ShadowOpacity", ShadowAlpha)
             .Draw()
             .Commit();
     }
