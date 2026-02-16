@@ -37,7 +37,6 @@ public class Inspector : core.System
     private bool DraggingSlider;
     private string SliderWindowId;
     private string SliderWidgetId;
-    private float DragStartUIScale;
     private bool MouseOverUI;
     private bool GlobalVisible = false;
 
@@ -54,13 +53,14 @@ public class Inspector : core.System
     private const int DefaultWindowWidth = 412;
     private const int TitleBarHeight = 44;
     private const int WidgetHeight = 40;
-    private const int WidgetSpacing = 7;
-    private const int Padding = 13;
+    private const int WidgetSpacing = 12;
+    private const int LabelSpacing = 4;
+    private const int Padding = 14;
     private const int CloseButtonSize = 24;
     private const int CloseButtonWidth = 40;
     private const int AutoLayoutGap = 22;
     private const int SliderTrackHeight = 9;
-    private const int SliderHandleSize = 15;
+    private const int SliderHandleSize = 12;
     private const int ToggleBoxSize = 24;
     private const int CornerRadius = 7;
     private const int MaxVisibleDropdownItems = 4;
@@ -117,6 +117,9 @@ public class Inspector : core.System
 
     public static void AddLabel(string WindowId, string WidgetId, string Text)
         => Instance?.AddWidgetInternal(WindowId, WidgetId, WidgetType.Label, Text);
+
+    public static void AddSectionLabel(string WindowId, string WidgetId, string Text)
+        => Instance?.AddSectionLabelInternal(WindowId, WidgetId, Text);
 
     public static void AddButton(string WindowId, string WidgetId, string Text, Action Callback)
         => Instance?.AddButtonInternal(WindowId, WidgetId, Text, Callback);
@@ -240,6 +243,14 @@ public class Inspector : core.System
         if (Window.WidgetIndex.ContainsKey(WidgetId)) return;
         Window.WidgetIndex[WidgetId] = Window.Widgets.Count;
         Window.Widgets.Add(new Widget { Id = WidgetId, Type = Type, Text = Text, Visible = true });
+    }
+
+    private void AddSectionLabelInternal(string WindowId, string WidgetId, string Text)
+    {
+        if (!Windows.TryGetValue(WindowId, out var Window)) return;
+        if (Window.WidgetIndex.ContainsKey(WidgetId)) return;
+        Window.WidgetIndex[WidgetId] = Window.Widgets.Count;
+        Window.Widgets.Add(new Widget { Id = WidgetId, Type = WidgetType.Label, Text = Text, Visible = true, Section = true });
     }
 
     private void AddButtonInternal(string WindowId, string WidgetId, string Text, Action Callback)
@@ -409,7 +420,7 @@ public class Inspector : core.System
             if (!W.Visible) continue;
             int WidgetH = W.Type switch
             {
-                WidgetType.Slider => WidgetHeight + 16,
+                WidgetType.Slider => WidgetHeight + 25,
                 WidgetType.Label => MeasureWrappedHeight(W.Text, ContentWidth),
                 _ => WidgetHeight
             };
@@ -503,8 +514,9 @@ public class Inspector : core.System
 
     private float ComputeAutoScale()
     {
-        float scale = 2160f / Renderer.ScreenHeight;
-        return MathF.Round(scale * 10f) / 10f;
+        float scale = 0.5f + 1080f / Renderer.ScreenHeight;
+        scale = MathF.Round(scale * 2f) / 2f;
+        return MathHelper.Clamp(scale, 0.5f, 2.5f);
     }
 
     public override void OnResize()
@@ -551,14 +563,14 @@ public class Inspector : core.System
         // Handle slider dragging (continues even outside window)
         if (DraggingSlider && LeftHeld)
         {
+            float prevScale = UIScale;
             HandleSliderDrag(VirtualMouse);
+            if (UIScale != prevScale) LayoutDone = false;
             MouseOverUI = true;
         }
         else if (DraggingSlider && LeftReleased)
         {
             DraggingSlider = false;
-            if (UIScale != DragStartUIScale)
-                LayoutDone = false;
         }
 
         // Handle window dragging
@@ -671,11 +683,20 @@ public class Inspector : core.System
             switch (W.Type)
             {
                 case WidgetType.Slider:
+                    int trackLeft = W.Bounds.X + 4;
+                    int trackWidth = W.Bounds.Width - 8;
+                    float range = W.SliderMax - W.SliderMin;
+                    float t = range > 0 ? (W.SliderValue - W.SliderMin) / range : 0;
+                    int fillWidth = (int)(trackWidth * t);
+                    int handleCX = trackLeft + fillWidth;
+                    int handleCY = (int)(W.Bounds.Y + LineHeight + 8) + SliderTrackHeight / 2;
+                    float dx = Mouse.X - handleCX;
+                    float dy = Mouse.Y - handleCY;
+                    int hitRadius = SliderHandleSize;
+                    if (dx * dx + dy * dy > hitRadius * hitRadius) return;
                     DraggingSlider = true;
-                    DragStartUIScale = UIScale;
                     SliderWindowId = Window.Id;
                     SliderWidgetId = W.Id;
-                    HandleSliderDrag(Mouse);
                     return;
 
                 case WidgetType.Toggle:
@@ -709,8 +730,8 @@ public class Inspector : core.System
         if (!Window.WidgetIndex.TryGetValue(SliderWidgetId, out int Index)) return;
 
         var W = Window.Widgets[Index];
-        int TrackLeft = W.Bounds.X + Padding;
-        int TrackRight = W.Bounds.Right - Padding;
+        int TrackLeft = W.Bounds.X + 4;
+        int TrackRight = W.Bounds.Right - 4;
         int TrackWidth = TrackRight - TrackLeft;
 
         if (TrackWidth <= 0) return;
@@ -758,10 +779,9 @@ public class Inspector : core.System
 
     private Vector2 ScreenToVirtual(Vector2 ScreenPos)
     {
-        float scale = DraggingSlider ? DragStartUIScale : UIScale;
         return new Vector2(
-            ScreenPos.X * (Renderer.VirtualWidth / Renderer.ScreenWidth) / scale,
-            ScreenPos.Y * (Renderer.VirtualHeight / Renderer.ScreenHeight) / scale);
+            ScreenPos.X * (Renderer.VirtualWidth / Renderer.ScreenWidth) / UIScale,
+            ScreenPos.Y * (Renderer.VirtualHeight / Renderer.ScreenHeight) / UIScale);
     }
 
 
@@ -794,13 +814,21 @@ public class Inspector : core.System
 
             int WidgetH = Widget.Type switch
             {
-                WidgetType.Slider => WidgetHeight + 16,
+                WidgetType.Slider => WidgetHeight + 25,
                 WidgetType.Label => MeasureWrappedHeight(Widget.Text, ContentWidth),
                 _ => WidgetHeight
             };
             Widget.Bounds = new Rectangle(X + Padding, WidgetY, ContentWidth, WidgetH);
             Window.Widgets[I] = Widget;
-            WidgetY += WidgetH + WidgetSpacing;
+            bool tightLabel = Widget.Type == WidgetType.Label && !Widget.Section;
+            bool nextIsTightLabel = false;
+            for (int J = I + 1; J < Window.Widgets.Count; J++)
+            {
+                if (!Window.Widgets[J].Visible) continue;
+                nextIsTightLabel = Window.Widgets[J].Type == WidgetType.Label && !Window.Widgets[J].Section;
+                break;
+            }
+            WidgetY += WidgetH + (tightLabel && nextIsTightLabel ? LabelSpacing : WidgetSpacing);
         }
 
         // Auto-size height
@@ -812,7 +840,7 @@ public class Inspector : core.System
     {
         int MaxWidth = AvailableWidth - 8;
         if (MeasureText(Text).X <= MaxWidth)
-            return WidgetHeight;
+            return (int)MeasureText(Text).Y;
 
         string[] Words = Text.Split(' ');
         float SpaceWidth = MeasureText(" ").X;
@@ -929,7 +957,7 @@ public class Inspector : core.System
         var CloseTextSize = Renderer.MeasureString("Inter-Bold", CloseFontSize, "X");
         var CloseTextPos = new Vector2(
             Window.CloseBounds.X + (Window.CloseBounds.Width - CloseTextSize.X) / 2,
-            Window.CloseBounds.Y + (Window.CloseBounds.Height - CloseTextSize.Y) / 2);
+            Window.CloseBounds.Y + (Window.CloseBounds.Height - CloseTextSize.Y) / 2 - 2);
         Renderer.DrawString("Inter-Bold", CloseFontSize, "X", CloseTextPos, CloseText);
 
         // Widgets
@@ -951,7 +979,7 @@ public class Inspector : core.System
 
     private void DrawLabel(Widget W, Vector2 Mouse)
     {
-        bool isHeader = W.Id.EndsWith("Header");
+        bool isHeader = W.Section;
         Color labelColor = isHeader ? TextColor : LabelDim;
 
         if (isHeader)
@@ -1039,8 +1067,8 @@ public class Inspector : core.System
         DrawText(ValueText, TextPos, TextColor);
 
         int TrackY = (int)(W.Bounds.Y + LineHeight + 8);
-        int TrackLeft = W.Bounds.X + Padding;
-        int TrackWidth = W.Bounds.Width - Padding * 2;
+        int TrackLeft = W.Bounds.X + 4;
+        int TrackWidth = W.Bounds.Width - 8;
         var TrackRect = new Rectangle(TrackLeft, TrackY, TrackWidth, SliderTrackHeight);
         Renderer.DrawRoundedRect(TrackRect, SliderTrack, CornerRadius);
 
@@ -1056,7 +1084,7 @@ public class Inspector : core.System
         int HandleX = TrackLeft + FillWidth - SliderHandleSize / 2;
         int HandleY = TrackY + SliderTrackHeight / 2 - SliderHandleSize / 2;
         var HandleRect = new Rectangle(HandleX, HandleY, SliderHandleSize, SliderHandleSize);
-        Renderer.DrawSprite(Renderer.GetCircleTexture(SliderHandleSize * 4), HandleRect, SliderHandle);
+        Renderer.DrawSprite(Renderer.GetCircleTexture(64), HandleRect, SliderHandle);
     }
 
     private void DrawDropdown(Widget W, Vector2 Mouse, bool HoverBlocked)

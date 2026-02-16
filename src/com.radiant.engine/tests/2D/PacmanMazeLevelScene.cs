@@ -241,13 +241,6 @@ public class PacmanMazeLevelScene : Scene
             Inspector.SetToggleValue("scene", "pauseGameplay", paused);
         });
 
-        Inspector.AddDropdown("pipeline", "lighting", "Lighting", GIGroup.Names, GIGroup.ActiveIdx, (index) =>
-        {
-            GIGroup.SetActive(index);
-            UpdateUpscalerInput();
-            UpdateWindowVisibility();
-        });
-
         Inspector.AddDropdown("pipeline", "upscaler", "Upscaler", UpscalerGroup.Names, UpscalerGroup.ActiveIdx, (index) =>
         {
             UpscalerGroup.SetActive(index);
@@ -255,7 +248,15 @@ public class PacmanMazeLevelScene : Scene
             UpdateWindowVisibility();
         });
 
-        Inspector.AddToggle("pipeline", "gizmos", "Gizmos", Gizmos.Enabled, (enabled) => Gizmos.Enabled = enabled);
+        Inspector.AddSectionLabel("pipeline", "techniquesHeader", "Techniques");
+        Inspector.AddDropdown("pipeline", "lighting", "Lighting", GIGroup.Names, GIGroup.ActiveIdx, (index) =>
+        {
+            GIGroup.SetActive(index);
+            UpdateUpscalerInput();
+            UpdateWindowVisibility();
+        });
+
+        Inspector.AddToggle("inspector", "gizmos", "Gizmos", Gizmos.Enabled, (enabled) => Gizmos.Enabled = enabled);
 
         Inspector.WindowsRestored += UpdateWindowVisibility;
         UpdateWindowVisibility();

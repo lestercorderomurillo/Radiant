@@ -174,22 +174,24 @@ public class Geometry : core.System
         WriteBuffer = 0;
         ReadBuffer = 1;
 
-        Inspector.CreateWindow("pipeline", "Pipeline Controller");
+        Inspector.AddSectionLabel("perf", "sceneHeader", "Scene");
+        Inspector.AddLabel("perf", "emissive", "Emissive: -");
+        Inspector.AddLabel("perf", "absorption", "Absorption: -");
+        Inspector.AddLabel("perf", "buffers", "World: -");
 
-        Inspector.AddLabel("pipeline", "sceneHeader", "Scene");
-        Inspector.AddLabel("pipeline", "emissive", "Emissive: 0");
-        Inspector.AddLabel("pipeline", "absorption", "Absorption: 0");
-        Inspector.AddLabel("pipeline", "buffers", "World: -");
+        Inspector.AddSectionLabel("perf", "pipelineHeader", "Pipeline");
+        Inspector.AddLabel("perf", "collect", "Collect: -");
+        Inspector.AddLabel("perf", "flatten", "Flatten: -");
+        Inspector.AddLabel("perf", "render", "Render: -");
+        Inspector.AddLabel("perf", "setdata", "SetData: -");
+        Inspector.AddLabel("perf", "draw", "Draw: -");
+        Inspector.AddLabel("perf", "sdf", "SDF: -");
+        Inspector.AddLabel("perf", "jfa", "JFA: -");
 
-        Inspector.AddLabel("pipeline", "perfHeader", "Performance");
-        Inspector.AddLabel("pipeline", "timing", "Collect: - | Flatten: - | Render: -");
-        Inspector.AddLabel("pipeline", "gpu", "GPU: -");
-        Inspector.AddLabel("pipeline", "sdf", "SDF: -");
-        Inspector.AddLabel("pipeline", "jfa", "JFA: -");
-
-        Inspector.AddLabel("pipeline", "controlsHeader", "Controls");
+        Inspector.CreateWindow("pipeline", "Rendering");
+        Inspector.AddSectionLabel("pipeline", "outputHeader", "Output");
         var debugModeNames = Enum.GetNames<DebugMode>();
-        Inspector.AddDropdown("pipeline", "debugMode", "Debug", debugModeNames, 0, (index) => CurrentDebug = (DebugMode)index);
+        Inspector.AddDropdown("pipeline", "debugMode", "Buffer", debugModeNames, 0, (index) => CurrentDebug = (DebugMode)index);
     }
 
     private void InitializeJFA()
@@ -768,21 +770,24 @@ public class Geometry : core.System
     private void UpdateGizmos()
     {
         Inspector.SetDropdownValue("pipeline", "debugMode", (int)CurrentDebug);
-        Inspector.SetLabel("pipeline", "emissive", $"Emissive Objects: {EmissiveCount}");
-        Inspector.SetLabel("pipeline", "absorption", $"Absorption Objects: {AbsorptionCount}");
-        Inspector.SetLabel("pipeline", "buffers", $"World Bounds: {WorldBounds.X}x{WorldBounds.Y}");
-        Inspector.SetLabel("pipeline", "timing", $"Collect: {CollectMs:F2}ms | Flatten: {FlattenMs:F2}ms | Render: {RenderMs:F2}ms");
-        Inspector.SetLabel("pipeline", "gpu", $"GPU: SetData: {Renderer.LastSetDataMs:F2}ms | Draw: {Renderer.LastDrawMs:F2}ms");
+        Inspector.SetLabel("perf", "emissive", $"Emissive: {EmissiveCount}");
+        Inspector.SetLabel("perf", "absorption", $"Absorption: {AbsorptionCount}");
+        Inspector.SetLabel("perf", "buffers", $"World: {WorldBounds.X}x{WorldBounds.Y}");
+        Inspector.SetLabel("perf", "collect", $"Collect: {CollectMs:F2}ms");
+        Inspector.SetLabel("perf", "flatten", $"Flatten: {FlattenMs:F2}ms");
+        Inspector.SetLabel("perf", "render", $"Render: {RenderMs:F2}ms");
+        Inspector.SetLabel("perf", "setdata", $"SetData: {Renderer.LastSetDataMs:F2}ms");
+        Inspector.SetLabel("perf", "draw", $"Draw: {Renderer.LastDrawMs:F2}ms");
 
         if (EnableSDF)
         {
-            Inspector.SetLabel("pipeline", "sdf", $"SDF: {SDFBounds.X}x{SDFBounds.Y} ({SDFScale:P0})");
-            Inspector.SetLabel("pipeline", "jfa", $"JFA Passes: {JFAPassCount}");
+            Inspector.SetLabel("perf", "sdf", $"SDF: {SDFBounds.X}x{SDFBounds.Y} ({SDFScale:P0})");
+            Inspector.SetLabel("perf", "jfa", $"JFA: {JFAPassCount} passes");
         }
         else
         {
-            Inspector.SetLabel("pipeline", "sdf", "SDF: Disabled");
-            Inspector.SetLabel("pipeline", "jfa", "");
+            Inspector.SetLabel("perf", "sdf", "SDF: Disabled");
+            Inspector.SetLabel("perf", "jfa", "");
         }
     }
 

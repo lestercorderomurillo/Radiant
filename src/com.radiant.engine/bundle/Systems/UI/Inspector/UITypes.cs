@@ -19,6 +19,7 @@ public struct Widget
     public WidgetType Type;
     public string Text;
     public bool Visible;
+    public bool Section;
     public Rectangle Bounds;
     public bool ToggleValue;
     public float SliderValue;

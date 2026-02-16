@@ -52,6 +52,7 @@ public class PerformanceMonitor : core.System
     // Cached string builders - eliminates per-frame allocations
     private readonly StringBuilder FpsBuilder = new(32);
     private readonly StringBuilder FrameTimeBuilder = new(32);
+    private readonly StringBuilder TargetBuilder = new(32);
     private readonly StringBuilder CpuBuilder = new(48);
     private readonly StringBuilder GpuBuilder = new(32);
     private readonly StringBuilder RamBuilder = new(32);
@@ -68,13 +69,17 @@ public class PerformanceMonitor : core.System
         StartSamplerThread();
 
         Inspector.CreateWindow("perf", "Metrics", 1);
-        Inspector.AddLabel("perf", "fps", "FPS: -");
-        Inspector.AddLabel("perf", "frame", "Frame: -");
+
+        Inspector.AddSectionLabel("perf", "perfHeader", "Performance");
+        Inspector.AddLabel("perf", "fps", "Frames Per Second: -");
+        Inspector.AddLabel("perf", "frame", "Frame Time: -");
+        Inspector.AddLabel("perf", "target", "Target: -");
         Inspector.AddLabel("perf", "cpu", "CPU: -");
         Inspector.AddLabel("perf", "gpu", "GPU: -");
+
+        Inspector.AddSectionLabel("perf", "memHeader", "Memory");
         Inspector.AddLabel("perf", "ram", "RAM: -");
         Inspector.AddLabel("perf", "peak", "Peak: -");
-        Inspector.AddLabel("perf", "build", Window.BuildTag);
     }
 
     private void StartSamplerThread()
@@ -222,14 +227,22 @@ public class PerformanceMonitor : core.System
         SmoothedDisplayFps = SmoothedDisplayFps == 0 ? ActualFps : SmoothedDisplayFps * 0.9f + ActualFps * 0.1f;
         int DisplayFps = (int)MathF.Round(SmoothedDisplayFps);
 
-        // Reuse StringBuilders - zero allocation
-        FpsBuilder.Clear().Append("FPS: ").Append(DisplayFps);
+        FpsBuilder.Clear().Append("Frames Per Second: ").Append(DisplayFps);
         if (!Uncapped) FpsBuilder.Append('/').Append(TargetFps);
         Inspector.SetLabel("perf", "fps", FpsBuilder.ToString());
 
-        FrameTimeBuilder.Clear().Append("Frame: ").AppendFormat("{0:F2}", FrameTimeAverage).Append("ms");
-        if (!Uncapped) FrameTimeBuilder.Append(" (target: ").AppendFormat("{0:F2}", 1000f / TargetFps).Append("ms)");
+        FrameTimeBuilder.Clear().Append("Frame Time: ").AppendFormat("{0:F2}", FrameTimeAverage).Append("ms");
         Inspector.SetLabel("perf", "frame", FrameTimeBuilder.ToString());
+
+        if (!Uncapped)
+        {
+            TargetBuilder.Clear().Append("Target: ").AppendFormat("{0:F2}", 1000f / TargetFps).Append("ms (").Append(TargetFps).Append(" fps)");
+            Inspector.SetLabel("perf", "target", TargetBuilder.ToString());
+        }
+        else
+        {
+            Inspector.SetLabel("perf", "target", "Target: Uncapped");
+        }
 
         CpuBuilder.Clear().Append("CPU: ").AppendFormat("{0:F1}", CpuUsage).Append("% (").Append(CpuCoreCount).Append(" cores)");
         Inspector.SetLabel("perf", "cpu", CpuBuilder.ToString());
