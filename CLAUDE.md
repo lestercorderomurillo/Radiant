@@ -481,7 +481,7 @@ Inspector.GetThemeNames();
 Inspector.WindowsRestored += () => {}; // F1 restore event
 ```
 
-Built-in themes: Radiant, Dark, Light, Monokai, Nord, Solarized, Gruvbox.
+Built-in themes: Radiant, Obsidian, Midnight, Frost, Neon, Glacier.
 
 ## GizmosRenderer
 

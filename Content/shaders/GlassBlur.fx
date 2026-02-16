@@ -58,6 +58,7 @@ float4 PS_RoundedBlit(PixelShaderInput input) : SV_Target0
     if (dist >= 0.5) discard;
     float alpha = saturate(0.5 - dist);
     float4 color = InputTexture.Sample(Sampler0, input.UV);
+    color.a = 1.0;
     return color * alpha;
 }
 
@@ -75,9 +76,9 @@ float4 PS_Shadow(PixelShaderInput input) : SV_Target0
     float2 pixel = input.UV * ScreenSize;
     float2 center = WindowRect.xy + WindowRect.zw * 0.5 + ShadowOffset;
     float2 halfSize = WindowRect.zw * 0.5;
-    float dist = RoundedRectSDF(pixel - center, halfSize, WindowRadius);
-    float alpha = 1.0 - smoothstep(0.0, ShadowSpread, dist);
-    if (alpha <= 0.0) discard;
+    float dist = max(RoundedRectSDF(pixel - center, halfSize, WindowRadius), 0.0);
+    float alpha = exp(-4.0 * dist * dist / (ShadowSpread * ShadowSpread));
+    if (alpha < 0.01) discard;
     return float4(0, 0, 0, ShadowOpacity * alpha);
 }
 
