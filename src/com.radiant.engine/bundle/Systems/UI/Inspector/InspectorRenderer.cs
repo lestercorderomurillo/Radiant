@@ -239,7 +239,7 @@ public partial class Inspector
         var textPos = new Vector2(Widget.Bounds.X + 4, Widget.Bounds.Y + 2);
         DrawText(valueText, textPos, TextColor);
 
-        int trackY = (int)(Widget.Bounds.Y + LineHeight + 8);
+        int trackY = (int)(Widget.Bounds.Y + LineHeight + 20);
         int trackLeft = Widget.Bounds.X + 4;
         int trackWidth = Widget.Bounds.Width - 8;
         var trackRect = new Rectangle(trackLeft, trackY, trackWidth, SliderTrackHeight);

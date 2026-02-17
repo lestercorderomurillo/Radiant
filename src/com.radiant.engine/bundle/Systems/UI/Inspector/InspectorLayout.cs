@@ -64,7 +64,7 @@ public partial class Inspector
 
             int widgetH = widget.Type switch
             {
-                WidgetType.Slider => WidgetHeight + 25,
+                WidgetType.Slider => WidgetHeight + 18,
                 WidgetType.Label => MeasureWrappedHeight(widget.Text, contentWidth),
                 _ => WidgetHeight
             };
@@ -114,7 +114,7 @@ public partial class Inspector
 
             int widgetH = widget.Type switch
             {
-                WidgetType.Slider => WidgetHeight + 25,
+                WidgetType.Slider => WidgetHeight + 18,
                 WidgetType.Label => MeasureWrappedHeight(widget.Text, contentWidth),
                 _ => WidgetHeight
             };

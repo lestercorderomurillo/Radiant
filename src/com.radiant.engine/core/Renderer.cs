@@ -1437,7 +1437,7 @@ public class Renderer : IDisposable
                     float alpha = 1.0f - MathHelper.Clamp((dist - innerRadius) / aaWidth, 0f, 1f);
                     byte a = (byte)(alpha * 255f + 0.5f);
 
-                    data[y * diameter + x] = new Color(a, a, a, alpha);
+                    data[y * diameter + x] = new Color(a, a, a, a);
                 }
             }
 
