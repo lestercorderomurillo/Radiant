@@ -10,15 +10,22 @@ namespace com.radiant.engine.bundle;
 public class ColorManagement : core.System
 {
     public override RenderLayer RenderLayer => RenderLayer.World;
-    private static readonly string[] TechniqueNames = ["None", "ACES", "ACES2", "AgX", "Filmic", "Reinhard", "Uchimura"];
-    private int TechniqueIndex = 2;
+    private static readonly string[] DisplayNames = ["PBR Neutral", "ACES 1.0", "ACES 2.0", "AgX", "Filmic", "Reinhard", "Uchimura"];
+    private static readonly string[] TechniqueNames = ["PBRNeutral", "ACES", "ACES2", "AgX", "Filmic", "Reinhard", "Uchimura"];
+    private bool TonemappingEnabled = true;
+    private int TechniqueIndex = 0;
     private Func<Texture2D> InputSource;
     private RenderTarget2D OutputTexture;
 
     public override void Initialize()
     {
         Inspector.AddSectionLabel("pipeline", "colorHeader", "Color Profile");
-        Inspector.AddDropdown("pipeline", "tonemap", "Tonemapping", TechniqueNames, TechniqueIndex, (index) => TechniqueIndex = index);
+        Inspector.AddToggle("pipeline", "tonemapToggle", "Enable Tonemapping", TonemappingEnabled, (enabled) =>
+        {
+            TonemappingEnabled = enabled;
+            Inspector.SetWidgetEnabled("pipeline", "tonemap", enabled);
+        });
+        Inspector.AddDropdown("pipeline", "tonemap", "Tonemapping", DisplayNames, TechniqueIndex, (index) => TechniqueIndex = index);
     }
 
     public void SetInputSource(Func<Texture2D> source)
@@ -48,7 +55,7 @@ public class ColorManagement : core.System
         Renderer
             .Reset()
             .SetShader("ColorManagement")
-            .SetTechnique(TechniqueNames[TechniqueIndex])
+            .SetTechnique(TonemappingEnabled ? TechniqueNames[TechniqueIndex] : "None")
             .Configure(SamplerState.LinearClamp)
             .SetTarget(OutputTexture)
             .Clear(Color.Black)

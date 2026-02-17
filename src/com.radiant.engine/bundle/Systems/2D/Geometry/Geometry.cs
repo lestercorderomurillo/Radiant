@@ -174,19 +174,17 @@ public class Geometry : core.System
         WriteBuffer = 0;
         ReadBuffer = 1;
 
-        Inspector.AddSectionLabel("perf", "sceneHeader", "Scene");
-        Inspector.AddLabel("perf", "emissive", "Emissive: -");
-        Inspector.AddLabel("perf", "absorption", "Absorption: -");
-        Inspector.AddLabel("perf", "buffers", "World: -");
-
-        Inspector.AddSectionLabel("perf", "pipelineHeader", "Pipeline");
-        Inspector.AddLabel("perf", "collect", "Collect: -");
-        Inspector.AddLabel("perf", "flatten", "Flatten: -");
-        Inspector.AddLabel("perf", "render", "Render: -");
-        Inspector.AddLabel("perf", "setdata", "SetData: -");
-        Inspector.AddLabel("perf", "draw", "Draw: -");
-        Inspector.AddLabel("perf", "sdf", "SDF: -");
-        Inspector.AddLabel("perf", "jfa", "JFA: -");
+        Inspector.AddSectionLabel("perf", "geometryHeader", "Geometry");
+        Inspector.AddLabel("perf", "emissive", "Emissive Entities: -");
+        Inspector.AddLabel("perf", "absorption", "Absorptive Entities: -");
+        Inspector.AddLabel("perf", "buffers", "World Size: -");
+        Inspector.AddLabel("perf", "collect", "Entity Collection (MT): -");
+        Inspector.AddLabel("perf", "flatten", "Entity Merge (ST): -");
+        Inspector.AddLabel("perf", "render", "GPU Render: -");
+        Inspector.AddLabel("perf", "setdata", "GPU Submission: -");
+        Inspector.AddLabel("perf", "draw", "GPU Draw: -");
+        Inspector.AddLabel("perf", "sdf", "SDF Resolution: -");
+        Inspector.AddLabel("perf", "jfa", "JFA Passes: -");
 
         Inspector.CreateWindow("pipeline", "Rendering");
         Inspector.AddSectionLabel("pipeline", "outputHeader", "Output");
@@ -770,23 +768,23 @@ public class Geometry : core.System
     private void UpdateGizmos()
     {
         Inspector.SetDropdownValue("pipeline", "debugMode", (int)CurrentDebug);
-        Inspector.SetLabel("perf", "emissive", $"Emissive: {EmissiveCount}");
-        Inspector.SetLabel("perf", "absorption", $"Absorption: {AbsorptionCount}");
-        Inspector.SetLabel("perf", "buffers", $"World: {WorldBounds.X}x{WorldBounds.Y}");
-        Inspector.SetLabel("perf", "collect", $"Collect: {CollectMs:F2}ms");
-        Inspector.SetLabel("perf", "flatten", $"Flatten: {FlattenMs:F2}ms");
-        Inspector.SetLabel("perf", "render", $"Render: {RenderMs:F2}ms");
-        Inspector.SetLabel("perf", "setdata", $"SetData: {Renderer.LastSetDataMs:F2}ms");
-        Inspector.SetLabel("perf", "draw", $"Draw: {Renderer.LastDrawMs:F2}ms");
+        Inspector.SetLabel("perf", "emissive", $"Emissive Entities: {EmissiveCount}");
+        Inspector.SetLabel("perf", "absorption", $"Absorptive Entities: {AbsorptionCount}");
+        Inspector.SetLabel("perf", "buffers", $"World Size: {WorldBounds.X}x{WorldBounds.Y}");
+        Inspector.SetLabel("perf", "collect", $"Entity Collection (MT): {CollectMs:F2}ms");
+        Inspector.SetLabel("perf", "flatten", $"Entity Merge (ST): {FlattenMs:F2}ms");
+        Inspector.SetLabel("perf", "render", $"GPU Render: {RenderMs:F2}ms");
+        Inspector.SetLabel("perf", "setdata", $"GPU Submission: {Renderer.LastSetDataMs:F2}ms");
+        Inspector.SetLabel("perf", "draw", $"GPU Draw: {Renderer.LastDrawMs:F2}ms");
 
         if (EnableSDF)
         {
-            Inspector.SetLabel("perf", "sdf", $"SDF: {SDFBounds.X}x{SDFBounds.Y} ({SDFScale:P0})");
-            Inspector.SetLabel("perf", "jfa", $"JFA: {JFAPassCount} passes");
+            Inspector.SetLabel("perf", "sdf", $"SDF Resolution: {SDFBounds.X}x{SDFBounds.Y} ({SDFScale:P0})");
+            Inspector.SetLabel("perf", "jfa", $"JFA Passes: {JFAPassCount}");
         }
         else
         {
-            Inspector.SetLabel("perf", "sdf", "SDF: Disabled");
+            Inspector.SetLabel("perf", "sdf", "SDF Resolution: Disabled");
             Inspector.SetLabel("perf", "jfa", "");
         }
     }

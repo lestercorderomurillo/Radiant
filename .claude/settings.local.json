@@ -22,7 +22,8 @@
       "Bash(bc:*)",
       "mcp__ide__getDiagnostics",
       "Bash(unzip:*)",
-      "WebFetch(domain:community.monogame.net)"
+      "WebFetch(domain:community.monogame.net)",
+      "Bash(xargs:*)"
     ]
   }
 }
