@@ -81,7 +81,8 @@ public class ECS : IGameObject
         BuildRenderOrder();
 
         for (int i = 0; i < Systems.Count; i++)
-            Systems[i].Initialize();
+            if (Systems[i].Enabled)
+                Systems[i].Initialize();
     }
 
     private void BuildRenderOrder()

@@ -132,7 +132,7 @@ public class UDR1 : core.System
 
     public override void Dispose()
     {
-        // Restore render scale to 1.0 when UDR1 is disabled
+        Inspector.DestroyWindow("udr1");
         Renderer.RenderScale = 1.0f;
 
         OutputTexture?.Dispose();

@@ -44,6 +44,29 @@ public struct InspectorTheme
     public Color TextColor, CloseText, LabelDim;
 }
 
+/// <summary> Type of menu bar item. </summary>
+public enum MenuItemType { Action, Toggle }
+
+/// <summary> A single item inside a menu bar dropdown. </summary>
+public struct MenuItem
+{
+    public string Id;
+    public string Label;
+    public MenuItemType Type;
+    public bool ToggleValue;
+    public Action ActionCallback;
+    public Action<bool> ToggleCallback;
+}
+
+/// <summary> A top-level menu in the menu bar (e.g. Workspace, About). </summary>
+public class MenuData
+{
+    public string Id;
+    public string Label;
+    public List<MenuItem> Items = new();
+    public Rectangle HeaderBounds;
+}
+
 /// <summary> Runtime state for a single Inspector window. </summary>
 public class WindowData
 {

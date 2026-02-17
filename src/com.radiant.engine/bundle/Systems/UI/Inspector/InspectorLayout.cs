@@ -17,7 +17,7 @@ public partial class Inspector
         });
 
         float columnX = AutoLayoutGap;
-        float currentY = AutoLayoutGap;
+        float currentY = MenuBarHeight + AutoLayoutGap;
         Vector2 lastVisiblePos = new Vector2(columnX, currentY);
 
         foreach (var window in ordered)
@@ -31,10 +31,10 @@ public partial class Inspector
             int windowHeight = ComputeWindowHeight(window);
 
             float maxY = Renderer.VirtualHeight / UIScale - 64;
-            if (currentY + windowHeight > maxY && currentY > AutoLayoutGap)
+            if (currentY + windowHeight > maxY && currentY > MenuBarHeight + AutoLayoutGap)
             {
                 columnX += DefaultWindowWidth + AutoLayoutGap;
-                currentY = AutoLayoutGap;
+                currentY = MenuBarHeight + AutoLayoutGap;
             }
 
             window.Position = new Vector2(columnX, currentY);

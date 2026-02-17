@@ -207,6 +207,7 @@ public class UDR3 : core.System
 
     public override void Dispose()
     {
+        Inspector.DestroyWindow("udr3");
         Renderer.RenderScale = 1.0f;
 
         DisposeRenderTargets();

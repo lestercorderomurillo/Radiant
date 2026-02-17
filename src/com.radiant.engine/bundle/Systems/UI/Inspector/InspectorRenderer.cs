@@ -22,7 +22,7 @@ public partial class Inspector
     /// <summary> Renders all visible Inspector windows with blur, shadows, and glass effects. </summary>
     public override void LateRender()
     {
-        if (RenderOrder.Count == 0 || !GlobalVisible) return;
+        if (!GlobalVisible) return;
 
         ComputeAllLayouts();
 
@@ -35,7 +35,8 @@ public partial class Inspector
         var virtualMouse = ScreenToVirtual(new Vector2(currentMouse.X, currentMouse.Y));
 
         string hoveredWindowId = null;
-        if (!Dragging && !DraggingSlider && OpenDropdownWindowId == null)
+        bool menuBlocking = OpenMenuId != null || MenuBarBounds.Contains((int)virtualMouse.X, (int)virtualMouse.Y);
+        if (!Dragging && !DraggingSlider && OpenDropdownWindowId == null && !menuBlocking)
         {
             for (int i = RenderOrder.Count - 1; i >= 0; i--)
             {
@@ -67,6 +68,21 @@ public partial class Inspector
 
         Renderer.BeginDraw(SpriteSortMode.Deferred, BlendState.AlphaBlend, transform: scale);
         DrawDropdownPopup(virtualMouse);
+        Renderer.EndDraw();
+
+        if (BlurResult != null)
+            DrawBlurQuad(MenuBarBounds, 0);
+
+        if (OpenMenuId != null)
+        {
+            DrawShadowQuad(OpenMenuDropdownBounds, CornerRadius);
+            if (BlurResult != null)
+                DrawBlurQuad(OpenMenuDropdownBounds, CornerRadius);
+        }
+
+        Renderer.BeginDraw(SpriteSortMode.Deferred, BlendState.AlphaBlend, transform: scale);
+        DrawMenuBar(virtualMouse);
+        DrawMenuDropdown(virtualMouse);
         Renderer.EndDraw();
     }
 
@@ -367,13 +383,17 @@ public partial class Inspector
     }
 
     /// <summary> Draws the frosted glass background quad clipped to a window's rounded bounds. </summary>
-    private void DrawWindowBlurQuad(WindowData Window)
+    private void DrawWindowBlurQuad(WindowData Window) => DrawBlurQuad(Window.WindowBounds, CornerRadius);
+
+    /// <summary> Draws a soft drop shadow beneath a window using the Shadow shader technique. </summary>
+    private void DrawWindowShadow(WindowData Window) => DrawShadowQuad(Window.WindowBounds, CornerRadius);
+
+    /// <summary> Draws a frosted glass blur quad for the given virtual-space bounds. </summary>
+    private void DrawBlurQuad(Rectangle Bounds, float Radius)
     {
-        var windowBounds = Window.WindowBounds;
         float scaleX = UIScale * Renderer.VirtualToScreenScale.X;
         float scaleY = UIScale * Renderer.VirtualToScreenScale.Y;
-        var windowRect = new Vector4(windowBounds.X * scaleX, windowBounds.Y * scaleY, windowBounds.Width * scaleX, windowBounds.Height * scaleY);
-        float windowRadius = CornerRadius * Math.Min(scaleX, scaleY);
+        var rect = new Vector4(Bounds.X * scaleX, Bounds.Y * scaleY, Bounds.Width * scaleX, Bounds.Height * scaleY);
 
         Renderer
             .Reset()
@@ -383,20 +403,18 @@ public partial class Inspector
             .Configure(SamplerState.LinearClamp, 0)
             .SetParameter("InputTexture", BlurResult)
             .SetParameter("ScreenSize", Renderer.ScreenSize)
-            .SetParameter("WindowRect", windowRect)
-            .SetParameter("WindowRadius", windowRadius)
+            .SetParameter("WindowRect", rect)
+            .SetParameter("WindowRadius", Radius * Math.Min(scaleX, scaleY))
             .Draw()
             .Commit();
     }
 
-    /// <summary> Draws a soft drop shadow beneath a window using the Shadow shader technique. </summary>
-    private void DrawWindowShadow(WindowData Window)
+    /// <summary> Draws a soft drop shadow for the given virtual-space bounds. </summary>
+    private void DrawShadowQuad(Rectangle Bounds, float Radius)
     {
-        var windowBounds = Window.WindowBounds;
         float scaleX = UIScale * Renderer.VirtualToScreenScale.X;
         float scaleY = UIScale * Renderer.VirtualToScreenScale.Y;
-        var windowRect = new Vector4(windowBounds.X * scaleX, windowBounds.Y * scaleY, windowBounds.Width * scaleX, windowBounds.Height * scaleY);
-        float windowRadius = CornerRadius * Math.Min(scaleX, scaleY);
+        var rect = new Vector4(Bounds.X * scaleX, Bounds.Y * scaleY, Bounds.Width * scaleX, Bounds.Height * scaleY);
 
         Renderer
             .Reset()
@@ -404,8 +422,8 @@ public partial class Inspector
             .SetTechnique("Shadow")
             .Configure(BlendState.AlphaBlend)
             .SetParameter("ScreenSize", Renderer.ScreenSize)
-            .SetParameter("WindowRect", windowRect)
-            .SetParameter("WindowRadius", windowRadius)
+            .SetParameter("WindowRect", rect)
+            .SetParameter("WindowRadius", Radius * Math.Min(scaleX, scaleY))
             .SetParameter("ShadowOffset", new Vector2(0, ShadowOffsetY * scaleY))
             .SetParameter("ShadowSpread", ShadowSpreadSize * Math.Min(scaleX, scaleY))
             .SetParameter("ShadowOpacity", ShadowAlpha)

@@ -45,7 +45,7 @@ public partial class Inspector : core.System
     private int DropdownScrollOffset;
     private int DropdownTotalOptions;
 
-    /// <summary> Raised when F1 restores all windows to visible. </summary>
+    /// <summary> Raised when "Restore Defaults" is clicked in the Workspace menu. </summary>
     public static event Action WindowsRestored;
 
     private const int DefaultWindowWidth = 480;
@@ -157,6 +157,8 @@ public partial class Inspector : core.System
         Windows[Id] = window;
         RenderOrder.Add(window);
         SortRenderOrder();
+        RebuildWorkspaceMenu();
+        AutoPositionAll();
     }
 
     private void DestroyWindowInternal(string Id)
@@ -164,24 +166,19 @@ public partial class Inspector : core.System
         if (!Windows.TryGetValue(Id, out var window)) return;
         Windows.Remove(Id);
         RenderOrder.Remove(window);
+        RebuildWorkspaceMenu();
     }
 
     private void SetWindowVisible(string Id, bool Visible)
     {
-        if (Windows.TryGetValue(Id, out var window) && window.Visible != Visible)
-        {
+        if (Windows.TryGetValue(Id, out var window))
             window.Visible = Visible;
-            LayoutDone = false;
-        }
     }
 
     private void ToggleWindowInternal(string Id)
     {
         if (Windows.TryGetValue(Id, out var window))
-        {
             window.Visible = !window.Visible;
-            LayoutDone = false;
-        }
     }
 
     private bool IsWindowVisibleInternal(string Id)
@@ -346,6 +343,8 @@ public partial class Inspector : core.System
         var gameLoop = Renderer.GameLoop;
         AddDropdown("inspector", "fpsCap", "FPS Cap", GameLoop.FpsOptionNames, 2, (index) => gameLoop?.SetTargetFps(GameLoop.FpsOptions[index]));
         AddToggle("inspector", "throttleUnfocused", "Throttle Unfocused", true, (enabled) => { if (gameLoop != null) gameLoop.ThrottleUnfocused = enabled; });
+
+        InitializeMenuBar();
     }
 
     /// <summary> Recomputes UI scale and triggers layout recalculation on window resize. </summary>
@@ -369,12 +368,7 @@ public partial class Inspector : core.System
         if (keyboard.IsKeyDown(Keys.F1) && PrevKeyState.IsKeyUp(Keys.F1))
         {
             GlobalVisible = !GlobalVisible;
-            if (GlobalVisible)
-            {
-                foreach (var window in Windows.Values)
-                    window.Visible = true;
-                WindowsRestored?.Invoke();
-            }
+            if (!GlobalVisible) CloseMenuDropdown();
         }
         PrevKeyState = keyboard;
 
@@ -389,6 +383,12 @@ public partial class Inspector : core.System
         bool leftReleased = currentMouse.LeftButton == ButtonState.Released && PrevMouse.LeftButton == ButtonState.Pressed;
 
         MouseOverUI = false;
+
+        if (UpdateMenuBar(virtualMouse, leftPressed, keyboard))
+        {
+            PrevMouse = currentMouse;
+            return;
+        }
 
         if (DraggingSlider && leftHeld)
         {

@@ -166,7 +166,7 @@ public abstract class System
 
 `[RunAfter(typeof(A), typeof(B))]`, `[RunBefore(...)]` — params Type[], AllowMultiple.
 `[Pausable]` — skipped when `ECS.GameplayPaused` (default). `[Pausable(PauseGroup.Animation)]` — skipped when `ECS.AnimationPaused`.
-Topological sort (Kahn's) at `ECS.Initialize()`.
+Topological sort (Kahn's) at `ECS.Initialize()`. Disabled systems (`Enabled = false`) are skipped during initialization — SystemGroup activates them later via `SetActive()`.
 
 ### RenderLayer
 
@@ -493,10 +493,16 @@ Inspector.RegisterTheme("name", new InspectorTheme { ... });
 Inspector.ApplyTheme("name");
 Inspector.GetThemeNames();
 
-Inspector.WindowsRestored += () => {}; // F1 restore event
+Inspector.WindowsRestored += () => {}; // Fired by Workspace > Reorder Windows
 ```
 
 Built-in themes: Solaris, Carbon, Midnight, Sentinel, Neon, Nord.
+
+### Menu Bar
+
+F1 toggles a top-of-screen menu bar with **About** and **Workspace** menus. About has a single "About Radiant" action that opens a centered window with engine/author info. Workspace dynamically lists all registered Inspector windows with show/hide toggles plus a "Reorder Windows" action (triggers auto-layout). The workspace menu rebuilds each time it opens — disabled systems (via SystemGroup) never create windows, so only active system windows appear. Implementation is in `InspectorMenuBar.cs` (partial class Inspector). Menu bar uses frosted glass blur (45% opacity). Renders last (always on top). Hover-to-switch between menus when a dropdown is open (macOS behavior). Toggle items keep the dropdown open; action items close it.
+
+**Auto-positioning**: Windows are only repositioned on: game window resize, UI scale change, or Workspace > Reorder Windows. Toggling visibility or creating/destroying windows does NOT reposition.
 
 ## GizmosRenderer
 
@@ -553,7 +559,7 @@ LightFactory.HueToRGB(0.5f);
 
 ## Controls
 
-F1 = toggle Inspector windows. Arrow keys = Pac-Man movement. ESC = exit. All other controls via Inspector.
+F1 = toggle Inspector UI (menu bar + windows). Arrow keys = Pac-Man movement. ESC = close menu dropdown / exit. All other controls via Inspector.
 
 ## Not Implemented
 

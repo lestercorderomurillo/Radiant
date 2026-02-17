@@ -192,7 +192,7 @@ public class UDR2 : core.System
 
     public override void Dispose()
     {
-        // Restore render scale to 1.0 when UDR2 is disabled
+        Inspector.DestroyWindow("udr2");
         Renderer.RenderScale = 1.0f;
 
         DisposeRenderTargets();

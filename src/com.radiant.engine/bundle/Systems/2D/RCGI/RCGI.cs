@@ -299,6 +299,7 @@ public class RCGI : core.System
 
     public override void Dispose()
     {
+        Inspector.DestroyWindow("rcgi");
         Renderer.RenderScaleChanged -= OnRenderScaleChanged;
 
         FinalTexture?.Dispose();

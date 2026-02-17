@@ -35,8 +35,8 @@ public class SystemGroup
         ActiveIndex = index;
 
         var next = Entries[ActiveIndex].System;
-        next.Initialize();
         next.Enabled = true;
+        next.Initialize();
     }
 
     public void ForEach(Action<System> action)

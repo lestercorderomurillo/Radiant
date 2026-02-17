@@ -63,6 +63,7 @@ public class Bilinear : core.System
 
     public override void Dispose()
     {
+        Inspector.DestroyWindow("bilinear");
         Renderer.RenderScale = 1.0f;
     }
 }

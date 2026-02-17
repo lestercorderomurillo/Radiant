@@ -315,6 +315,7 @@ public class HRCGI : core.System
 
     public override void Dispose()
     {
+        Inspector.DestroyWindow("hrcgi");
         Renderer.RenderScaleChanged -= OnRenderScaleChanged;
         DisposeRenderTargets();
     }
