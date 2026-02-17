@@ -30,6 +30,9 @@ public class ECS : IGameObject
         public int Index;
     }
 
+    // Tags — lightweight string-based entity grouping
+    private readonly Dictionary<string, PagedBitSet> TagSets = new();
+
     // Systems
     private readonly List<System> Systems;
     private List<System> RenderSystems;
@@ -259,6 +262,9 @@ public class ECS : IGameObject
                 EntityCount_--;
             }
         }
+
+        foreach (var bitset in TagSets.Values)
+            bitset.Clear();
     }
 
     public bool DestroyEntity(int entity)
@@ -267,6 +273,9 @@ public class ECS : IGameObject
         if (record.Arch == null) return false;
 
         Spatial.Remove(entity);
+
+        foreach (var bitset in TagSets.Values)
+            bitset.Remove(entity);
 
         int movedEntity = record.Arch.Remove(record.Index);
         if (movedEntity >= 0)
@@ -356,6 +365,45 @@ public class ECS : IGameObject
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ReadOnlySpan<int> Nearest(float cx, float cy, float cz, int count, float maxRadius = float.MaxValue) => Spatial.Nearest(cx, cy, cz, count, maxRadius);
+
+    public void AddTag(int entity, string tag)
+    {
+        if (!TagSets.TryGetValue(tag, out var bitset))
+        {
+            bitset = new PagedBitSet();
+            TagSets[tag] = bitset;
+        }
+        bitset.Add(entity);
+    }
+
+    public void RemoveTag(int entity, string tag)
+    {
+        if (TagSets.TryGetValue(tag, out var bitset))
+            bitset.Remove(entity);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool HasTag(int entity, string tag) => TagSets.TryGetValue(tag, out var bitset) && bitset.Contains(entity);
+
+    /// <summary>
+    /// Returns the PagedBitSet for a tag. Caller iterates directly via foreach (zero-copy).
+    /// Returns null if the tag has never been used.
+    /// </summary>
+    public PagedBitSet WithTag(string tag) => TagSets.TryGetValue(tag, out var bitset) ? bitset : null;
+
+    public void DestroyEntitiesWithTag(string tag)
+    {
+        if (!TagSets.TryGetValue(tag, out var bitset)) return;
+        foreach (int entity in bitset)
+            DestroyEntity(entity);
+        bitset.Clear();
+    }
+
+    public void ClearTag(string tag)
+    {
+        if (TagSets.TryGetValue(tag, out var bitset))
+            bitset.Clear();
+    }
 
     public static int ThreadCount => CachedThreadCount;
 

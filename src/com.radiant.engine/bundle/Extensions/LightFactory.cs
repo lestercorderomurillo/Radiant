@@ -30,16 +30,18 @@ public static class LightFactory
         return id;
     }
 
-    public static void SpawnRandom(ECS ecs, int count, Vector2 screenSize, float radius = 3f)
+    public static int[] SpawnRandom(ECS ecs, int count, Vector2 screenSize, float radius = 3f)
     {
+        var ids = new int[count];
         var rng = new Random();
         for (int i = 0; i < count; i++)
         {
             float x = (float)rng.NextDouble() * screenSize.X;
             float y = (float)rng.NextDouble() * screenSize.Y;
             var color = HueToRGB((float)rng.NextDouble());
-            CreateLight(ecs, new Vector2(x, y), radius, color, color);
+            ids[i] = CreateLight(ecs, new Vector2(x, y), radius, color, color);
         }
+        return ids;
     }
 
     public static Color HueToRGB(float hue)

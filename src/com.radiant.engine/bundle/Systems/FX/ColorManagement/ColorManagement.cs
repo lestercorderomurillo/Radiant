@@ -19,13 +19,13 @@ public class ColorManagement : core.System
 
     public override void Initialize()
     {
-        Inspector.AddSectionLabel("pipeline", "colorHeader", "Color Profile");
-        Inspector.AddToggle("pipeline", "tonemapToggle", "Enable Tonemapping", TonemappingEnabled, (enabled) =>
+        Inspector.CreateWindow("colorProfile", "Color Profile");
+        Inspector.AddToggle("colorProfile", "tonemapToggle", "Enable Tonemapping", TonemappingEnabled, (enabled) =>
         {
             TonemappingEnabled = enabled;
-            Inspector.SetWidgetEnabled("pipeline", "tonemap", enabled);
+            Inspector.SetWidgetEnabled("colorProfile", "tonemap", enabled);
         });
-        Inspector.AddDropdown("pipeline", "tonemap", "Tonemapping", DisplayNames, TechniqueIndex, (index) => TechniqueIndex = index);
+        Inspector.AddDropdown("colorProfile", "tonemap", "Tonemapper", DisplayNames, TechniqueIndex, (index) => TechniqueIndex = index);
     }
 
     public void SetInputSource(Func<Texture2D> source)

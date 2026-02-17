@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using com.radiant.engine.core;
-using com.radiant.engine.runtime;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 
@@ -66,8 +65,8 @@ public partial class Inspector : core.System
     private static float UIScale = 1.0f;
 
     /// <summary> Creates a new window. LayoutOrder controls auto-position column order. </summary>
-    public static void CreateWindow(string Id, string Title, int LayoutOrder = 100)
-        => Instance?.CreateWindowInternal(Id, Title, LayoutOrder);
+    public static void CreateWindow(string Id, string Title, int LayoutOrder = 100, bool AutoPosition = true)
+        => Instance?.CreateWindowInternal(Id, Title, LayoutOrder, AutoPosition);
 
     /// <summary> Destroys a window and all its widgets. </summary>
     public static void DestroyWindow(string Id)
@@ -140,7 +139,7 @@ public partial class Inspector : core.System
     /// <summary> Returns true if the mouse is over any Inspector window or popup. </summary>
     public static bool IsMouseOverUI() => Instance?.MouseOverUI ?? false;
 
-    private void CreateWindowInternal(string Id, string Title, int LayoutOrder)
+    private void CreateWindowInternal(string Id, string Title, int LayoutOrder, bool AutoPosition = true)
     {
         if (Windows.ContainsKey(Id)) return;
         var window = new WindowData
@@ -158,7 +157,7 @@ public partial class Inspector : core.System
         RenderOrder.Add(window);
         SortRenderOrder();
         RebuildWorkspaceMenu();
-        AutoPositionAll();
+        if (AutoPosition) AutoPositionAll();
     }
 
     private void DestroyWindowInternal(string Id)
@@ -172,13 +171,19 @@ public partial class Inspector : core.System
     private void SetWindowVisible(string Id, bool Visible)
     {
         if (Windows.TryGetValue(Id, out var window))
+        {
             window.Visible = Visible;
+            if (Visible) AutoPositionAll();
+        }
     }
 
     private void ToggleWindowInternal(string Id)
     {
         if (Windows.TryGetValue(Id, out var window))
+        {
             window.Visible = !window.Visible;
+            if (window.Visible) AutoPositionAll();
+        }
     }
 
     private bool IsWindowVisibleInternal(string Id)
@@ -339,10 +344,6 @@ public partial class Inspector : core.System
         AddSlider("inspector", "uiScale", "UI Scale", 0.5f, 3.0f, UIScale, (value) => UIScale = value);
         ApplyTheme(0);
         AddDropdown("inspector", "theme", "Theme", GetThemeNames(), 0, ApplyTheme);
-
-        var gameLoop = Renderer.GameLoop;
-        AddDropdown("inspector", "fpsCap", "FPS Cap", GameLoop.FpsOptionNames, 2, (index) => gameLoop?.SetTargetFps(GameLoop.FpsOptions[index]));
-        AddToggle("inspector", "throttleUnfocused", "Throttle Unfocused", true, (enabled) => { if (gameLoop != null) gameLoop.ThrottleUnfocused = enabled; });
 
         InitializeMenuBar();
     }

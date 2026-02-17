@@ -99,12 +99,22 @@ public partial class Inspector
 
         RegisterTheme("Sentinel", new InspectorTheme
         {
-            WindowBg = new(225, 225, 222, 230), TitleBarColor = new(205, 205, 200, 240), TitleBarHover = new(195, 195, 188, 240),
-            ButtonColor = new(178, 178, 174, 235), ButtonHover = new(162, 162, 156, 245),
-            SliderTrack = new(178, 178, 174, 220), SliderFill = new(110, 110, 105, 255), SliderHandle = new(80, 80, 76, 255),
-            ToggleOn = new(100, 100, 95, 255), ToggleOff = new(178, 178, 174, 235),
-            CloseColor = new(150, 70, 70, 255), CloseHover = new(180, 85, 85, 255),
-            TextColor = new(38, 38, 36, 255), CloseText = new(238, 238, 235, 255), LabelDim = new(105, 105, 100, 255)
+            WindowBg = new(232, 234, 238, 225), TitleBarColor = new(212, 215, 220, 240), TitleBarHover = new(200, 204, 210, 240),
+            ButtonColor = new(195, 198, 205, 230), ButtonHover = new(180, 184, 192, 245),
+            SliderTrack = new(190, 194, 200, 215), SliderFill = new(70, 125, 190, 255), SliderHandle = new(50, 105, 170, 255),
+            ToggleOn = new(70, 125, 190, 255), ToggleOff = new(195, 198, 205, 230),
+            CloseColor = new(195, 75, 70, 255), CloseHover = new(220, 90, 85, 255),
+            TextColor = new(10, 12, 18, 255), CloseText = new(242, 242, 245, 255), LabelDim = new(38, 42, 55, 255)
+        });
+
+        RegisterTheme("Greenfields", new InspectorTheme
+        {
+            WindowBg = new(58, 62, 55, 210), TitleBarColor = new(50, 54, 48, 235), TitleBarHover = new(64, 68, 60, 240),
+            ButtonColor = new(56, 60, 52, 225), ButtonHover = new(72, 78, 66, 240),
+            SliderTrack = new(44, 48, 40, 200), SliderFill = new(140, 165, 115, 255), SliderHandle = new(172, 195, 148, 255),
+            ToggleOn = new(135, 160, 110, 255), ToggleOff = new(56, 60, 52, 225),
+            CloseColor = new(155, 68, 62, 255), CloseHover = new(190, 85, 78, 255),
+            TextColor = new(232, 235, 228, 255), CloseText = new(232, 235, 228, 255), LabelDim = new(148, 155, 140, 255)
         });
 
         RegisterTheme("Neon", new InspectorTheme

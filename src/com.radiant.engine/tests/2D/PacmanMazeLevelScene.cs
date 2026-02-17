@@ -1,8 +1,8 @@
+using System;
 using com.radiant.engine.bundle;
 using com.radiant.engine.runtime;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using System;
 
 namespace com.radiant.engine.core;
 
@@ -230,9 +230,9 @@ public class PacmanMazeLevelScene : Scene
 
         Inspector.AddLabel("scene", "level", $"Level: 1/{Levels.Length}");
 
-        Inspector.AddButton("scene", "restartLevel", "Restart Level", RestartLevel);
         Inspector.AddButton("scene", "nextLevel", "Next Level", () => LoadLevel((CurrentLevel + 1) % Levels.Length));
-        Inspector.AddButton("scene", "spawnLights", "Spawn Lights", () => LightFactory.SpawnRandom(ECS, 100_000, Renderer.VirtualSize));
+        Inspector.AddButton("scene", "prevLevel", "Previous Level", () => LoadLevel((CurrentLevel - 1 + Levels.Length) % Levels.Length));
+        Inspector.AddButton("scene", "restartLevel", "Restart Level", RestartLevel);
         Inspector.AddToggle("scene", "pause", "Pause", false, (paused) =>
         {
             Inspector.SetWidgetEnabled("scene", "pauseType", paused);
@@ -240,6 +240,14 @@ public class PacmanMazeLevelScene : Scene
         });
         Inspector.AddDropdown("scene", "pauseType", "Pause Type", ["Gameplay", "Gameplay + Animations"], 1, (index) => ApplyPause(true, index));
         Inspector.SetWidgetEnabled("scene", "pauseType", false);
+
+        Inspector.AddSectionLabel("scene", "debugHeader", "Debugging");
+        Inspector.AddButton("scene", "spawnDummy", "Spawn Dummy Entities", () =>
+        {
+            foreach (int id in LightFactory.SpawnRandom(ECS, 100_000, Renderer.VirtualSize))
+                ECS.AddTag(id, "dummy");
+        });
+        Inspector.AddButton("scene", "destroyDummy", "Destroy Dummy Entities", () => ECS.DestroyEntitiesWithTag("dummy"));
 
         Inspector.AddSectionLabel("pipeline", "techniquesHeader", "Techniques");
         Inspector.AddToggle("pipeline", "upscalerToggle", "Enable Upscaler", UpscalerEnabled, (enabled) =>

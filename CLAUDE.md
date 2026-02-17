@@ -111,6 +111,20 @@ ECS.AtExact(position);                    // 0.01 precision
 ECS.Nearest(center, count, maxRadius);
 ```
 
+### Tags
+
+Lightweight string-based entity grouping. Backed by `PagedBitSet` (1 bit per entity). Cleaned up automatically on `DestroyEntity`/`DestroyAllEntities`.
+
+```csharp
+ECS.AddTag(entityId, "dummy");
+ECS.RemoveTag(entityId, "dummy");
+ECS.HasTag(entityId, "dummy");
+
+PagedBitSet tagged = ECS.WithTag("dummy");   // null if tag never used; iterate with foreach
+ECS.DestroyEntitiesWithTag("dummy");          // Destroy all + clear tag
+ECS.ClearTag("dummy");                        // Remove tag from all without destroying
+```
+
 ### Pausing & System Retrieval
 
 ```csharp
@@ -496,7 +510,7 @@ Inspector.GetThemeNames();
 Inspector.WindowsRestored += () => {}; // Fired by Workspace > Reorder Windows
 ```
 
-Built-in themes: Solaris, Carbon, Midnight, Sentinel, Neon, Nord.
+Built-in themes: Solaris, Carbon, Midnight, Sentinel (light), Greenfields (olive), Neon, Nord.
 
 ### Menu Bar
 

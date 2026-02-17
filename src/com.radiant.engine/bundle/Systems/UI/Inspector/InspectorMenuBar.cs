@@ -15,7 +15,7 @@ public partial class Inspector
     private const int MenuItemHeight = 40;
     private const int MenuDropdownWidth = 320;
     private const float MenuBarFontSize = 22f;
-    private const float MenuBarGlassOpacity = 0.45f;
+
 
     private List<MenuData> Menus = new();
     private string OpenMenuId;
@@ -26,7 +26,7 @@ public partial class Inspector
     {
         Menus.Clear();
 
-        var about = new MenuData { Id = "about", Label = "About" };
+        var about = new MenuData { Id = "about", Label = "Help" };
         about.Items.Add(new MenuItem
         {
             Id = "about_radiant",
@@ -36,7 +36,7 @@ public partial class Inspector
             {
                 if (!Windows.ContainsKey("about_radiant"))
                 {
-                    CreateWindow("about_radiant", "About Radiant", 999);
+                    CreateWindow("about_radiant", "About Radiant", 999, AutoPosition: false);
                     AddSectionLabel("about_radiant", "about_engine", "Radiant Engine");
                     AddLabel("about_radiant", "about_author", "By Lester Cordero Murillo");
                     AddLabel("about_radiant", "about_tech", ".NET 8.0 | MonoGame 3.8.5");
@@ -52,10 +52,10 @@ public partial class Inspector
                 ShowWindow("about_radiant");
             }
         });
-        Menus.Add(about);
-
-        var workspace = new MenuData { Id = "workspace", Label = "Workspace" };
+        var workspace = new MenuData { Id = "workspace", Label = "Workspaces" };
         Menus.Add(workspace);
+
+        Menus.Add(about);
 
         RebuildWorkspaceMenu();
         ComputeMenuBarLayout();
@@ -81,6 +81,7 @@ public partial class Inspector
 
         foreach (var window in ordered)
         {
+            if (window.Id == "about_radiant") continue;
             string windowId = window.Id;
             workspace.Items.Add(new MenuItem
             {
@@ -95,7 +96,7 @@ public partial class Inspector
         workspace.Items.Add(new MenuItem
         {
             Id = "reorder_windows",
-            Label = "Reorder Windows",
+            Label = "Reset Positions",
             Type = MenuItemType.Action,
             ActionCallback = () =>
             {
@@ -260,7 +261,7 @@ public partial class Inspector
     private void DrawMenuBar(Vector2 VirtualMouse)
     {
         var solid = Renderer.GetSolidTexture(Color.White);
-        Color barBg = BlurResult != null ? MenuBarGlass(TitleBarColor) : TitleBarColor;
+        Color barBg = BlurResult != null ? GlassTint(TitleBarColor) : TitleBarColor;
         Renderer.DrawSprite(solid, MenuBarBounds, barBg);
 
         foreach (var menu in Menus)
@@ -270,7 +271,7 @@ public partial class Inspector
 
             if (isOpen || hovered)
             {
-                Color highlightBg = BlurResult != null ? MenuBarGlass(ButtonHover) : ButtonHover;
+                Color highlightBg = BlurResult != null ? GlassTint(ButtonHover) : ButtonHover;
                 Renderer.DrawSprite(solid, menu.HeaderBounds, highlightBg);
             }
 
@@ -282,7 +283,25 @@ public partial class Inspector
         }
     }
 
-    private static Color MenuBarGlass(Color color) => new(color.R, color.G, color.B, (byte)(color.A * MenuBarGlassOpacity));
+    private const float MenuBarSmallFontSize = 18f;
+
+    private (string Text, float FontSize) FitMenuItemText(string label, float maxWidth)
+    {
+        var size = Renderer.MeasureString("Inter", MenuBarFontSize, label);
+        if (size.X <= maxWidth) return (label, MenuBarFontSize);
+
+        size = Renderer.MeasureString("Inter", MenuBarSmallFontSize, label);
+        if (size.X <= maxWidth) return (label, MenuBarSmallFontSize);
+
+        var ellipsis = "...";
+        for (int length = label.Length - 1; length > 0; length--)
+        {
+            var truncated = label[..length] + ellipsis;
+            size = Renderer.MeasureString("Inter", MenuBarSmallFontSize, truncated);
+            if (size.X <= maxWidth) return (truncated, MenuBarSmallFontSize);
+        }
+        return (ellipsis, MenuBarSmallFontSize);
+    }
 
     private void DrawMenuDropdown(Vector2 VirtualMouse)
     {
@@ -295,7 +314,8 @@ public partial class Inspector
         }
         if (menu == null) return;
 
-        Color dropdownBg = BlurResult != null ? GlassTint(WindowBg) : WindowBg;
+        bool glass = BlurResult != null;
+        Color dropdownBg = glass ? GlassTint(WindowBg) : WindowBg;
         Renderer.DrawRoundedRect(OpenMenuDropdownBounds, dropdownBg, CornerRadius, RoundedCorners.Bottom);
 
         var solid = Renderer.GetSolidTexture(Color.White);
@@ -309,7 +329,7 @@ public partial class Inspector
             {
                 RoundedCorners corners = menu.Items.Count == 1 ? RoundedCorners.Bottom :
                     i == menu.Items.Count - 1 ? RoundedCorners.Bottom : RoundedCorners.None;
-                Renderer.DrawRoundedRect(itemRect, ButtonHover, CornerRadius, corners);
+                Renderer.DrawRoundedRect(itemRect, glass ? GlassTint(ButtonHover) : ButtonHover, CornerRadius, corners);
             }
 
             if (item.Type == MenuItemType.Toggle)
@@ -325,13 +345,21 @@ public partial class Inspector
                     Renderer.DrawSprite(solid, innerRect, TextColor);
                 }
 
-                var textPos = new Vector2(itemRect.X + Padding + ToggleBoxSize + 8, itemRect.Y + (itemRect.Height - LineHeight) / 2);
-                Renderer.DrawString("Inter", MenuBarFontSize, item.Label, textPos, TextColor);
+                float textStartX = itemRect.X + Padding + ToggleBoxSize + 8;
+                float maxTextWidth = itemRect.Right - textStartX - Padding;
+                var (fitText, fitSize) = FitMenuItemText(item.Label, maxTextWidth);
+                float fitLineHeight = Renderer.MeasureString("Inter", fitSize, fitText).Y;
+                var textPos = new Vector2(textStartX, itemRect.Y + (itemRect.Height - fitLineHeight) / 2);
+                Renderer.DrawString("Inter", fitSize, fitText, textPos, TextColor);
             }
             else
             {
-                var textPos = new Vector2(itemRect.X + Padding, itemRect.Y + (itemRect.Height - LineHeight) / 2);
-                Renderer.DrawString("Inter", MenuBarFontSize, item.Label, textPos, TextColor);
+                float textStartX = itemRect.X + Padding;
+                float maxTextWidth = itemRect.Right - textStartX - Padding;
+                var (fitText, fitSize) = FitMenuItemText(item.Label, maxTextWidth);
+                float fitLineHeight = Renderer.MeasureString("Inter", fitSize, fitText).Y;
+                var textPos = new Vector2(textStartX, itemRect.Y + (itemRect.Height - fitLineHeight) / 2);
+                Renderer.DrawString("Inter", fitSize, fitText, textPos, TextColor);
             }
         }
     }

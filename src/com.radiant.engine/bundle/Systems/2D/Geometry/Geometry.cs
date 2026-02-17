@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using com.radiant.engine.core;
+using com.radiant.engine.runtime;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using RendererShape = com.radiant.engine.core.Shape;
@@ -186,10 +187,13 @@ public class Geometry : core.System
         Inspector.AddLabel("perf", "sdf", "SDF Resolution: -");
         Inspector.AddLabel("perf", "jfa", "JFA Passes: -");
 
-        Inspector.CreateWindow("pipeline", "Rendering");
+        Inspector.CreateWindow("pipeline", "Pipeline");
         Inspector.AddSectionLabel("pipeline", "outputHeader", "Output");
         string[] debugModeNames = ["Composite", "Emissive", "Absorption", "Signed Distance Field", "JFA Direction", "JFA Raw", "Motion Vectors"];
         Inspector.AddDropdown("pipeline", "debugMode", "Buffer", debugModeNames, 0, (index) => CurrentDebug = (DebugMode)index);
+        var gameLoop = Renderer.GameLoop;
+        Inspector.AddDropdown("pipeline", "fpsCap", "FPS Limit", GameLoop.FpsOptionNames, 2, (index) => gameLoop?.SetTargetFps(GameLoop.FpsOptions[index]));
+        Inspector.AddToggle("pipeline", "throttleUnfocused", "Limit FPS When Unfocused", true, (enabled) => { if (gameLoop != null) gameLoop.ThrottleUnfocused = enabled; });
     }
 
     private void InitializeJFA()
@@ -768,8 +772,8 @@ public class Geometry : core.System
     private void UpdateGizmos()
     {
         Inspector.SetDropdownValue("pipeline", "debugMode", (int)CurrentDebug);
-        Inspector.SetLabel("perf", "emissive", $"Emissive Entities: {EmissiveCount}");
-        Inspector.SetLabel("perf", "absorption", $"Absorptive Entities: {AbsorptionCount}");
+        Inspector.SetLabel("perf", "emissive", $"Emissive Entities: {EmissiveCount:N0}");
+        Inspector.SetLabel("perf", "absorption", $"Absorptive Entities: {AbsorptionCount:N0}");
         Inspector.SetLabel("perf", "buffers", $"World Size: {WorldBounds.X}x{WorldBounds.Y}");
         Inspector.SetLabel("perf", "collect", $"Entity Collection (MT): {CollectMs:F2}ms");
         Inspector.SetLabel("perf", "flatten", $"Entity Merge (ST): {FlattenMs:F2}ms");

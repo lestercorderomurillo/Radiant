@@ -13,8 +13,10 @@ public partial class Inspector
     private RenderTarget2D BlurResult;
 
     private const int BlurDownscale = 4;
-    private const int BlurPasses = 4;
-    private const float GlassTintOpacity = 0.65f;
+    private const int BlurPasses = 5;
+    private const float GlassTintOpacity = 0.45f;
+    private const float GlassTintBrightOpacity = 0.40f;
+    private const float GlassBrightnessThreshold = 0.5f;
     private const float ShadowOffsetY = 3f;
     private const float ShadowSpreadSize = 12f;
     private const float ShadowAlpha = 0.25f;
@@ -435,6 +437,18 @@ public partial class Inspector
             .Commit();
     }
 
-    /// <summary> Reduces the alpha of a color for glass transparency blending. </summary>
-    private static Color GlassTint(Color color) => new(color.R, color.G, color.B, (byte)(color.A * GlassTintOpacity));
+    /// <summary>
+    /// Premultiplied glass tint. Scales RGB and A by the same opacity factor so bright colors
+    /// don't appear solid under BlendState.AlphaBlend (source blend = One).
+    /// </summary>
+    private static Color GlassTint(Color color)
+    {
+        float luminance = (0.299f * color.R + 0.587f * color.G + 0.114f * color.B) / 255f;
+        float opacity = luminance > GlassBrightnessThreshold ? GlassTintBrightOpacity : GlassTintOpacity;
+        return new Color(
+            (byte)(color.R * opacity),
+            (byte)(color.G * opacity),
+            (byte)(color.B * opacity),
+            (byte)(color.A * opacity));
+    }
 }
