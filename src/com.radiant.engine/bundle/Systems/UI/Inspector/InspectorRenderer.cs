@@ -144,7 +144,7 @@ public partial class Inspector
                 case WidgetType.Button: DrawButton(widget, Mouse, HoverBlocked); break;
                 case WidgetType.Toggle: DrawToggle(widget); break;
                 case WidgetType.Slider: DrawSlider(widget); break;
-                case WidgetType.Dropdown: DrawDropdown(widget, Mouse, HoverBlocked); break;
+                case WidgetType.Dropdown: DrawDropdown(widget, Mouse, HoverBlocked, Window.Id); break;
             }
         }
     }
@@ -260,11 +260,12 @@ public partial class Inspector
     }
 
     /// <summary> Draws a dropdown widget showing the selected option with a triangle indicator. </summary>
-    private void DrawDropdown(Widget Widget, Vector2 Mouse, bool HoverBlocked)
+    private void DrawDropdown(Widget Widget, Vector2 Mouse, bool HoverBlocked, string WindowId)
     {
         bool hovered = !Widget.Disabled && !HoverBlocked && Widget.Bounds.Contains((int)Mouse.X, (int)Mouse.Y);
         Color bgColor = Widget.Disabled ? Dim(ButtonColor) : (hovered ? ButtonHover : ButtonColor);
-        Renderer.DrawRoundedRect(Widget.Bounds, bgColor, CornerRadius);
+        bool isOpen = OpenDropdownWindowId == WindowId && OpenDropdownWidgetId == Widget.Id;
+        Renderer.DrawRoundedRect(Widget.Bounds, bgColor, CornerRadius, isOpen ? RoundedCorners.Top : RoundedCorners.All);
 
         string selectedLabel = Widget.DropdownOptions != null && Widget.DropdownSelected < Widget.DropdownOptions.Length
             ? Widget.DropdownOptions[Widget.DropdownSelected] : "?";
@@ -299,24 +300,30 @@ public partial class Inspector
         var widget = window.Widgets[index];
         if (widget.DropdownOptions == null) return;
 
-        Renderer.DrawRoundedRect(OpenDropdownPopupBounds, WindowBg, CornerRadius);
+        Renderer.DrawRoundedRect(OpenDropdownPopupBounds, WindowBg, CornerRadius, RoundedCorners.Bottom);
 
         int visibleCount = Math.Min(widget.DropdownOptions.Length - DropdownScrollOffset, MaxVisibleDropdownItems);
         bool scrollable = widget.DropdownOptions.Length > MaxVisibleDropdownItems;
-        int scrollbarReserved = scrollable ? 10 : 0;
 
         for (int i = 0; i < visibleCount; i++)
         {
             int optionIndex = i + DropdownScrollOffset;
-            int optionWidth = OpenDropdownPopupBounds.Width - scrollbarReserved;
-            var optionRect = new Rectangle(OpenDropdownPopupBounds.X, OpenDropdownPopupBounds.Y + i * WidgetHeight, optionWidth, WidgetHeight);
+            var optionRect = new Rectangle(OpenDropdownPopupBounds.X, OpenDropdownPopupBounds.Y + i * WidgetHeight, OpenDropdownPopupBounds.Width, WidgetHeight);
             bool optionHovered = optionRect.Contains((int)Mouse.X, (int)Mouse.Y);
             bool isSelected = optionIndex == widget.DropdownSelected;
 
-            Color optionBg = isSelected ? SliderFill : (optionHovered ? ButtonHover : ButtonColor);
-            RoundedCorners optionCorners = visibleCount == 1 ? RoundedCorners.All :
-                i == 0 ? RoundedCorners.Top : i == visibleCount - 1 ? RoundedCorners.Bottom : RoundedCorners.None;
-            Renderer.DrawRoundedRect(optionRect, optionBg, CornerRadius, optionCorners);
+            RoundedCorners optionCorners = visibleCount == 1 ? RoundedCorners.Bottom :
+                i == visibleCount - 1 ? RoundedCorners.Bottom : RoundedCorners.None;
+            Renderer.DrawRoundedRect(optionRect, ButtonColor, CornerRadius, optionCorners);
+
+            if (isSelected || optionHovered)
+            {
+                bool isLast = i == visibleCount - 1;
+                int highlightWidth = scrollable ? OpenDropdownPopupBounds.Width - 10 : OpenDropdownPopupBounds.Width;
+                var highlightRect = new Rectangle(OpenDropdownPopupBounds.X, optionRect.Y, highlightWidth, WidgetHeight);
+                RoundedCorners highlightCorners = isLast ? (scrollable ? RoundedCorners.BL : RoundedCorners.Bottom) : RoundedCorners.None;
+                Renderer.DrawRoundedRect(highlightRect, isSelected ? SliderFill : ButtonHover, CornerRadius, highlightCorners);
+            }
 
             string optionText = TruncateText(widget.DropdownOptions[optionIndex], optionRect.Width - Padding * 2);
             var optionTextSize = MeasureText(optionText);
@@ -326,18 +333,15 @@ public partial class Inspector
 
         if (scrollable)
         {
-            int scrollTrackWidth = 4;
-            int scrollTrackMargin = 3;
-            int scrollTrackX = OpenDropdownPopupBounds.Right - scrollTrackMargin - scrollTrackWidth;
-            int scrollTrackY = OpenDropdownPopupBounds.Y;
-            int scrollTrackHeight = OpenDropdownPopupBounds.Height;
+            int thumbWidth = 4;
+            int thumbMargin = 3;
+            int thumbX = OpenDropdownPopupBounds.Right - thumbMargin - thumbWidth;
             float thumbRatio = (float)MaxVisibleDropdownItems / DropdownTotalOptions;
-            int thumbHeight = Math.Max(8, (int)(scrollTrackHeight * thumbRatio));
-            int scrollRange = scrollTrackHeight - thumbHeight;
+            int thumbHeight = Math.Max(8, (int)(OpenDropdownPopupBounds.Height * thumbRatio));
+            int scrollRange = OpenDropdownPopupBounds.Height - thumbHeight;
             int maxScroll = Math.Max(1, DropdownTotalOptions - MaxVisibleDropdownItems);
-            int thumbY = scrollTrackY + (int)(scrollRange * ((float)DropdownScrollOffset / maxScroll));
-            Renderer.DrawRoundedRect(new Rectangle(scrollTrackX, scrollTrackY, scrollTrackWidth, scrollTrackHeight), ButtonColor, scrollTrackWidth / 2);
-            Renderer.DrawRoundedRect(new Rectangle(scrollTrackX, thumbY, scrollTrackWidth, thumbHeight), SliderFill, scrollTrackWidth / 2);
+            int thumbY = OpenDropdownPopupBounds.Y + (int)(scrollRange * ((float)DropdownScrollOffset / maxScroll));
+            Renderer.DrawRoundedRect(new Rectangle(thumbX, thumbY, thumbWidth, thumbHeight), SliderFill, thumbWidth / 2);
         }
     }
 

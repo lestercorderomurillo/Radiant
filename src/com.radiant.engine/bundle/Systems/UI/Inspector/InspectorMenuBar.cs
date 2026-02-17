@@ -296,7 +296,7 @@ public partial class Inspector
         if (menu == null) return;
 
         Color dropdownBg = BlurResult != null ? GlassTint(WindowBg) : WindowBg;
-        Renderer.DrawRoundedRect(OpenMenuDropdownBounds, dropdownBg, CornerRadius);
+        Renderer.DrawRoundedRect(OpenMenuDropdownBounds, dropdownBg, CornerRadius, RoundedCorners.Bottom);
 
         var solid = Renderer.GetSolidTexture(Color.White);
         for (int i = 0; i < menu.Items.Count; i++)
@@ -307,8 +307,8 @@ public partial class Inspector
 
             if (hovered)
             {
-                RoundedCorners corners = menu.Items.Count == 1 ? RoundedCorners.All :
-                    i == 0 ? RoundedCorners.Top : i == menu.Items.Count - 1 ? RoundedCorners.Bottom : RoundedCorners.None;
+                RoundedCorners corners = menu.Items.Count == 1 ? RoundedCorners.Bottom :
+                    i == menu.Items.Count - 1 ? RoundedCorners.Bottom : RoundedCorners.None;
                 Renderer.DrawRoundedRect(itemRect, ButtonHover, CornerRadius, corners);
             }
 
