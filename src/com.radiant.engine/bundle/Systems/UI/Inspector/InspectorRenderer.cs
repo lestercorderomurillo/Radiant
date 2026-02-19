@@ -14,9 +14,7 @@ public partial class Inspector
 
     private const int BlurDownscale = 4;
     private const int BlurPasses = 5;
-    private const float GlassTintOpacity = 0.45f;
-    private const float GlassTintBrightOpacity = 0.40f;
-    private const float GlassBrightnessThreshold = 0.5f;
+    private const float GlassTintOpacity = 0.50f;
     private const float ShadowOffsetY = 3f;
     private const float ShadowSpreadSize = 12f;
     private const float ShadowAlpha = 0.25f;
@@ -128,12 +126,12 @@ public partial class Inspector
 
         bool closeHovered = !HoverBlocked && Window.CloseBounds.Contains((int)Mouse.X, (int)Mouse.Y);
         Renderer.DrawRoundedRect(Window.CloseBounds, closeHovered ? CloseHover : CloseColor, CornerRadius);
-        const float closeFontSize = FontSize * 0.7f;
+        const float closeFontSize = FontSize * 0.8f;
         var closeTextSize = Renderer.MeasureString("Inter-Bold", closeFontSize, "X");
         var closeTextPos = new Vector2(
             Window.CloseBounds.X + (Window.CloseBounds.Width - closeTextSize.X) / 2,
             Window.CloseBounds.Y + (Window.CloseBounds.Height - closeTextSize.Y) / 2 - 2);
-        Renderer.DrawString("Inter-Bold", closeFontSize, "X", closeTextPos, CloseText);
+        Renderer.DrawString("Inter-Bold", closeFontSize, "X", closeTextPos, CloseText, bold: true);
 
         for (int i = 0; i < Window.Widgets.Count; i++)
         {
@@ -218,14 +216,14 @@ public partial class Inspector
     {
         int boxY = Widget.Bounds.Y + (Widget.Bounds.Height - ToggleBoxSize) / 2;
         var boxRect = new Rectangle(Widget.Bounds.X, boxY, ToggleBoxSize, ToggleBoxSize);
-        var solid = Renderer.GetSolidTexture(Color.White);
-        Renderer.DrawSprite(solid, boxRect, Widget.ToggleValue ? ToggleOn : ToggleOff);
+        Renderer.DrawRoundedRect(boxRect, Widget.ToggleValue ? ToggleOn : ToggleOff, 4);
 
         if (Widget.ToggleValue)
         {
-            int inset = 5;
-            var innerRect = new Rectangle(boxRect.X + inset, boxRect.Y + inset, boxRect.Width - inset * 2, boxRect.Height - inset * 2);
-            Renderer.DrawSprite(solid, innerRect, TextColor);
+            int checkSize = ToggleBoxSize - 4;
+            var checkTex = Renderer.GetCheckmarkTexture(checkSize);
+            var checkRect = new Rectangle(boxRect.X + 2, boxRect.Y + 2, checkSize, checkSize);
+            Renderer.DrawSprite(checkTex, checkRect, CloseText);
         }
 
         var textPos = new Vector2(Widget.Bounds.X + ToggleBoxSize + 8, Widget.Bounds.Y + (Widget.Bounds.Height - LineHeight) / 2);
@@ -267,6 +265,11 @@ public partial class Inspector
         bool hovered = !Widget.Disabled && !HoverBlocked && Widget.Bounds.Contains((int)Mouse.X, (int)Mouse.Y);
         Color bgColor = Widget.Disabled ? Dim(ButtonColor) : (hovered ? ButtonHover : ButtonColor);
         bool isOpen = OpenDropdownWindowId == WindowId && OpenDropdownWidgetId == Widget.Id;
+        var borderRect = new Rectangle(Widget.Bounds.X - 1, Widget.Bounds.Y - 1, Widget.Bounds.Width + 2, Widget.Bounds.Height + 3);
+        byte borderAlpha = Widget.Disabled ? (byte)25 : (byte)50;
+        float borderFactor = borderAlpha / 255f;
+        var borderColor = new Color((byte)(TextColor.R * borderFactor), (byte)(TextColor.G * borderFactor), (byte)(TextColor.B * borderFactor), borderAlpha);
+        Renderer.DrawRoundedRect(borderRect, borderColor, CornerRadius + 1, isOpen ? RoundedCorners.Top : RoundedCorners.All);
         Renderer.DrawRoundedRect(Widget.Bounds, bgColor, CornerRadius, isOpen ? RoundedCorners.Top : RoundedCorners.All);
 
         string selectedLabel = Widget.DropdownOptions != null && Widget.DropdownSelected < Widget.DropdownOptions.Length
@@ -302,6 +305,11 @@ public partial class Inspector
         var widget = window.Widgets[index];
         if (widget.DropdownOptions == null) return;
 
+        var popupBorderRect = new Rectangle(OpenDropdownPopupBounds.X - 1, OpenDropdownPopupBounds.Y, OpenDropdownPopupBounds.Width + 2, OpenDropdownPopupBounds.Height + 1);
+        byte popupBorderAlpha = 50;
+        float popupBorderFactor = popupBorderAlpha / 255f;
+        var popupBorderColor = new Color((byte)(TextColor.R * popupBorderFactor), (byte)(TextColor.G * popupBorderFactor), (byte)(TextColor.B * popupBorderFactor), popupBorderAlpha);
+        Renderer.DrawRoundedRect(popupBorderRect, popupBorderColor, CornerRadius + 1, RoundedCorners.Bottom);
         Renderer.DrawRoundedRect(OpenDropdownPopupBounds, WindowBg, CornerRadius, RoundedCorners.Bottom);
 
         int visibleCount = Math.Min(widget.DropdownOptions.Length - DropdownScrollOffset, MaxVisibleDropdownItems);
@@ -443,8 +451,7 @@ public partial class Inspector
     /// </summary>
     private static Color GlassTint(Color color)
     {
-        float luminance = (0.299f * color.R + 0.587f * color.G + 0.114f * color.B) / 255f;
-        float opacity = luminance > GlassBrightnessThreshold ? GlassTintBrightOpacity : GlassTintOpacity;
+        float opacity = GlassTintOpacity;
         return new Color(
             (byte)(color.R * opacity),
             (byte)(color.G * opacity),

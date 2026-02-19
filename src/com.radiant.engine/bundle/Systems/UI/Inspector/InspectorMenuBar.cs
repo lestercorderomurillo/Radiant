@@ -336,13 +336,14 @@ public partial class Inspector
             {
                 int boxY = itemRect.Y + (itemRect.Height - ToggleBoxSize) / 2;
                 var boxRect = new Rectangle(itemRect.X + Padding, boxY, ToggleBoxSize, ToggleBoxSize);
-                Renderer.DrawSprite(solid, boxRect, item.ToggleValue ? ToggleOn : ToggleOff);
+                Renderer.DrawRoundedRect(boxRect, item.ToggleValue ? ToggleOn : ToggleOff, 4);
 
                 if (item.ToggleValue)
                 {
-                    int inset = 5;
-                    var innerRect = new Rectangle(boxRect.X + inset, boxRect.Y + inset, boxRect.Width - inset * 2, boxRect.Height - inset * 2);
-                    Renderer.DrawSprite(solid, innerRect, TextColor);
+                    int checkSize = ToggleBoxSize - 4;
+                    var checkTex = Renderer.GetCheckmarkTexture(checkSize);
+                    var checkRect = new Rectangle(boxRect.X + 2, boxRect.Y + 2, checkSize, checkSize);
+                    Renderer.DrawSprite(checkTex, checkRect, TextColor);
                 }
 
                 float textStartX = itemRect.X + Padding + ToggleBoxSize + 8;

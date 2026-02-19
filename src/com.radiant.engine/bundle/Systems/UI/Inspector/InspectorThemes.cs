@@ -99,12 +99,12 @@ public partial class Inspector
 
         RegisterTheme("Sentinel", new InspectorTheme
         {
-            WindowBg = new(232, 234, 238, 225), TitleBarColor = new(212, 215, 220, 240), TitleBarHover = new(200, 204, 210, 240),
-            ButtonColor = new(195, 198, 205, 230), ButtonHover = new(180, 184, 192, 245),
-            SliderTrack = new(190, 194, 200, 215), SliderFill = new(70, 125, 190, 255), SliderHandle = new(50, 105, 170, 255),
-            ToggleOn = new(70, 125, 190, 255), ToggleOff = new(195, 198, 205, 230),
+            WindowBg = new(235, 235, 235, 225), TitleBarColor = new(215, 215, 215, 240), TitleBarHover = new(205, 205, 205, 240),
+            ButtonColor = new(200, 200, 200, 230), ButtonHover = new(185, 185, 185, 245),
+            SliderTrack = new(195, 195, 195, 215), SliderFill = new(55, 55, 55, 255), SliderHandle = new(35, 35, 35, 255),
+            ToggleOn = new(50, 50, 50, 255), ToggleOff = new(255, 255, 255, 255),
             CloseColor = new(195, 75, 70, 255), CloseHover = new(220, 90, 85, 255),
-            TextColor = new(10, 12, 18, 255), CloseText = new(242, 242, 245, 255), LabelDim = new(38, 42, 55, 255)
+            TextColor = new(15, 15, 15, 255), CloseText = new(245, 245, 245, 255), LabelDim = new(15, 15, 15, 255)
         });
 
         RegisterTheme("Greenfields", new InspectorTheme

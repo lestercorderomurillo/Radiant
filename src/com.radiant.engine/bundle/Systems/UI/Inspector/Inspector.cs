@@ -57,7 +57,7 @@ public partial class Inspector : core.System
     private const int CloseButtonWidth = 48;
     private const int AutoLayoutGap = 26;
     private const int SliderTrackHeight = 6;
-    private const int SliderHandleSize = 20;
+    private const int SliderHandleSize = 18;
     private const int ToggleBoxSize = 28;
     private const int CornerRadius = 8;
     private const int MaxVisibleDropdownItems = 4;

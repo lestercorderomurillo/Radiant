@@ -179,6 +179,7 @@ public class Renderer : IDisposable
     private Dictionary<(Color, int, int), Texture2D> SolidTextureCache = new();
     private Dictionary<int, Texture2D> CircleTextureCache = new();
     private Dictionary<int, Texture2D> TriangleTextureCache = new();
+    private Dictionary<int, Texture2D> CheckmarkTextureCache = new();
     private Dictionary<int, Texture2D> RoundedRectCache = new();
     private VertexBuffer QuadVertexBuffer;
     private IndexBuffer QuadIndexBuffer;
@@ -1493,6 +1494,54 @@ public class Renderer : IDisposable
     }
 
     /// <summary>
+    /// Gets or creates a cached anti-aliased checkmark texture.
+    /// </summary>
+    /// <param name="size">Texture size in pixels (square).</param>
+    /// <returns>Cached white checkmark texture with premultiplied alpha.</returns>
+    public Texture2D GetCheckmarkTexture(int size)
+    {
+        if (size < 4) size = 4;
+        if (!CheckmarkTextureCache.TryGetValue(size, out var texture))
+        {
+            texture = new Texture2D(Device, size, size);
+            var data = new Color[size * size];
+
+            float s = size;
+            Vector2 a = new(0.18f * s, 0.50f * s);
+            Vector2 b = new(0.40f * s, 0.75f * s);
+            Vector2 c = new(0.82f * s, 0.25f * s);
+            float thickness = s * 0.16f;
+
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    Vector2 p = new(x + 0.5f, y + 0.5f);
+                    float d1 = SegmentDist(p, a, b);
+                    float d2 = SegmentDist(p, b, c);
+                    float dist = MathF.Min(d1, d2);
+                    float alpha = MathHelper.Clamp(1f - (dist - thickness * 0.5f), 0f, 1f);
+                    byte val = (byte)(alpha * 255f + 0.5f);
+                    data[y * size + x] = new Color(val, val, val, val);
+                }
+            }
+            texture.SetData(data);
+            CheckmarkTextureCache[size] = texture;
+        }
+        return texture;
+
+        static float SegmentDist(Vector2 p, Vector2 v0, Vector2 v1)
+        {
+            Vector2 seg = v1 - v0;
+            float len2 = seg.X * seg.X + seg.Y * seg.Y;
+            float t = MathHelper.Clamp(((p.X - v0.X) * seg.X + (p.Y - v0.Y) * seg.Y) / len2, 0f, 1f);
+            float dx = p.X - (v0.X + t * seg.X);
+            float dy = p.Y - (v0.Y + t * seg.Y);
+            return MathF.Sqrt(dx * dx + dy * dy);
+        }
+    }
+
+    /// <summary>
     /// Gets or creates a cached anti-aliased rounded rectangle texture for 9-slice rendering.
     /// The texture is (radius*2+2) pixels square with premultiplied alpha SDF corners.
     /// </summary>
@@ -2098,6 +2147,10 @@ public class Renderer : IDisposable
         foreach (var texture in TriangleTextureCache.Values)
             texture?.Dispose();
         TriangleTextureCache.Clear();
+
+        foreach (var texture in CheckmarkTextureCache.Values)
+            texture?.Dispose();
+        CheckmarkTextureCache.Clear();
 
         foreach (var texture in RoundedRectCache.Values)
             texture?.Dispose();
