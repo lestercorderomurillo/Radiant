@@ -341,9 +341,9 @@ public partial class Inspector
                 if (item.ToggleValue)
                 {
                     int checkSize = ToggleBoxSize - 4;
-                    var checkTex = Renderer.GetCheckmarkTexture(checkSize);
+                    var checkTex = Renderer.GetCheckmarkTexture(checkSize * 4);
                     var checkRect = new Rectangle(boxRect.X + 2, boxRect.Y + 2, checkSize, checkSize);
-                    Renderer.DrawSprite(checkTex, checkRect, TextColor);
+                    Renderer.DrawSprite(checkTex, checkRect, CloseText);
                 }
 
                 float textStartX = itemRect.X + Padding + ToggleBoxSize + 8;

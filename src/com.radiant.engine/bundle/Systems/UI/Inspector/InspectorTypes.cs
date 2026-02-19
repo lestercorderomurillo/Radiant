@@ -78,6 +78,7 @@ public class WindowData
     public int ZOrder;
     public int CreationIndex;
     public int LayoutOrder;
+    public bool AutoPosition = true;
 
     public List<Widget> Widgets = new();
     public Dictionary<string, int> WidgetIndex = new();

@@ -22,7 +22,7 @@ public partial class Inspector
 
         foreach (var window in ordered)
         {
-            if (!window.Visible) continue;
+            if (!window.Visible || !window.AutoPosition) continue;
 
             int windowHeight = ComputeWindowHeight(window);
             if (currentY + windowHeight > maxY && currentY > MenuBarHeight + AutoLayoutGap)
@@ -37,7 +37,7 @@ public partial class Inspector
 
         foreach (var window in ordered)
         {
-            if (window.Visible) continue;
+            if (window.Visible || !window.AutoPosition) continue;
 
             int windowHeight = ComputeWindowHeight(window);
             if (currentY + windowHeight > maxY && currentY > MenuBarHeight + AutoLayoutGap)
@@ -48,6 +48,15 @@ public partial class Inspector
 
             window.Position = new Vector2(columnX, currentY);
             currentY += windowHeight + AutoLayoutGap;
+        }
+
+        foreach (var window in ordered)
+        {
+            if (window.AutoPosition) continue;
+            int windowHeight = ComputeWindowHeight(window);
+            window.Position = new Vector2(
+                (Renderer.VirtualWidth / UIScale - window.Size.X) / 2,
+                (Renderer.VirtualHeight / UIScale - windowHeight) / 2);
         }
     }
 

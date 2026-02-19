@@ -161,7 +161,8 @@ public partial class Inspector : core.System
             Visible = true,
             ZOrder = NextZOrder++,
             CreationIndex = NextCreationIndex++,
-            LayoutOrder = LayoutOrder
+            LayoutOrder = LayoutOrder,
+            AutoPosition = AutoPosition
         };
         Windows[Id] = window;
         RenderOrder.Add(window);
