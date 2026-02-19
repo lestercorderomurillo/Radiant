@@ -432,6 +432,7 @@ public class PacmanMazeLevelScene : Scene
         // Animate coins — wave + attraction toward player
         foreach (var (cell, coinId) in Maze.CoinCells)
         {
+            if (!ECS.IsAlive(coinId)) continue;
             float phase = CoinWaveTime * 1.8f - cell.Item1 * 0.5f;
             float sinVal = MathF.Sin(phase);
             float wave = 0.85f + 0.15f * sinVal;
@@ -476,6 +477,7 @@ public class PacmanMazeLevelScene : Scene
         // Animate power pellets — prismatic white + attraction
         foreach (var (cell, pelletId) in Maze.PowerPelletCells)
         {
+            if (!ECS.IsAlive(pelletId)) continue;
             float phase = CoinWaveTime * 1.8f - cell.Item1 * 0.5f;
 
             var basePos = Maze.CellCenter(cell.Item1, cell.Item2);

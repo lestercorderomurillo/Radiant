@@ -10,7 +10,7 @@ namespace com.radiant.engine.bundle;
 public class GizmosRenderer : core.System
 {
     public override RenderLayer RenderLayer => RenderLayer.Overlay;
-    private const float FontSize = 14f;
+    private const float FontSize = 28f;
 
     private List<LineGizmo> LineQueue = new();
     private List<CircleGizmo> CircleQueue = new();

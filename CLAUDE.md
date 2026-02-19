@@ -85,8 +85,12 @@ ref var transform = ref ECS.AddComponent<Transform>(entityId); // Returns ref
 ref var material = ref ECS.GetComponent<Material>(entityId);   // Returns ref — always capture by ref
 
 bool has = ECS.HasComponent<Circle2D>(entityId);
+bool alive = ECS.IsAlive(entityId);
 
 ECS.SetPosition(entityId, position); // Also updates SpatialIndex
+
+List<int> ids = new();
+ECS.GetAllEntityIds(ids); // Collects all living entity IDs (clears list first)
 ```
 
 ### Parallel Queries
@@ -486,8 +490,13 @@ Inspector.AddButton("win", "id", "text", () => {});
 Inspector.AddToggle("win", "id", "text", initialValue, (bool value) => {});
 Inspector.AddSlider("win", "id", "text", min, max, initial, (float value) => {});
 Inspector.AddDropdown("win", "id", "text", options, initialIndex, (int index) => {});
+Inspector.AddTextInput("win", "id", "placeholder", (string value) => {}, inlineRatio: 0f);
+Inspector.AddButton("win", "id", "text", () => {}, inlineRatio: 0.2f); // Inline overload
+Inspector.AddListBox("win", "id", height: 500, items: null);
 Inspector.RemoveWidget("win", "id");
 ```
+
+**Inline layout**: Set `InlineRatio` (0-1) on widgets to place them side by side. Consecutive inline widgets share a row. E.g., TextInput at 0.8 + Button at 0.2 = search bar. Empty button text renders a search icon.
 
 ### Updating Widgets (call in Update)
 
@@ -497,6 +506,11 @@ Inspector.SetSliderValue("win", "id", value);
 Inspector.SetToggleValue("win", "id", value);
 Inspector.SetDropdownValue("win", "id", index);
 Inspector.SetDropdownOptions("win", "id", newOptions);
+Inspector.SetTextInputValue("win", "id", "text");
+Inspector.GetTextInputValue("win", "id"); // Returns current text
+Inspector.SetListBoxItems("win", "id", new[] { "item1", "item2" });
+Inspector.GetListBoxSelected("win", "id");           // Returns HashSet<int> of selected indices
+Inspector.ClearListBoxSelection("win", "id");
 Inspector.SetWidgetEnabled("win", "id", enabled); // Greyed out + non-interactive when disabled
 ```
 
@@ -516,7 +530,7 @@ Built-in themes: Solaris, Carbon, Midnight, Sentinel (light), Greenfields (olive
 
 ### Menu Bar
 
-F1 toggles a top-of-screen menu bar with **About** and **Workspace** menus. About has a single "About Radiant" action that opens a centered window with engine/author info. Workspace dynamically lists all registered Inspector windows with show/hide toggles plus a "Reorder Windows" action (triggers auto-layout). The workspace menu rebuilds each time it opens — disabled systems (via SystemGroup) never create windows, so only active system windows appear. Implementation is in `InspectorMenuBar.cs` (partial class Inspector). Menu bar uses frosted glass blur (45% opacity). Renders last (always on top). Hover-to-switch between menus when a dropdown is open (macOS behavior). Toggle items keep the dropdown open; action items close it.
+F1 toggles a top-of-screen menu bar with **Workspaces**, **Entities**, **Components**, and **Help** menus. Workspaces dynamically lists all registered Inspector windows with show/hide toggles plus a "Reset Positions" action. Entities has "Open Entity Inspector" (search bar + results list). Components has "Open Component Registry". Help has "About Radiant" (centered info window). Implementation is in `InspectorMenuBar.cs` (partial class Inspector). Menu bar uses frosted glass blur (45% opacity). Renders last (always on top). Hover-to-switch between menus when a dropdown is open (macOS behavior). Toggle items keep the dropdown open; action items close it.
 
 **Auto-positioning**: Windows are only repositioned on: game window resize, UI scale change, or Workspace > Reorder Windows. Toggling visibility or creating/destroying windows does NOT reposition.
 

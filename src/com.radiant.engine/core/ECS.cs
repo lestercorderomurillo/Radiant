@@ -33,6 +33,9 @@ public class ECS : IGameObject
     // Tags — lightweight string-based entity grouping
     private readonly Dictionary<string, PagedBitSet> TagSets = new();
 
+    // Deferred destruction — queued during frame, flushed at start of next Update
+    private readonly HashSet<int> DeferredDestroyQueue = new();
+
     // Systems
     private readonly List<System> Systems;
     private List<System> RenderSystems;
@@ -245,6 +248,33 @@ public class ECS : IGameObject
         transform.Position = position;
         Spatial.Insert(id, position);
         return id;
+    }
+
+    /// <summary> Returns true if the entity ID refers to a living entity. </summary>
+    public bool IsAlive(int entity) => entity >= 0 && entity < EntityRecords.Length && EntityRecords[entity].Arch != null;
+
+    /// <summary> Schedules an entity for destruction at the start of the next Update. Safe to call mid-frame. </summary>
+    public void ScheduleDestroy(int entity) => DeferredDestroyQueue.Add(entity);
+
+    /// <summary> Processes all deferred entity destructions. Called automatically at the start of Update. </summary>
+    public void FlushDeferred()
+    {
+        if (DeferredDestroyQueue.Count == 0) return;
+        foreach (int entity in DeferredDestroyQueue)
+            DestroyEntity(entity);
+        DeferredDestroyQueue.Clear();
+    }
+
+    /// <summary> Collects all living entity IDs into the provided list (cleared first). </summary>
+    public void GetAllEntityIds(List<int> result)
+    {
+        result.Clear();
+        foreach (var arch in Archetypes)
+        {
+            var entities = arch.GetEntities();
+            for (int i = 0; i < arch.EntityCount; i++)
+                result.Add(entities[i]);
+        }
     }
 
     public void DestroyAllEntities()
@@ -650,6 +680,8 @@ public class ECS : IGameObject
 
     public void Update()
     {
+        FlushDeferred();
+
         if (Renderer.HasPendingResize)
         {
             Renderer.HandleResize();

@@ -37,12 +37,23 @@ public partial class Inspector : core.System
     private string SliderWidgetId;
     private bool MouseOverUI;
     private bool GlobalVisible = false;
+    private bool Resizing;
+    private string ResizeWindowId;
+    private Vector2 ResizeStartMouse;
+    private float ResizeStartWidth;
+    private float ResizeStartHeight;
 
     private string OpenDropdownWindowId;
     private string OpenDropdownWidgetId;
     private Rectangle OpenDropdownPopupBounds;
     private int DropdownScrollOffset;
     private int DropdownTotalOptions;
+
+    private string FocusedTextInputWindowId;
+    private string FocusedTextInputWidgetId;
+    private float CursorBlinkTimer;
+    private const float CursorBlinkRate = 0.53f;
+    private const int InlineGap = 8;
 
     /// <summary> Raised when "Restore Defaults" is clicked in the Workspace menu. </summary>
     public static event Action WindowsRestored;
@@ -61,6 +72,9 @@ public partial class Inspector : core.System
     private const int ToggleBoxSize = 28;
     private const int CornerRadius = 8;
     private const int MaxVisibleDropdownItems = 4;
+    private const int ResizeHandleSize = 20;
+    private const int MinWindowWidth = 280;
+    private const int MinWindowHeight = 300;
 
     private static float UIScaleBacking = 1.0f;
     private static float UIScale
@@ -117,6 +131,38 @@ public partial class Inspector : core.System
     /// <summary> Adds a dropdown selection widget. </summary>
     public static void AddDropdown(string WindowId, string WidgetId, string Text, string[] Options, int Initial, Action<int> Callback)
         => Instance?.AddDropdownInternal(WindowId, WidgetId, Text, Options, Initial, Callback);
+
+    /// <summary> Adds a text input field with placeholder text. </summary>
+    public static void AddTextInput(string WindowId, string WidgetId, string Placeholder, Action<string> Callback, float InlineRatio = 0f)
+        => Instance?.AddTextInputInternal(WindowId, WidgetId, Placeholder, Callback, InlineRatio);
+
+    /// <summary> Updates a text input's current value. </summary>
+    public static void SetTextInputValue(string WindowId, string WidgetId, string Value)
+        => Instance?.SetTextInputValueInternal(WindowId, WidgetId, Value);
+
+    /// <summary> Gets a text input's current value. </summary>
+    public static string GetTextInputValue(string WindowId, string WidgetId)
+        => Instance?.GetTextInputValueInternal(WindowId, WidgetId) ?? "";
+
+    /// <summary> Adds an empty list box with a fixed pixel height. </summary>
+    public static void AddListBox(string WindowId, string WidgetId, int Height, string[] Items = null)
+        => Instance?.AddListBoxInternal(WindowId, WidgetId, Height, Items);
+
+    /// <summary> Updates the items displayed in a list box. </summary>
+    public static void SetListBoxItems(string WindowId, string WidgetId, string[] Items)
+        => Instance?.SetListBoxItemsInternal(WindowId, WidgetId, Items);
+
+    /// <summary> Returns the set of selected indices in a list box. </summary>
+    public static HashSet<int> GetListBoxSelected(string WindowId, string WidgetId)
+        => Instance?.GetListBoxSelectedInternal(WindowId, WidgetId);
+
+    /// <summary> Clears all selections in a list box. </summary>
+    public static void ClearListBoxSelection(string WindowId, string WidgetId)
+        => Instance?.ClearListBoxSelectionInternal(WindowId, WidgetId);
+
+    /// <summary> Adds a clickable button widget with inline ratio for horizontal layout. </summary>
+    public static void AddButton(string WindowId, string WidgetId, string Text, Action Callback, float InlineRatio)
+        => Instance?.AddButtonInternal(WindowId, WidgetId, Text, Callback, InlineRatio);
 
     /// <summary> Removes a widget from a window. </summary>
     public static void RemoveWidget(string WindowId, string WidgetId)
@@ -216,7 +262,7 @@ public partial class Inspector : core.System
         window.Widgets.Add(new Widget { Id = WidgetId, Type = WidgetType.Label, Text = Text, Visible = true, Section = true });
     }
 
-    private void AddButtonInternal(string WindowId, string WidgetId, string Text, Action Callback)
+    private void AddButtonInternal(string WindowId, string WidgetId, string Text, Action Callback, float InlineRatio = 0f)
     {
         if (!Windows.TryGetValue(WindowId, out var window)) return;
         if (window.WidgetIndex.ContainsKey(WidgetId)) return;
@@ -224,8 +270,77 @@ public partial class Inspector : core.System
         window.Widgets.Add(new Widget
         {
             Id = WidgetId, Type = WidgetType.Button, Text = Text, Visible = true,
-            ButtonCallback = Callback
+            ButtonCallback = Callback, InlineRatio = InlineRatio
         });
+    }
+
+    private void AddTextInputInternal(string WindowId, string WidgetId, string Placeholder, Action<string> Callback, float InlineRatio)
+    {
+        if (!Windows.TryGetValue(WindowId, out var window)) return;
+        if (window.WidgetIndex.ContainsKey(WidgetId)) return;
+        window.WidgetIndex[WidgetId] = window.Widgets.Count;
+        window.Widgets.Add(new Widget
+        {
+            Id = WidgetId, Type = WidgetType.TextInput, Visible = true,
+            TextInputValue = "", TextInputPlaceholder = Placeholder,
+            TextInputCallback = Callback, TextInputCursor = 0, InlineRatio = InlineRatio
+        });
+    }
+
+    private void SetTextInputValueInternal(string WindowId, string WidgetId, string Value)
+    {
+        if (!Windows.TryGetValue(WindowId, out var window)) return;
+        if (!window.WidgetIndex.TryGetValue(WidgetId, out int index)) return;
+        var widget = window.Widgets[index];
+        widget.TextInputValue = Value ?? "";
+        widget.TextInputCursor = widget.TextInputValue.Length;
+        window.Widgets[index] = widget;
+    }
+
+    private string GetTextInputValueInternal(string WindowId, string WidgetId)
+    {
+        if (!Windows.TryGetValue(WindowId, out var window)) return "";
+        if (!window.WidgetIndex.TryGetValue(WidgetId, out int index)) return "";
+        return window.Widgets[index].TextInputValue ?? "";
+    }
+
+    private void AddListBoxInternal(string WindowId, string WidgetId, int Height, string[] Items)
+    {
+        if (!Windows.TryGetValue(WindowId, out var window)) return;
+        if (window.WidgetIndex.ContainsKey(WidgetId)) return;
+        window.WidgetIndex[WidgetId] = window.Widgets.Count;
+        window.Widgets.Add(new Widget
+        {
+            Id = WidgetId, Type = WidgetType.ListBox, Visible = true,
+            ListBoxHeight = Height, ListBoxItems = Items ?? Array.Empty<string>(),
+            ListBoxSelected = new HashSet<int>()
+        });
+    }
+
+    private void SetListBoxItemsInternal(string WindowId, string WidgetId, string[] Items)
+    {
+        if (!Windows.TryGetValue(WindowId, out var window)) return;
+        if (!window.WidgetIndex.TryGetValue(WidgetId, out int index)) return;
+        var widget = window.Widgets[index];
+        widget.ListBoxItems = Items ?? Array.Empty<string>();
+        widget.ListBoxSelected ??= new HashSet<int>();
+        widget.ListBoxSelected.Clear();
+        widget.ListBoxScroll = 0;
+        window.Widgets[index] = widget;
+    }
+
+    private HashSet<int> GetListBoxSelectedInternal(string WindowId, string WidgetId)
+    {
+        if (!Windows.TryGetValue(WindowId, out var window)) return null;
+        if (!window.WidgetIndex.TryGetValue(WidgetId, out int index)) return null;
+        return window.Widgets[index].ListBoxSelected;
+    }
+
+    private void ClearListBoxSelectionInternal(string WindowId, string WidgetId)
+    {
+        if (!Windows.TryGetValue(WindowId, out var window)) return;
+        if (!window.WidgetIndex.TryGetValue(WidgetId, out int index)) return;
+        window.Widgets[index].ListBoxSelected?.Clear();
     }
 
     private void AddToggleInternal(string WindowId, string WidgetId, string Text, bool Initial, Action<bool> Callback)
@@ -357,6 +472,56 @@ public partial class Inspector : core.System
         AddDropdown("inspector", "theme", "Theme", GetThemeNames(), 0, ApplyTheme);
 
         InitializeMenuBar();
+        Renderer.Window.Window.TextInput += OnTextInput;
+    }
+
+    private void OnTextInput(object Sender, TextInputEventArgs Args)
+    {
+        if (FocusedTextInputWindowId == null) return;
+        if (!Windows.TryGetValue(FocusedTextInputWindowId, out var window)) return;
+        if (!window.WidgetIndex.TryGetValue(FocusedTextInputWidgetId, out int index)) return;
+
+        var widget = window.Widgets[index];
+        string value = widget.TextInputValue ?? "";
+        int cursor = Math.Clamp(widget.TextInputCursor, 0, value.Length);
+        char character = Args.Character;
+
+        if (character == '\b')
+        {
+            if (cursor > 0)
+            {
+                value = value.Remove(cursor - 1, 1);
+                cursor--;
+            }
+        }
+        else if (character == 127)
+        {
+            if (cursor < value.Length)
+                value = value.Remove(cursor, 1);
+        }
+        else if (character == '\r' || character == '\n')
+        {
+            widget.TextInputCallback?.Invoke(value);
+            widget.TextInputValue = value;
+            widget.TextInputCursor = cursor;
+            window.Widgets[index] = widget;
+            return;
+        }
+        else if (character == '\t' || character == '\x1b')
+        {
+            if (character == '\x1b') ClearTextInputFocus();
+            return;
+        }
+        else if (!char.IsControl(character))
+        {
+            value = value.Insert(cursor, character.ToString());
+            cursor++;
+        }
+
+        widget.TextInputValue = value;
+        widget.TextInputCursor = cursor;
+        window.Widgets[index] = widget;
+        CursorBlinkTimer = 0;
     }
 
     /// <summary> Recomputes UI scale and triggers layout recalculation on window resize. </summary>
@@ -370,7 +535,7 @@ public partial class Inspector : core.System
     /// <summary> Processes F1 toggle, mouse input, window dragging, slider dragging, and dropdown interaction. </summary>
     public override void Update()
     {
-        if (!LayoutDone && !Dragging)
+        if (!LayoutDone && !Dragging && !Resizing)
         {
             AutoPositionAll();
             LayoutDone = true;
@@ -386,6 +551,9 @@ public partial class Inspector : core.System
 
         if (!GlobalVisible)
             return;
+
+        CursorBlinkTimer += (float)(GameTime?.ElapsedGameTime.TotalSeconds ?? 0.016);
+        UpdateTextInputKeys(keyboard);
 
         var currentMouse = Mouse.GetState();
         var virtualMouse = ScreenToVirtual(new Vector2(currentMouse.X, currentMouse.Y));
@@ -425,11 +593,28 @@ public partial class Inspector : core.System
             Dragging = false;
         }
 
+        if (Resizing && leftHeld)
+        {
+            if (Windows.TryGetValue(ResizeWindowId, out var resizeWin))
+            {
+                float deltaX = virtualMouse.X - ResizeStartMouse.X;
+                float deltaY = virtualMouse.Y - ResizeStartMouse.Y;
+                resizeWin.Size = new Vector2(Math.Max(MinWindowWidth, ResizeStartWidth + deltaX), resizeWin.Size.Y);
+                resizeWin.ResizedHeight = Math.Max(MinWindowHeight, ResizeStartHeight + deltaY);
+            }
+            MouseOverUI = true;
+        }
+        else if (Resizing && leftReleased)
+        {
+            Resizing = false;
+        }
+
         ComputeAllLayouts();
+
+        int scrollDelta = currentMouse.ScrollWheelValue - PrevMouse.ScrollWheelValue;
 
         if (OpenDropdownWindowId != null)
         {
-            int scrollDelta = currentMouse.ScrollWheelValue - PrevMouse.ScrollWheelValue;
             if (scrollDelta != 0 && OpenDropdownPopupBounds.Contains((int)virtualMouse.X, (int)virtualMouse.Y))
             {
                 int maxScroll = Math.Max(0, DropdownTotalOptions - MaxVisibleDropdownItems);
@@ -438,7 +623,10 @@ public partial class Inspector : core.System
             }
         }
 
-        if (!Dragging && !DraggingSlider && OpenDropdownWindowId != null && leftPressed)
+        if (scrollDelta != 0)
+            HandleListBoxScroll(virtualMouse, scrollDelta);
+
+        if (!Dragging && !DraggingSlider && !Resizing && OpenDropdownWindowId != null && leftPressed)
         {
             if (OpenDropdownPopupBounds.Contains((int)virtualMouse.X, (int)virtualMouse.Y))
             {
@@ -453,7 +641,7 @@ public partial class Inspector : core.System
             return;
         }
 
-        if (!Dragging && !DraggingSlider)
+        if (!Dragging && !DraggingSlider && !Resizing)
         {
             for (int i = RenderOrder.Count - 1; i >= 0; i--)
             {
@@ -480,13 +668,35 @@ public partial class Inspector : core.System
                         break;
                     }
 
+                    if (window.Resizable)
+                    {
+                        var resizeBounds = new Rectangle(
+                            window.WindowBounds.Right - ResizeHandleSize,
+                            window.WindowBounds.Bottom - ResizeHandleSize,
+                            ResizeHandleSize, ResizeHandleSize);
+                        if (resizeBounds.Contains((int)virtualMouse.X, (int)virtualMouse.Y))
+                        {
+                            Resizing = true;
+                            ResizeWindowId = window.Id;
+                            ResizeStartMouse = virtualMouse;
+                            ResizeStartWidth = window.Size.X;
+                            ResizeStartHeight = window.ResizedHeight > 0 ? window.ResizedHeight : ComputeWindowHeight(window);
+                            BringToFront(window);
+                            break;
+                        }
+                    }
+
                     BringToFront(window);
+                    ClearTextInputFocus();
                     HandleWidgetPress(window, virtualMouse);
                     break;
                 }
 
                 break;
             }
+
+            if (leftPressed && !MouseOverUI)
+                ClearTextInputFocus();
         }
 
         if (OpenDropdownWindowId != null && OpenDropdownPopupBounds.Contains((int)virtualMouse.X, (int)virtualMouse.Y))
@@ -494,6 +704,50 @@ public partial class Inspector : core.System
 
         PrevMouse = currentMouse;
     }
+
+    private void UpdateTextInputKeys(KeyboardState Keyboard)
+    {
+        if (FocusedTextInputWindowId == null) return;
+        if (!Windows.TryGetValue(FocusedTextInputWindowId, out var window)) return;
+        if (!window.WidgetIndex.TryGetValue(FocusedTextInputWidgetId, out int index)) return;
+
+        var widget = window.Widgets[index];
+        string value = widget.TextInputValue ?? "";
+        int cursor = Math.Clamp(widget.TextInputCursor, 0, value.Length);
+        bool changed = false;
+
+        if (Keyboard.IsKeyDown(Keys.Left) && PrevKeyState.IsKeyUp(Keys.Left) && cursor > 0)
+        { cursor--; changed = true; }
+        if (Keyboard.IsKeyDown(Keys.Right) && PrevKeyState.IsKeyUp(Keys.Right) && cursor < value.Length)
+        { cursor++; changed = true; }
+        if (Keyboard.IsKeyDown(Keys.Home) && PrevKeyState.IsKeyUp(Keys.Home))
+        { cursor = 0; changed = true; }
+        if (Keyboard.IsKeyDown(Keys.End) && PrevKeyState.IsKeyUp(Keys.End))
+        { cursor = value.Length; changed = true; }
+
+        if (changed)
+        {
+            widget.TextInputCursor = cursor;
+            window.Widgets[index] = widget;
+            CursorBlinkTimer = 0;
+        }
+    }
+
+    private void FocusTextInput(string WindowId, string WidgetId)
+    {
+        FocusedTextInputWindowId = WindowId;
+        FocusedTextInputWidgetId = WidgetId;
+        CursorBlinkTimer = 0;
+    }
+
+    private void ClearTextInputFocus()
+    {
+        FocusedTextInputWindowId = null;
+        FocusedTextInputWidgetId = null;
+    }
+
+    private bool IsTextInputFocused(string WindowId, string WidgetId)
+        => FocusedTextInputWindowId == WindowId && FocusedTextInputWidgetId == WidgetId;
 
     private void HandleWidgetPress(WindowData Window, Vector2 Mouse)
     {
@@ -531,12 +785,67 @@ public partial class Inspector : core.System
                     widget.ButtonCallback?.Invoke();
                     return;
 
+                case WidgetType.TextInput:
+                    FocusTextInput(Window.Id, widget.Id);
+                    widget.TextInputCursor = (widget.TextInputValue ?? "").Length;
+                    Window.Widgets[i] = widget;
+                    return;
+
+                case WidgetType.ListBox:
+                    HandleListBoxClick(Window, i, Mouse);
+                    return;
+
                 case WidgetType.Dropdown:
                     if (OpenDropdownWindowId == Window.Id && OpenDropdownWidgetId == widget.Id)
                         CloseDropdown();
                     else
                         OpenDropdown(Window.Id, widget.Id, widget);
                     return;
+            }
+        }
+    }
+
+    private void HandleListBoxClick(WindowData Window, int WidgetIndex, Vector2 Mouse)
+    {
+        var widget = Window.Widgets[WidgetIndex];
+        if (widget.ListBoxItems == null || widget.ListBoxItems.Length == 0) return;
+
+        int itemHeight = (int)(LineHeight + 4);
+        int contentY = widget.Bounds.Y + 4;
+        int localY = (int)Mouse.Y - contentY;
+        if (localY < 0) return;
+
+        int clickedIndex = localY / itemHeight + widget.ListBoxScroll;
+        if (clickedIndex < 0 || clickedIndex >= widget.ListBoxItems.Length) return;
+
+        widget.ListBoxSelected ??= new HashSet<int>();
+        if (widget.ListBoxSelected.Contains(clickedIndex))
+            widget.ListBoxSelected.Remove(clickedIndex);
+        else
+            widget.ListBoxSelected.Add(clickedIndex);
+        Window.Widgets[WidgetIndex] = widget;
+    }
+
+    private void HandleListBoxScroll(Vector2 Mouse, int ScrollDelta)
+    {
+        for (int i = RenderOrder.Count - 1; i >= 0; i--)
+        {
+            var window = RenderOrder[i];
+            if (!window.Visible) continue;
+            for (int j = 0; j < window.Widgets.Count; j++)
+            {
+                var widget = window.Widgets[j];
+                if (widget.Type != WidgetType.ListBox || !widget.Visible) continue;
+                if (!widget.Bounds.Contains((int)Mouse.X, (int)Mouse.Y)) continue;
+
+                int itemHeight = (int)(LineHeight + 4);
+                int maxVisible = (widget.Bounds.Height - 8) / itemHeight;
+                int itemCount = widget.ListBoxItems?.Length ?? 0;
+                int maxScroll = Math.Max(0, itemCount - maxVisible);
+                widget.ListBoxScroll = Math.Clamp(widget.ListBoxScroll - Math.Sign(ScrollDelta), 0, maxScroll);
+                window.Widgets[j] = widget;
+                MouseOverUI = true;
+                return;
             }
         }
     }
@@ -596,6 +905,7 @@ public partial class Inspector : core.System
     /// <summary> Disposes blur render targets and clears the singleton instance. </summary>
     public override void Dispose()
     {
+        Renderer.Window.Window.TextInput -= OnTextInput;
         BlurRT_A?.Dispose();
         BlurRT_B?.Dispose();
         if (Instance == this)

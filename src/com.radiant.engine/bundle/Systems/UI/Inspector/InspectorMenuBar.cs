@@ -60,6 +60,46 @@ public partial class Inspector
         var workspace = new MenuData { Id = "workspace", Label = "Workspaces" };
         Menus.Add(workspace);
 
+        var entities = new MenuData { Id = "entities", Label = "Entities" };
+        entities.Items.Add(new MenuItem
+        {
+            Id = "entity_inspector",
+            Label = "Open Entity Inspector",
+            Type = MenuItemType.Action,
+            ActionCallback = () =>
+            {
+                if (!Windows.ContainsKey("entity_inspector"))
+                {
+                    CreateWindow("entity_inspector", "Entity Inspector", 50);
+                    if (Windows.TryGetValue("entity_inspector", out var entityInspectorWindow))
+                        entityInspectorWindow.Resizable = true;
+                    AddSectionLabel("entity_inspector", "find_section", "Find Entity");
+                    AddTextInput("entity_inspector", "find_input", "Search by ID...", (value) => RefreshEntityList(), 0.8f);
+                    AddButton("entity_inspector", "find_btn", "", () => RefreshEntityList(), 0.2f);
+                    AddListBox("entity_inspector", "results_list", 500);
+                    AddButton("entity_inspector", "delete_btn", "trash", () => DeleteSelectedEntities());
+                    RefreshEntityList();
+                }
+                ShowWindow("entity_inspector");
+            }
+        });
+        Menus.Add(entities);
+
+        var components = new MenuData { Id = "components", Label = "Components" };
+        components.Items.Add(new MenuItem
+        {
+            Id = "component_registry",
+            Label = "Open Component Registry",
+            Type = MenuItemType.Action,
+            ActionCallback = () =>
+            {
+                if (!Windows.ContainsKey("component_registry"))
+                    CreateWindow("component_registry", "Component Registry", 52);
+                ShowWindow("component_registry");
+            }
+        });
+        Menus.Add(components);
+
         Menus.Add(about);
 
         RebuildWorkspaceMenu();
@@ -366,6 +406,118 @@ public partial class Inspector
                 float fitLineHeight = Renderer.MeasureString("Inter", fitSize, fitText).Y;
                 var textPos = new Vector2(textStartX, itemRect.Y + (itemRect.Height - fitLineHeight) / 2);
                 Renderer.DrawString("Inter", fitSize, fitText, textPos, TextColor);
+            }
+        }
+    }
+
+    private readonly List<int> EntityIdCache = new();
+
+    private void RefreshEntityList()
+    {
+        EntityIdCache.Clear();
+        Scene.ECS.GetAllEntityIds(EntityIdCache);
+
+        string filter = GetTextInputValue("entity_inspector", "find_input");
+        List<string> items = new();
+        foreach (int id in EntityIdCache)
+        {
+            if (filter.Length > 0 && !id.ToString().Contains(filter)) continue;
+            items.Add($"Entity {id}");
+        }
+        SetListBoxItems("entity_inspector", "results_list", items.ToArray());
+    }
+
+    private void DeleteSelectedEntities()
+    {
+        var selected = GetListBoxSelected("entity_inspector", "results_list");
+        if (selected == null || selected.Count == 0) return;
+
+        string filter = GetTextInputValue("entity_inspector", "find_input");
+        List<int> filteredIds = new();
+        foreach (int id in EntityIdCache)
+        {
+            if (filter.Length > 0 && !id.ToString().Contains(filter)) continue;
+            filteredIds.Add(id);
+        }
+
+        List<int> toDelete = new();
+        foreach (int index in selected)
+        {
+            if (index >= 0 && index < filteredIds.Count)
+                toDelete.Add(filteredIds[index]);
+        }
+
+        foreach (int entityId in toDelete)
+            Scene.ECS.ScheduleDestroy(entityId);
+
+        RefreshEntityList();
+    }
+
+    private List<int> GetSelectedEntityIds()
+    {
+        var selected = GetListBoxSelected("entity_inspector", "results_list");
+        if (selected == null || selected.Count == 0) return null;
+
+        string filter = GetTextInputValue("entity_inspector", "find_input");
+        List<int> filteredIds = new();
+        foreach (int id in EntityIdCache)
+        {
+            if (filter.Length > 0 && !id.ToString().Contains(filter)) continue;
+            filteredIds.Add(id);
+        }
+
+        List<int> result = new();
+        foreach (int index in selected)
+        {
+            if (index >= 0 && index < filteredIds.Count)
+                result.Add(filteredIds[index]);
+        }
+        return result.Count > 0 ? result : null;
+    }
+
+    private static readonly Color GizmoSelectionColor = new(0, 255, 100, 200);
+
+    public override void Render()
+    {
+        if (!GlobalVisible) return;
+        if (!IsWindowVisible("entity_inspector")) return;
+
+        var gizmos = Scene.ECS.GetSystem<GizmosRenderer>();
+        if (gizmos == null) return;
+
+        var selectedIds = GetSelectedEntityIds();
+        if (selectedIds == null) return;
+
+        foreach (int entityId in selectedIds)
+        {
+            if (!Scene.ECS.IsAlive(entityId)) continue;
+            ref var transform = ref Scene.ECS.GetComponent<Transform>(entityId);
+            var position = new Vector2(transform.Position.X, transform.Position.Y);
+
+            if (Scene.ECS.HasComponent<Circle2D>(entityId))
+            {
+                ref var circle = ref Scene.ECS.GetComponent<Circle2D>(entityId);
+                gizmos.AddGizmoCircle(position, circle.Radius + 4f, GizmoSelectionColor);
+            }
+            else if (Scene.ECS.HasComponent<Rectangle2D>(entityId))
+            {
+                ref var rectangle = ref Scene.ECS.GetComponent<Rectangle2D>(entityId);
+                var rect = new Rectangle(
+                    (int)(position.X - rectangle.Size.X / 2 - 4),
+                    (int)(position.Y - rectangle.Size.Y / 2 - 4),
+                    (int)(rectangle.Size.X + 8),
+                    (int)(rectangle.Size.Y + 8));
+                gizmos.AddGizmoRect(rect, GizmoSelectionColor);
+            }
+            else if (Scene.ECS.HasComponent<Triangle2D>(entityId))
+            {
+                ref var triangle = ref Scene.ECS.GetComponent<Triangle2D>(entityId);
+                float radius = Math.Max(triangle.Size.X, triangle.Size.Y) / 2f + 4f;
+                gizmos.AddGizmoCircle(position, radius, GizmoSelectionColor);
+            }
+            else
+            {
+                gizmos.AddGizmoCircle(position, 12f, GizmoSelectionColor);
             }
         }
     }

@@ -180,6 +180,8 @@ public class Renderer : IDisposable
     private Dictionary<int, Texture2D> CircleTextureCache = new();
     private Dictionary<int, Texture2D> TriangleTextureCache = new();
     private Dictionary<int, Texture2D> CheckmarkTextureCache = new();
+    private Dictionary<int, Texture2D> SearchTextureCache = new();
+    private Dictionary<int, Texture2D> TrashTextureCache = new();
     private Dictionary<int, Texture2D> RoundedRectCache = new();
     private VertexBuffer QuadVertexBuffer;
     private IndexBuffer QuadIndexBuffer;
@@ -1538,6 +1540,127 @@ public class Renderer : IDisposable
             float dx = p.X - (v0.X + t * seg.X);
             float dy = p.Y - (v0.Y + t * seg.Y);
             return MathF.Sqrt(dx * dx + dy * dy);
+        }
+    }
+
+    /// <summary>
+    /// Gets or creates a cached anti-aliased magnifying glass (search) icon texture.
+    /// </summary>
+    /// <param name="size">Texture size in pixels (square).</param>
+    /// <returns>Cached white search icon texture with premultiplied alpha.</returns>
+    public Texture2D GetSearchTexture(int size)
+    {
+        if (size < 8) size = 8;
+        if (!SearchTextureCache.TryGetValue(size, out var texture))
+        {
+            texture = new Texture2D(Device, size, size);
+            var data = new Color[size * size];
+            float s = size;
+            float cx = 0.42f * s, cy = 0.42f * s;
+            float radius = 0.26f * s;
+            float thickness = s * 0.1f;
+            Vector2 handleStart = new(cx + radius * 0.707f, cy + radius * 0.707f);
+            Vector2 handleEnd = new(0.85f * s, 0.85f * s);
+
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    Vector2 p = new(x + 0.5f, y + 0.5f);
+                    float dx = p.X - cx, dy = p.Y - cy;
+                    float dist = MathF.Sqrt(dx * dx + dy * dy);
+                    float ringDist = MathF.Abs(dist - radius) - thickness * 0.5f;
+                    float ringAlpha = MathHelper.Clamp(0.5f - ringDist, 0f, 1f);
+
+                    Vector2 seg = handleEnd - handleStart;
+                    float len2 = seg.X * seg.X + seg.Y * seg.Y;
+                    float t = MathHelper.Clamp(((p.X - handleStart.X) * seg.X + (p.Y - handleStart.Y) * seg.Y) / len2, 0f, 1f);
+                    float hx = p.X - (handleStart.X + t * seg.X);
+                    float hy = p.Y - (handleStart.Y + t * seg.Y);
+                    float handleDist = MathF.Sqrt(hx * hx + hy * hy) - thickness * 0.45f;
+                    float handleAlpha = MathHelper.Clamp(0.5f - handleDist, 0f, 1f);
+
+                    float alpha = MathF.Max(ringAlpha, handleAlpha);
+                    byte val = (byte)(alpha * 255f + 0.5f);
+                    data[y * size + x] = new Color(val, val, val, val);
+                }
+            }
+            texture.SetData(data);
+            SearchTextureCache[size] = texture;
+        }
+        return texture;
+    }
+
+    /// <summary>
+    /// Gets or creates a cached anti-aliased trash can icon texture.
+    /// </summary>
+    /// <param name="size">Texture size in pixels (square).</param>
+    /// <returns>Cached white trash icon texture with premultiplied alpha.</returns>
+    public Texture2D GetTrashTexture(int size)
+    {
+        if (size < 8) size = 8;
+        if (!TrashTextureCache.TryGetValue(size, out var texture))
+        {
+            texture = new Texture2D(Device, size, size);
+            var data = new Color[size * size];
+            float s = size;
+            float thickness = s * 0.08f;
+
+            float lidY = 0.18f * s, lidBottom = 0.28f * s;
+            float lidLeft = 0.15f * s, lidRight = 0.85f * s;
+            float handleLeft = 0.38f * s, handleRight = 0.62f * s;
+            float handleTop = 0.10f * s;
+            float bodyTop = lidBottom, bodyBottom = 0.88f * s;
+            float bodyLeft = 0.22f * s, bodyRight = 0.78f * s;
+
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float px = x + 0.5f, py = y + 0.5f;
+                    float alpha = 0;
+
+                    float lidDist = RectDist(px, py, lidLeft, lidY, lidRight, lidBottom);
+                    alpha = MathF.Max(alpha, MathHelper.Clamp(thickness * 0.5f - lidDist + 0.5f, 0f, 1f));
+
+                    float handleDist = RectDist(px, py, handleLeft, handleTop, handleRight, lidY + thickness * 0.5f);
+                    alpha = MathF.Max(alpha, MathHelper.Clamp(thickness * 0.4f - handleDist + 0.5f, 0f, 1f));
+
+                    float bodyDist = RectBorderDist(px, py, bodyLeft, bodyTop, bodyRight, bodyBottom, thickness);
+                    alpha = MathF.Max(alpha, MathHelper.Clamp(0.5f - bodyDist, 0f, 1f));
+
+                    for (int stripe = 0; stripe < 3; stripe++)
+                    {
+                        float stripeX = bodyLeft + (bodyRight - bodyLeft) * (stripe + 1) / 4f;
+                        float stripeTop = bodyTop + thickness + 2;
+                        float stripeBot = bodyBottom - thickness - 2;
+                        float dx = MathF.Abs(px - stripeX);
+                        float dy = MathF.Max(stripeTop - py, py - stripeBot);
+                        float stripeDist = MathF.Max(dx, dy);
+                        alpha = MathF.Max(alpha, MathHelper.Clamp(thickness * 0.35f - stripeDist + 0.5f, 0f, 1f));
+                    }
+
+                    byte val = (byte)(MathHelper.Clamp(alpha, 0f, 1f) * 255f + 0.5f);
+                    data[y * size + x] = new Color(val, val, val, val);
+                }
+            }
+            texture.SetData(data);
+            TrashTextureCache[size] = texture;
+        }
+        return texture;
+
+        static float RectDist(float px, float py, float left, float top, float right, float bottom)
+        {
+            float dx = MathF.Max(left - px, px - right);
+            float dy = MathF.Max(top - py, py - bottom);
+            return MathF.Max(dx, dy);
+        }
+
+        static float RectBorderDist(float px, float py, float left, float top, float right, float bottom, float thick)
+        {
+            float outer = -RectDist(px, py, left, top, right, bottom);
+            float inner = -RectDist(px, py, left + thick, top + thick, right - thick, bottom - thick);
+            return -MathF.Min(outer, -inner);
         }
     }
 

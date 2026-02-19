@@ -60,23 +60,61 @@ public partial class Inspector
         }
     }
 
+    private int GetWidgetHeight(Widget Widget, int ContentWidth) => Widget.Type switch
+    {
+        WidgetType.Slider => WidgetHeight + 18,
+        WidgetType.Label => MeasureWrappedHeight(Widget.Text, ContentWidth),
+        WidgetType.ListBox => Widget.ListBoxHeight,
+        _ => WidgetHeight
+    };
+
+    private bool IsNextWidgetInline(WindowData Window, int CurrentIndex)
+    {
+        for (int j = CurrentIndex + 1; j < Window.Widgets.Count; j++)
+        {
+            if (!Window.Widgets[j].Visible) continue;
+            return Window.Widgets[j].InlineRatio > 0;
+        }
+        return false;
+    }
+
     /// <summary> Calculates the total pixel height of a window based on its visible widgets. </summary>
     private int ComputeWindowHeight(WindowData Window)
     {
+        if (Window.Resizable && Window.ResizedHeight > 0)
+            return (int)Window.ResizedHeight;
+
         int contentWidth = (int)Window.Size.X - Padding * 2;
         int height = TitleBarHeight + WidgetSpacing;
+        int inlineMaxH = 0;
+        bool inRow = false;
 
         for (int i = 0; i < Window.Widgets.Count; i++)
         {
             var widget = Window.Widgets[i];
             if (!widget.Visible) continue;
 
-            int widgetH = widget.Type switch
+            int widgetH = GetWidgetHeight(widget, contentWidth);
+
+            if (widget.InlineRatio > 0)
             {
-                WidgetType.Slider => WidgetHeight + 18,
-                WidgetType.Label => MeasureWrappedHeight(widget.Text, contentWidth),
-                _ => WidgetHeight
-            };
+                inlineMaxH = Math.Max(inlineMaxH, widgetH);
+                inRow = true;
+                if (!IsNextWidgetInline(Window, i))
+                {
+                    height += inlineMaxH + WidgetSpacing;
+                    inlineMaxH = 0;
+                    inRow = false;
+                }
+                continue;
+            }
+
+            if (inRow)
+            {
+                height += inlineMaxH + WidgetSpacing;
+                inlineMaxH = 0;
+                inRow = false;
+            }
 
             bool tightLabel = widget.Type == WidgetType.Label && !widget.Section;
             bool nextIsTightLabel = false;
@@ -90,7 +128,70 @@ public partial class Inspector
             height += widgetH + (tightLabel && nextIsTightLabel ? LabelSpacing : WidgetSpacing);
         }
 
+        if (inRow) height += inlineMaxH + WidgetSpacing;
+
         return height + Padding;
+    }
+
+    private int ComputeDynamicListBoxHeight(WindowData Window)
+    {
+        int contentWidth = (int)Window.Size.X - Padding * 2;
+        int fixedHeight = TitleBarHeight + WidgetSpacing + Padding;
+        int listBoxCount = 0;
+        int inlineMaxH = 0;
+        bool inRow = false;
+
+        for (int i = 0; i < Window.Widgets.Count; i++)
+        {
+            var widget = Window.Widgets[i];
+            if (!widget.Visible) continue;
+
+            if (widget.Type == WidgetType.ListBox)
+            {
+                listBoxCount++;
+                fixedHeight += WidgetSpacing;
+                continue;
+            }
+
+            int widgetH = GetWidgetHeight(widget, contentWidth);
+
+            if (widget.InlineRatio > 0)
+            {
+                inlineMaxH = Math.Max(inlineMaxH, widgetH);
+                inRow = true;
+                if (!IsNextWidgetInline(Window, i))
+                {
+                    fixedHeight += inlineMaxH + WidgetSpacing;
+                    inlineMaxH = 0;
+                    inRow = false;
+                }
+                continue;
+            }
+
+            if (inRow)
+            {
+                fixedHeight += inlineMaxH + WidgetSpacing;
+                inlineMaxH = 0;
+                inRow = false;
+            }
+
+            bool tightLabel = widget.Type == WidgetType.Label && !widget.Section;
+            bool nextIsTightLabel = false;
+            for (int j = i + 1; j < Window.Widgets.Count; j++)
+            {
+                if (!Window.Widgets[j].Visible) continue;
+                nextIsTightLabel = Window.Widgets[j].Type == WidgetType.Label && !Window.Widgets[j].Section;
+                break;
+            }
+
+            fixedHeight += widgetH + (tightLabel && nextIsTightLabel ? LabelSpacing : WidgetSpacing);
+        }
+
+        if (inRow) fixedHeight += inlineMaxH + WidgetSpacing;
+
+        int remaining = (int)Window.ResizedHeight - fixedHeight;
+        if (listBoxCount > 0) remaining /= listBoxCount;
+        return Math.Max(80, remaining);
     }
 
     /// <summary> Recomputes layout bounds for all visible windows in render order. </summary>
@@ -110,23 +211,48 @@ public partial class Inspector
         int posY = (int)Window.Position.Y;
         int windowWidth = (int)Window.Size.X;
 
+        int dynamicListBoxHeight = (Window.Resizable && Window.ResizedHeight > 0)
+            ? ComputeDynamicListBoxHeight(Window) : -1;
+
         Window.TitleBarBounds = new Rectangle(posX, posY, windowWidth, TitleBarHeight);
         Window.CloseBounds = new Rectangle(posX + windowWidth - CloseButtonWidth - 6, posY + (TitleBarHeight - CloseButtonSize) / 2, CloseButtonWidth, CloseButtonSize);
 
         int contentWidth = windowWidth - Padding * 2;
         int widgetY = posY + TitleBarHeight + WidgetSpacing;
+        int inlineX = posX + Padding;
+        int inlineMaxH = 0;
+        bool inRow = false;
 
         for (int i = 0; i < Window.Widgets.Count; i++)
         {
             var widget = Window.Widgets[i];
             if (!widget.Visible) continue;
 
-            int widgetH = widget.Type switch
+            int widgetH = (widget.Type == WidgetType.ListBox && dynamicListBoxHeight > 0)
+                ? dynamicListBoxHeight : GetWidgetHeight(widget, contentWidth);
+
+            if (widget.InlineRatio > 0)
             {
-                WidgetType.Slider => WidgetHeight + 18,
-                WidgetType.Label => MeasureWrappedHeight(widget.Text, contentWidth),
-                _ => WidgetHeight
-            };
+                if (!inRow) { inlineX = posX + Padding; inlineMaxH = 0; inRow = true; }
+                int widgetWidth = (int)(contentWidth * widget.InlineRatio) - InlineGap / 2;
+                widget.Bounds = new Rectangle(inlineX, widgetY, widgetWidth, widgetH);
+                Window.Widgets[i] = widget;
+                inlineX += widgetWidth + InlineGap;
+                inlineMaxH = Math.Max(inlineMaxH, widgetH);
+
+                if (!IsNextWidgetInline(Window, i))
+                {
+                    widgetY += inlineMaxH + WidgetSpacing;
+                    inRow = false;
+                }
+                continue;
+            }
+
+            if (inRow)
+            {
+                widgetY += inlineMaxH + WidgetSpacing;
+                inRow = false;
+            }
 
             widget.Bounds = new Rectangle(posX + Padding, widgetY, contentWidth, widgetH);
             Window.Widgets[i] = widget;
@@ -143,7 +269,10 @@ public partial class Inspector
             widgetY += widgetH + (tightLabel && nextIsTightLabel ? LabelSpacing : WidgetSpacing);
         }
 
-        int totalHeight = widgetY - posY + Padding;
+        if (inRow) widgetY += inlineMaxH + WidgetSpacing;
+
+        int totalHeight = (Window.Resizable && Window.ResizedHeight > 0)
+            ? (int)Window.ResizedHeight : widgetY - posY + Padding;
         Window.WindowBounds = new Rectangle(posX, posY, windowWidth, totalHeight);
     }
 

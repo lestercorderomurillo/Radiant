@@ -5,7 +5,7 @@ using Microsoft.Xna.Framework;
 namespace com.radiant.engine.bundle;
 
 /// <summary> Available widget types for Inspector windows. </summary>
-public enum WidgetType { Label, Button, Toggle, Slider, Dropdown }
+public enum WidgetType { Label, Button, Toggle, Slider, Dropdown, TextInput, ListBox }
 
 /// <summary> A single UI widget inside an Inspector window. Struct for value-type list storage. </summary>
 public struct Widget
@@ -31,6 +31,18 @@ public struct Widget
     public string[] DropdownOptions;
     public int DropdownSelected;
     public Action<int> DropdownCallback;
+
+    public string TextInputValue;
+    public string TextInputPlaceholder;
+    public Action<string> TextInputCallback;
+    public int TextInputCursor;
+
+    public int ListBoxHeight;
+    public string[] ListBoxItems;
+    public HashSet<int> ListBoxSelected;
+    public int ListBoxScroll;
+
+    public float InlineRatio;
 }
 
 /// <summary> Color palette for an Inspector theme. All 15 slots must be set. </summary>
@@ -79,6 +91,8 @@ public class WindowData
     public int CreationIndex;
     public int LayoutOrder;
     public bool AutoPosition = true;
+    public bool Resizable;
+    public float ResizedHeight;
 
     public List<Widget> Widgets = new();
     public Dictionary<string, int> WidgetIndex = new();

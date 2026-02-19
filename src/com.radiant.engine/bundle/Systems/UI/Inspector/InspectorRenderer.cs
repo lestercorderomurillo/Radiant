@@ -144,8 +144,24 @@ public partial class Inspector
                 case WidgetType.Button: DrawButton(widget, Mouse, HoverBlocked); break;
                 case WidgetType.Toggle: DrawToggle(widget); break;
                 case WidgetType.Slider: DrawSlider(widget); break;
+                case WidgetType.TextInput: DrawTextInput(widget, Mouse, HoverBlocked, Window.Id); break;
+                case WidgetType.ListBox: DrawListBox(widget); break;
                 case WidgetType.Dropdown: DrawDropdown(widget, Mouse, HoverBlocked, Window.Id); break;
             }
+        }
+
+        if (Window.Resizable)
+        {
+            var solid = Renderer.GetSolidTexture(Color.White);
+            Color gripColor = new Color(TextColor.R, TextColor.G, TextColor.B, (byte)160);
+            int bx = Window.WindowBounds.Right - 5;
+            int by = Window.WindowBounds.Bottom - 5;
+            Renderer.DrawSprite(solid, new Rectangle(bx, by, 2, 2), gripColor);
+            Renderer.DrawSprite(solid, new Rectangle(bx - 5, by, 2, 2), gripColor);
+            Renderer.DrawSprite(solid, new Rectangle(bx, by - 5, 2, 2), gripColor);
+            Renderer.DrawSprite(solid, new Rectangle(bx - 10, by, 2, 2), gripColor);
+            Renderer.DrawSprite(solid, new Rectangle(bx - 5, by - 5, 2, 2), gripColor);
+            Renderer.DrawSprite(solid, new Rectangle(bx, by - 10, 2, 2), gripColor);
         }
     }
 
@@ -198,11 +214,26 @@ public partial class Inspector
             DrawText(currentLine, new Vector2(Widget.Bounds.X + 4, currentY), labelColor);
     }
 
-    /// <summary> Draws a button widget with centered text and hover highlight. </summary>
+    /// <summary> Draws a button widget with centered text/icon and hover highlight. </summary>
     private void DrawButton(Widget Widget, Vector2 Mouse, bool HoverBlocked)
     {
-        bool hovered = !HoverBlocked && Widget.Bounds.Contains((int)Mouse.X, (int)Mouse.Y);
+        bool hovered = !Widget.Disabled && !HoverBlocked && Widget.Bounds.Contains((int)Mouse.X, (int)Mouse.Y);
         Renderer.DrawRoundedRect(Widget.Bounds, hovered ? ButtonHover : ButtonColor, CornerRadius);
+
+        if (string.IsNullOrEmpty(Widget.Text) || Widget.Text == "trash")
+        {
+            int iconSize = Math.Min(Widget.Bounds.Width, Widget.Bounds.Height) - 16;
+            if (iconSize < 4) iconSize = 4;
+            var iconTex = Widget.Text == "trash"
+                ? Renderer.GetTrashTexture(iconSize * 4)
+                : Renderer.GetSearchTexture(iconSize * 4);
+            var iconRect = new Rectangle(
+                Widget.Bounds.X + (Widget.Bounds.Width - iconSize) / 2,
+                Widget.Bounds.Y + (Widget.Bounds.Height - iconSize) / 2,
+                iconSize, iconSize);
+            Renderer.DrawSprite(iconTex, iconRect, Widget.Text == "trash" ? CloseHover : TextColor);
+            return;
+        }
 
         var textSize = MeasureText(Widget.Text);
         var textPos = new Vector2(
@@ -257,6 +288,112 @@ public partial class Inspector
         int handleY = trackY + SliderTrackHeight / 2 - SliderHandleSize / 2;
         var handleRect = new Rectangle(handleX, handleY, SliderHandleSize, SliderHandleSize);
         Renderer.DrawSprite(Renderer.GetCircleTexture(64), handleRect, SliderHandle);
+    }
+
+    /// <summary> Draws a text input field with placeholder, cursor, and border. </summary>
+    private void DrawTextInput(Widget Widget, Vector2 Mouse, bool HoverBlocked, string WindowId)
+    {
+        bool focused = IsTextInputFocused(WindowId, Widget.Id);
+        bool hovered = !HoverBlocked && Widget.Bounds.Contains((int)Mouse.X, (int)Mouse.Y);
+
+        var borderRect = new Rectangle(Widget.Bounds.X - 1, Widget.Bounds.Y - 1, Widget.Bounds.Width + 2, Widget.Bounds.Height + 2);
+        byte borderAlpha = focused ? (byte)120 : (byte)50;
+        float borderFactor = borderAlpha / 255f;
+        var borderColor = focused
+            ? new Color((byte)(SliderFill.R * borderFactor), (byte)(SliderFill.G * borderFactor), (byte)(SliderFill.B * borderFactor), borderAlpha)
+            : new Color((byte)(TextColor.R * borderFactor), (byte)(TextColor.G * borderFactor), (byte)(TextColor.B * borderFactor), borderAlpha);
+        Renderer.DrawRoundedRect(borderRect, borderColor, CornerRadius + 1);
+
+        Color bgColor = hovered || focused ? ButtonHover : ButtonColor;
+        Renderer.DrawRoundedRect(Widget.Bounds, bgColor, CornerRadius);
+
+        string value = Widget.TextInputValue ?? "";
+        int textPadding = Padding / 2 + 4;
+        float maxTextWidth = Widget.Bounds.Width - textPadding * 2;
+
+        if (value.Length == 0 && !focused)
+        {
+            string placeholder = Widget.TextInputPlaceholder ?? "";
+            placeholder = TruncateText(placeholder, maxTextWidth);
+            var placeholderSize = MeasureText(placeholder);
+            var placeholderPos = new Vector2(Widget.Bounds.X + textPadding, Widget.Bounds.Y + (Widget.Bounds.Height - placeholderSize.Y) / 2);
+            DrawText(placeholder, placeholderPos, LabelDim);
+            return;
+        }
+
+        string displayText = TruncateText(value, maxTextWidth);
+        var textSize = MeasureText(displayText);
+        var textPos = new Vector2(Widget.Bounds.X + textPadding, Widget.Bounds.Y + (Widget.Bounds.Height - textSize.Y) / 2);
+        DrawText(displayText, textPos, TextColor);
+
+        if (focused && ((int)(CursorBlinkTimer / CursorBlinkRate) % 2 == 0))
+        {
+            int cursor = Math.Clamp(Widget.TextInputCursor, 0, value.Length);
+            string beforeCursor = cursor <= displayText.Length ? displayText[..cursor] : displayText;
+            float cursorX = textPos.X + MeasureText(beforeCursor).X;
+            var solid = Renderer.GetSolidTexture(Color.White);
+            var cursorRect = new Rectangle((int)cursorX, Widget.Bounds.Y + 8, 2, Widget.Bounds.Height - 16);
+            Renderer.DrawSprite(solid, cursorRect, TextColor);
+        }
+    }
+
+    /// <summary> Draws a list box with selectable items, scroll support, and selection highlights. </summary>
+    private void DrawListBox(Widget Widget)
+    {
+        var borderRect = new Rectangle(Widget.Bounds.X - 1, Widget.Bounds.Y - 1, Widget.Bounds.Width + 2, Widget.Bounds.Height + 2);
+        byte borderAlpha = 40;
+        float borderFactor = borderAlpha / 255f;
+        var borderColor = new Color((byte)(TextColor.R * borderFactor), (byte)(TextColor.G * borderFactor), (byte)(TextColor.B * borderFactor), borderAlpha);
+        Renderer.DrawRoundedRect(borderRect, borderColor, CornerRadius + 1);
+        Renderer.DrawRoundedRect(Widget.Bounds, ButtonColor, CornerRadius);
+
+        string[] items = Widget.ListBoxItems;
+        if (items == null || items.Length == 0)
+        {
+            string emptyText = "No results";
+            var emptySize = MeasureText(emptyText);
+            var emptyPos = new Vector2(
+                Widget.Bounds.X + (Widget.Bounds.Width - emptySize.X) / 2,
+                Widget.Bounds.Y + (Widget.Bounds.Height - emptySize.Y) / 2);
+            DrawText(emptyText, emptyPos, LabelDim);
+            return;
+        }
+
+        int itemHeight = (int)(LineHeight + 4);
+        int maxVisible = (Widget.Bounds.Height - 8) / itemHeight;
+        int scrollOffset = Widget.ListBoxScroll;
+        int count = Math.Min(items.Length - scrollOffset, maxVisible);
+        var selected = Widget.ListBoxSelected;
+
+        for (int i = 0; i < count; i++)
+        {
+            int itemIndex = i + scrollOffset;
+            int itemY = Widget.Bounds.Y + 4 + i * itemHeight;
+            bool isSelected = selected != null && selected.Contains(itemIndex);
+
+            if (isSelected)
+            {
+                var highlightRect = new Rectangle(Widget.Bounds.X + 4, itemY, Widget.Bounds.Width - 8, itemHeight);
+                Renderer.DrawRoundedRect(highlightRect, SliderFill, 4);
+            }
+
+            string itemText = TruncateText(items[itemIndex], Widget.Bounds.Width - Padding * 2);
+            DrawText(itemText, new Vector2(Widget.Bounds.X + Padding, itemY), isSelected ? CloseText : TextColor);
+        }
+
+        if (items.Length > maxVisible)
+        {
+            int thumbWidth = 4;
+            int thumbMargin = 3;
+            int thumbX = Widget.Bounds.Right - thumbMargin - thumbWidth;
+            int trackHeight = Widget.Bounds.Height - 8;
+            float thumbRatio = (float)maxVisible / items.Length;
+            int thumbHeight = Math.Max(8, (int)(trackHeight * thumbRatio));
+            int scrollRange = trackHeight - thumbHeight;
+            int maxScroll = Math.Max(1, items.Length - maxVisible);
+            int thumbY = Widget.Bounds.Y + 4 + (int)(scrollRange * ((float)scrollOffset / maxScroll));
+            Renderer.DrawRoundedRect(new Rectangle(thumbX, thumbY, thumbWidth, thumbHeight), SliderFill, thumbWidth / 2);
+        }
     }
 
     /// <summary> Draws a dropdown widget showing the selected option with a triangle indicator. </summary>

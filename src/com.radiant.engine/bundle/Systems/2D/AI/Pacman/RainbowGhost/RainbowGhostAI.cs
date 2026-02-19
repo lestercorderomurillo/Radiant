@@ -951,16 +951,12 @@ public class RainbowGhostAI : core.System
         return false;
     }
 
-    // ── Helpers ────────────────────────────────────────────────────────
-
     private void ShiftEyeHistory()
     {
-        // Main ghost
         EyePositions[0] = PrevPositions[0];
         ref var mt = ref Scene.ECS.GetComponent<Transform>(MainId);
         PrevPositions[0] = new Vector2(mt.Position.X, mt.Position.Y);
 
-        // Clones
         for (int i = 0; i < CloneCount; i++)
         {
             EyePositions[1 + i] = PrevPositions[1 + i];
