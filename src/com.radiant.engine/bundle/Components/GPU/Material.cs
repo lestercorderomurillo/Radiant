@@ -6,22 +6,22 @@ namespace com.radiant.engine.bundle;
 
 public struct Material : Component
 {
-    private Color _albedo;
-    private Color _emissive;
+    private Color AlbedoColor;
+    private Color EmissiveColor;
 
     /// <summary>Optional texture that modulates the emissive color. Null = solid color (default).</summary>
     public Texture2D Texture;
 
     public Color Albedo
     {
-        readonly get => _albedo;
-        set { _albedo = value; UpdateCached(); }
+        readonly get => AlbedoColor;
+        set { AlbedoColor = value; UpdateCached(); }
     }
 
     public Color Emissive
     {
-        readonly get => _emissive;
-        set { _emissive = value; UpdateCached(); }
+        readonly get => EmissiveColor;
+        set { EmissiveColor = value; UpdateCached(); }
     }
 
     /// <summary>Auto-calculated: Albedo inverted, scaled by alpha. Used by HRC.</summary>
@@ -32,43 +32,38 @@ public struct Material : Component
 
     public Material()
     {
-        _albedo = Color.White;
-        _emissive = Color.Black;
+        AlbedoColor = Color.White;
+        EmissiveColor = Color.Black;
         Absorption = new Color(0, 0, 0, 255);
         EmissiveScaled = Color.Black;
     }
 
     private void UpdateCached()
     {
-        // EmissiveScaled: RGB scaled by intensity (A), alpha=255 for rendering
-        float intensity = _emissive.A / 255f;
+        float intensity = EmissiveColor.A / 255f;
         EmissiveScaled = new Color(
-            (int)(_emissive.R * intensity),
-            (int)(_emissive.G * intensity),
-            (int)(_emissive.B * intensity),
-            _emissive.A);
+            (int)(EmissiveColor.R * intensity),
+            (int)(EmissiveColor.G * intensity),
+            (int)(EmissiveColor.B * intensity),
+            EmissiveColor.A);
 
-        // Absorption depends on whether object emits light
-        // HRC formula: radiance = absorption * emission, so emitters need absorption = emission
-        bool isEmissive = _emissive.R > 0 || _emissive.G > 0 || _emissive.B > 0;
+        bool isEmissive = EmissiveColor.R > 0 || EmissiveColor.G > 0 || EmissiveColor.B > 0;
         if (isEmissive)
         {
-            // Emitters: absorption = scaled emissive (required by HRC radiance formula)
             Absorption = new Color(
-                (int)(_emissive.R * intensity),
-                (int)(_emissive.G * intensity),
-                (int)(_emissive.B * intensity),
-                _albedo.A);
+                (int)(EmissiveColor.R * intensity),
+                (int)(EmissiveColor.G * intensity),
+                (int)(EmissiveColor.B * intensity),
+                AlbedoColor.A);
         }
         else
         {
-            // Non-emitters: absorption = inverted albedo
-            float alpha = _albedo.A / 255f;
+            float alpha = AlbedoColor.A / 255f;
             Absorption = new Color(
-                (int)((255 - _albedo.R) * alpha),
-                (int)((255 - _albedo.G) * alpha),
-                (int)((255 - _albedo.B) * alpha),
-                _albedo.A);
+                (int)((255 - AlbedoColor.R) * alpha),
+                (int)((255 - AlbedoColor.G) * alpha),
+                (int)((255 - AlbedoColor.B) * alpha),
+                AlbedoColor.A);
         }
     }
 }

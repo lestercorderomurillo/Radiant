@@ -12,7 +12,7 @@ public class ECS : IGameObject
     // Entity tracking
     private readonly Stack<int> RecycledIds;
     private int NextEntityId;
-    private int EntityCount_;
+    private int EntityCountValue;
 
     // Archetype storage - components live here
     private readonly List<Archetype> Archetypes;
@@ -44,7 +44,7 @@ public class ECS : IGameObject
     // Thread pool
     private static readonly int CachedThreadCount = Environment.ProcessorCount;
 
-    public int EntityCount => EntityCount_;
+    public int EntityCount => EntityCountValue;
     public bool GameplayPaused { get; set; }
     public bool AnimationPaused { get; set; }
     public Scene Scene { get; set; }
@@ -94,11 +94,15 @@ public class ECS : IGameObject
     private void BuildRenderOrder()
     {
         RenderSystems = new List<System>(Systems);
+        var systemIndex = new Dictionary<System, int>(Systems.Count);
+        for (int i = 0; i < Systems.Count; i++)
+            systemIndex[Systems[i]] = i;
+
         RenderSystems.Sort((a, b) =>
         {
             int layerCmp = a.RenderLayer.CompareTo(b.RenderLayer);
             if (layerCmp != 0) return layerCmp;
-            return Systems.IndexOf(a).CompareTo(Systems.IndexOf(b));
+            return systemIndex[a].CompareTo(systemIndex[b]);
         });
     }
 
@@ -205,8 +209,8 @@ public class ECS : IGameObject
     private ulong GetSignature(params Type[] types)
     {
         ulong sig = 0;
-        foreach (var t in types)
-            sig |= 1UL << GetTypeId(t);
+        foreach (var type in types)
+            sig |= 1UL << GetTypeId(type);
         return sig;
     }
 
@@ -236,7 +240,7 @@ public class ECS : IGameObject
         int id = RecycledIds.Count > 0 ? RecycledIds.Pop() : NextEntityId++;
         EnsureEntityCapacity(id);
         EntityRecords[id] = default;
-        EntityCount_++;
+        EntityCountValue++;
         return id;
     }
 
@@ -289,7 +293,7 @@ public class ECS : IGameObject
                 arch.Remove(i);
                 EntityRecords[entity] = default;
                 RecycledIds.Push(entity);
-                EntityCount_--;
+                EntityCountValue--;
             }
         }
 
@@ -314,7 +318,7 @@ public class ECS : IGameObject
         record.Arch = null;
         record.Index = -1;
         RecycledIds.Push(entity);
-        EntityCount_--;
+        EntityCountValue--;
         return true;
     }
 
@@ -331,13 +335,17 @@ public class ECS : IGameObject
         if (oldArch != null && oldArch.Signature == newSig)
             return ref oldArch.Get<T>(record.Index);
 
-        // Build new type array - signature check above guarantees type not in oldArch
-        var types = new List<Type>();
-        if (oldArch != null)
-            types.AddRange(oldArch.Types);
-        types.Add(type);
-
-        var newArch = GetOrCreateArchetype(newSig, types.ToArray());
+        // Only build type array if archetype doesn't exist yet (avoids allocation in common case)
+        if (!ArchetypesBySignature.TryGetValue(newSig, out var newArch))
+        {
+            var types = new List<Type>();
+            if (oldArch != null)
+                types.AddRange(oldArch.Types);
+            types.Add(type);
+            newArch = new Archetype(types.ToArray(), newSig);
+            Archetypes.Add(newArch);
+            ArchetypesBySignature[newSig] = newArch;
+        }
         int newIndex = newArch.Add(entity);
 
         if (oldArch != null)
@@ -366,6 +374,12 @@ public class ECS : IGameObject
     {
         ref var record = ref EntityRecords[entity];
         return record.Arch != null && record.Arch.HasComponent<T>();
+    }
+
+    public Type[] GetComponentTypes(int entity)
+    {
+        ref var record = ref EntityRecords[entity];
+        return record.Arch?.Types ?? Array.Empty<Type>();
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

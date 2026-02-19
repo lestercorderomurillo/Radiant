@@ -377,8 +377,29 @@ public partial class Inspector
                 Renderer.DrawRoundedRect(highlightRect, SliderFill, 4);
             }
 
-            string itemText = TruncateText(items[itemIndex], Widget.Bounds.Width - Padding * 2);
-            DrawText(itemText, new Vector2(Widget.Bounds.X + Padding, itemY), isSelected ? CloseText : TextColor);
+            string fullText = items[itemIndex];
+            float maxWidth = Widget.Bounds.Width - Padding * 2;
+            int separatorIdx = fullText.IndexOf("  |  ", StringComparison.Ordinal);
+            var itemPos = new Vector2(Widget.Bounds.X + Padding, itemY);
+            Color primaryColor = isSelected ? CloseText : TextColor;
+
+            if (separatorIdx < 0)
+            {
+                DrawText(TruncateText(fullText, maxWidth), itemPos, primaryColor);
+            }
+            else
+            {
+                string primary = fullText[..separatorIdx];
+                string secondary = fullText[(separatorIdx + 5)..];
+                DrawText(primary, itemPos, primaryColor);
+                float primaryWidth = MeasureText(primary + "  ").X;
+                float remainingWidth = maxWidth - primaryWidth;
+                if (remainingWidth > 20)
+                {
+                    Color dimColor = isSelected ? new Color(CloseText.R, CloseText.G, CloseText.B, (byte)(CloseText.A * 0.6f)) : LabelDim;
+                    DrawText(TruncateText(secondary, remainingWidth), new Vector2(itemPos.X + primaryWidth, itemY), dimColor);
+                }
+            }
         }
 
         if (items.Length > maxVisible)

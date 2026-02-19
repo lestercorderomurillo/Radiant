@@ -42,6 +42,7 @@ radiant/
 ├── Content/
 │   ├── fonts/Inter-Regular.ttf, Inter-Bold.ttf, PressStart2P.ttf (loaded by FontStashSharp at runtime)
 │   ├── Ghost.png, Eyes.png (premultiplied alpha)
+│   ├── presets/icons/Checkmark.png, Search.png, Trash.png (Material Icons, white, Apache 2.0)
 │   ├── shaders/
 │   │   ├── Geometry.fx, InstancedShapes.fx, ColorManagement.fx, GlassBlur.fx
 │   │   ├── HRC/ (HRC_Extensions, HRC_FluenceSum, HRC_FrustumSeed, HRC_MergingCones)
@@ -49,7 +50,12 @@ radiant/
 │   └── Content.mgcb (HiDef, Windows)
 │
 ├── src/com.radiant.engine/
-│   ├── core/ (ECS, Archetype, Renderer, Scene, System, SystemGroup, Shape, SpatialIndex, PagedBitSet)
+│   ├── core/
+│   │   ├── ECS/ (ECS, Archetype, PagedBitSet, SpatialIndex)
+│   │   ├── Rendering/ (Renderer [partial: Renderer, RendererShaders, RendererTargets, RendererShapes, RendererDrawing],
+│   │   │               Shape, ShapeBatcher [internal], ShaderRegistry [internal], TextureManager [internal], FontRegistry [internal])
+│   │   ├── Interfaces/ (Component, GameObject)
+│   │   └── Scene, System, SystemGroup (framework glue at root)
 │   ├── bundle/
 │   │   ├── Components/
 │   │   │   ├── Spatial/Transform.cs
@@ -352,6 +358,19 @@ Renderer.GetTexture("Ghost");
 Renderer.GetSolidTexture(Color.White);   // 1x1 solid (cached by color)
 Renderer.GetCircleTexture(64);           // AA circle (cached by diameter)
 Renderer.GetRoundedRectTexture(8);       // AA rounded rect (cached by radius)
+
+// Icon textures (PNGs in Content/presets/icons/, Material Icons, Apache 2.0)
+Renderer.GetTexture("presets/icons/Checkmark"); // White checkmark
+Renderer.GetTexture("presets/icons/Search");    // White magnifying glass
+Renderer.GetTexture("presets/icons/Trash");     // White trash can
+
+// Custom procedural shape textures (registry pattern)
+Renderer.RegisterShapeTexture("Star", size => {
+    var pixels = new Color[size * size];
+    // ... generate pixel data ...
+    return (size, size, pixels);
+}, minSize: 8);
+Renderer.GetShapeTexture("Star", 32);    // Cached by name + size
 ```
 
 ### Rounded Rectangles

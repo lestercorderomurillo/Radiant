@@ -17,13 +17,13 @@ public partial class GameLoop : IGameObject
     [LibraryImport("winmm.dll")]
     private static partial uint timeEndPeriod(uint period);
 
-    private const int NO_SCENE = -1;
+    private const int NoScene = -1;
 
     private Scene[] Scenes = [];
 
-    private int SceneId = NO_SCENE;
+    private int SceneId = NoScene;
 
-    private int NextSceneId = NO_SCENE;
+    private int NextSceneId = NoScene;
 
     private Window Window;
 
@@ -105,12 +105,12 @@ public partial class GameLoop : IGameObject
 
     private void TransitionScene(int id)
     {
-        if (SceneId != NO_SCENE)
+        if (SceneId != NoScene)
             Scenes[SceneId].Dispose();
 
         SceneId = id;
 
-        if (SceneId != NO_SCENE)
+        if (SceneId != NoScene)
         {
             Scenes[SceneId].Renderer = new Renderer(Window);
             Scenes[SceneId].Initialize();
@@ -118,7 +118,7 @@ public partial class GameLoop : IGameObject
             Scenes[SceneId].SetupScene();
         }
 
-        NextSceneId = NO_SCENE;
+        NextSceneId = NoScene;
     }
 
     public void SetActiveSceneId(int id) => NextSceneId = id;
@@ -126,7 +126,7 @@ public partial class GameLoop : IGameObject
     public void Update()
     {
         // Auto-start first scene if no active scene
-        if (SceneId == NO_SCENE && Scenes.Length > 0)
+        if (SceneId == NoScene && Scenes.Length > 0)
         {
             TransitionScene(0);
         }
@@ -143,7 +143,7 @@ public partial class GameLoop : IGameObject
         int iterations = 0;
         while (FixedUpdateAccumulator >= UpdateInterval && iterations++ < MaxFixedUpdatesPerFrame)
         {
-            if (SceneId != NO_SCENE)
+            if (SceneId != NoScene)
             {
                 Scenes[SceneId].GameTime = GameTime;
                 Scenes[SceneId].DeltaTime = (float)(1.0 / TargetUpdatesPerSecond);
@@ -158,14 +158,14 @@ public partial class GameLoop : IGameObject
             FixedUpdateAccumulator = UpdateInterval;
 
         // Variable update with precise delta time
-        if (SceneId != NO_SCENE)
+        if (SceneId != NoScene)
         {
             Scenes[SceneId].GameTime = GameTime;
             Scenes[SceneId].DeltaTime = (float)deltaTime;
             Scenes[SceneId].InternalUpdate();
         }
 
-        if (NextSceneId != NO_SCENE && NextSceneId != SceneId)
+        if (NextSceneId != NoScene && NextSceneId != SceneId)
             TransitionScene(NextSceneId);
     }
 
@@ -226,7 +226,7 @@ public partial class GameLoop : IGameObject
 
         // Actual rendering
         long renderStartTicks = GlobalTimer.ElapsedTicks;
-        if (SceneId != NO_SCENE)
+        if (SceneId != NoScene)
         {
             Scenes[SceneId].Renderer.ClearBackBuffer(Color.Black);
             Scenes[SceneId].GameTime = GameTime;

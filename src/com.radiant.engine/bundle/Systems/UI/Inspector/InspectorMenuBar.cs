@@ -422,7 +422,19 @@ public partial class Inspector
         foreach (int id in EntityIdCache)
         {
             if (filter.Length > 0 && !id.ToString().Contains(filter)) continue;
-            items.Add($"Entity {id}");
+            var types = Scene.ECS.GetComponentTypes(id);
+            if (types.Length == 0)
+            {
+                items.Add($"Entity {id}");
+                continue;
+            }
+            var componentNames = new System.Text.StringBuilder();
+            for (int i = 0; i < types.Length; i++)
+            {
+                if (i > 0) componentNames.Append(", ");
+                componentNames.Append(types[i].Name);
+            }
+            items.Add($"Entity {id}  |  {componentNames}");
         }
         SetListBoxItems("entity_inspector", "results_list", items.ToArray());
     }

@@ -399,9 +399,13 @@ public class SpatialIndex
 
         PartialSort(candidates.Length, count);
 
-        ResultCount = 0;
+        // Resolve entity IDs into SortBuffer first to avoid aliasing
+        // (candidates is a span over ResultArray, writing ResultArray would corrupt reads)
         for (int i = 0; i < count; i++)
-            ResultArray[ResultCount++] = candidates[SortBuffer[i]];
+            SortBuffer[i] = candidates[SortBuffer[i]];
+
+        ResultCount = count;
+        Array.Copy(SortBuffer, 0, ResultArray, 0, count);
 
         return new ReadOnlySpan<int>(ResultArray, 0, ResultCount);
     }

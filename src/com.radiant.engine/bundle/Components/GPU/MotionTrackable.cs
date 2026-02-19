@@ -12,45 +12,42 @@ public struct MotionTrackable : Component
 {
     private const int MaxHistory = 4;
 
-    // Fixed-size circular buffer (no heap allocations)
-    private Vector3 _pos0, _pos1, _pos2, _pos3;
-    private int _head;
-    private int _count;
+    private Vector3 Pos0, Pos1, Pos2, Pos3;
+    private int Head;
+    private int HistoryCount;
 
     public MotionTrackable()
     {
-        _pos0 = _pos1 = _pos2 = _pos3 = Vector3.Zero;
-        _head = 0;
-        _count = 0;
+        Pos0 = Pos1 = Pos2 = Pos3 = Vector3.Zero;
+        Head = 0;
+        HistoryCount = 0;
     }
 
     public void Push(Vector3 position)
     {
-        // Write to head position
-        switch (_head)
+        switch (Head)
         {
-            case 0: _pos0 = position; break;
-            case 1: _pos1 = position; break;
-            case 2: _pos2 = position; break;
-            case 3: _pos3 = position; break;
+            case 0: Pos0 = position; break;
+            case 1: Pos1 = position; break;
+            case 2: Pos2 = position; break;
+            case 3: Pos3 = position; break;
         }
 
-        _head = (_head + 1) % MaxHistory;
-        if (_count < MaxHistory) _count++;
+        Head = (Head + 1) % MaxHistory;
+        if (HistoryCount < MaxHistory) HistoryCount++;
     }
 
     public readonly Vector2 CalculateVelocity(Vector3 currentPos, int historyFrames)
     {
-        if (_count == 0) return Vector2.Zero;
+        if (HistoryCount == 0) return Vector2.Zero;
 
-        int framesToUse = Math.Min(_count, Math.Min(historyFrames, MaxHistory));
+        int framesToUse = Math.Min(HistoryCount, Math.Min(historyFrames, MaxHistory));
         if (framesToUse == 0) return Vector2.Zero;
 
         Vector2 weightedVelocity = Vector2.Zero;
         float totalWeight = 0;
 
-        // Read from oldest to newest (circular buffer traversal)
-        int start = (_head - _count + MaxHistory) % MaxHistory;
+        int start = (Head - HistoryCount + MaxHistory) % MaxHistory;
         Vector3 prev = GetAt(start);
 
         for (int i = 1; i < framesToUse; i++)
@@ -65,7 +62,6 @@ public struct MotionTrackable : Component
             prev = pos;
         }
 
-        // Final transition to current position
         float finalWeight = framesToUse;
         weightedVelocity.X += (currentPos.X - prev.X) * finalWeight;
         weightedVelocity.Y += (currentPos.Y - prev.Y) * finalWeight;
@@ -78,10 +74,10 @@ public struct MotionTrackable : Component
     {
         return idx switch
         {
-            0 => _pos0,
-            1 => _pos1,
-            2 => _pos2,
-            3 => _pos3,
+            0 => Pos0,
+            1 => Pos1,
+            2 => Pos2,
+            3 => Pos3,
             _ => Vector3.Zero
         };
     }

@@ -1,4 +1,5 @@
 using System;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 
 namespace com.radiant.engine.core;
@@ -127,20 +128,20 @@ public sealed class PagedBitSet
 
     public ref struct EntityEnumerator
     {
-        private readonly PagedBitSet bitset;
-        private int pageIndex;
-        private int ulongIndex;
-        private ulong currentBits;
-        private int currentEntity;
+        private readonly PagedBitSet Bitset;
+        private int PageIdx;
+        private int UlongIdx;
+        private ulong CurrentBits;
+        private int CurrentEntity;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal EntityEnumerator(PagedBitSet bitset)
         {
-            this.bitset = bitset;
-            pageIndex = 0;
-            ulongIndex = -1;
-            currentBits = 0;
-            currentEntity = -1;
+            Bitset = bitset;
+            PageIdx = 0;
+            UlongIdx = -1;
+            CurrentBits = 0;
+            CurrentEntity = -1;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -148,54 +149,33 @@ public sealed class PagedBitSet
         {
             while (true)
             {
-                // Check remaining bits in current ulong
-                if (currentBits != 0)
+                if (CurrentBits != 0)
                 {
-                    int bit = BitOperations.TrailingZeroCount(currentBits);
-                    currentBits &= currentBits - 1; // Clear lowest bit
-                    currentEntity = pageIndex * BitsPerPage + ulongIndex * BitsPerUlong + bit;
+                    int bit = BitOperations.TrailingZeroCount(CurrentBits);
+                    CurrentBits &= CurrentBits - 1;
+                    CurrentEntity = PageIdx * BitsPerPage + UlongIdx * BitsPerUlong + bit;
                     return true;
                 }
 
-                // Move to next ulong
-                ulongIndex++;
+                UlongIdx++;
 
-                while (ulongIndex >= PageSize || (pageIndex < bitset.PageCount && bitset.Pages[pageIndex] == null))
+                while (UlongIdx >= PageSize || (PageIdx < Bitset.PageCount && Bitset.Pages[PageIdx] == null))
                 {
-                    pageIndex++;
-                    ulongIndex = 0;
-                    if (pageIndex >= bitset.PageCount) return false;
+                    PageIdx++;
+                    UlongIdx = 0;
+                    if (PageIdx >= Bitset.PageCount) return false;
                 }
 
-                if (pageIndex >= bitset.PageCount) return false;
+                if (PageIdx >= Bitset.PageCount) return false;
 
-                currentBits = bitset.Pages[pageIndex][ulongIndex];
+                CurrentBits = Bitset.Pages[PageIdx][UlongIdx];
             }
         }
 
         public int Current
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            get => currentEntity;
+            get => CurrentEntity;
         }
-    }
-}
-
-// BitOperations polyfill for older .NET versions
-file static class BitOperations
-{
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static int TrailingZeroCount(ulong value)
-    {
-        if (value == 0) return 64;
-
-        int count = 0;
-        if ((value & 0xFFFFFFFF) == 0) { count += 32; value >>= 32; }
-        if ((value & 0xFFFF) == 0) { count += 16; value >>= 16; }
-        if ((value & 0xFF) == 0) { count += 8; value >>= 8; }
-        if ((value & 0xF) == 0) { count += 4; value >>= 4; }
-        if ((value & 0x3) == 0) { count += 2; value >>= 2; }
-        if ((value & 0x1) == 0) { count += 1; }
-        return count;
     }
 }

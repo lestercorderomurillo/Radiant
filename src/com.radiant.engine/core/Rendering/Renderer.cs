@@ -1,13 +1,10 @@
 using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.IO;
 using com.radiant.engine.runtime;
 using FontStashSharp;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
-#pragma warning disable CS0618 // Renderer uses its own deprecated members internally
+#pragma warning disable CS0618
 namespace com.radiant.engine.core;
 
 /// <summary>
@@ -56,10 +53,8 @@ namespace com.radiant.engine.core;
 /// </code>
 /// </example>
 /// </summary>
-public class Renderer : IDisposable
+public partial class Renderer : IDisposable
 {
-    #region Public Properties
-
     /// <summary>The parent window containing the graphics device.</summary>
     public Window Window { get; }
 
@@ -80,9 +75,11 @@ public class Renderer : IDisposable
     /// <summary>Name of the currently active shader (null if none).</summary>
     public string CurrentShaderName { get; private set; }
 
-    #endregion
-
-    #region Screen Information
+    private GameWindow NativeWindow => Window.Window;
+    private readonly ShaderRegistry Shaders;
+    private readonly TextureManager Textures;
+    private readonly FontRegistry Fonts;
+    private readonly ShapeBatcher ShapeBatch;
 
     /// <summary>Current viewport width in pixels.</summary>
     public int ScreenWidth { get; private set; }
@@ -129,10 +126,6 @@ public class Renderer : IDisposable
     /// <summary>Scale factor from virtual coordinates to screen pixels (ScreenSize / VirtualSize).</summary>
     public Vector2 VirtualToScreenScale { get; private set; }
 
-    #endregion
-
-    #region Render Scale (Dynamic Resolution)
-
     private float RenderScaleValue = 1.0f;
 
     /// <summary>
@@ -168,80 +161,6 @@ public class Renderer : IDisposable
     /// <summary>Smallest power of 2 containing max(ScaledWidth, ScaledHeight).</summary>
     public int ScaledHigherPowerOfTwo { get; private set; }
 
-    #endregion
-
-    #region Private State
-
-    private GameWindow NativeWindow => Window.Window;
-    private Dictionary<string, Effect> ShaderCache = new();
-    private Dictionary<string, Texture2D> TextureCache = new();
-    private Dictionary<string, FontSystem> FontSystems = new();
-    private Dictionary<(Color, int, int), Texture2D> SolidTextureCache = new();
-    private Dictionary<int, Texture2D> CircleTextureCache = new();
-    private Dictionary<int, Texture2D> TriangleTextureCache = new();
-    private Dictionary<int, Texture2D> CheckmarkTextureCache = new();
-    private Dictionary<int, Texture2D> SearchTextureCache = new();
-    private Dictionary<int, Texture2D> TrashTextureCache = new();
-    private Dictionary<int, Texture2D> RoundedRectCache = new();
-    private VertexBuffer QuadVertexBuffer;
-    private IndexBuffer QuadIndexBuffer;
-    private Effect CurrentShader;
-    private bool IsDrawingTextures;
-
-    private BlendState BlendState = BlendState.Opaque;
-    private DepthStencilState DepthStencilState = DepthStencilState.None;
-    private RasterizerState RasterizerState = RasterizerState.CullNone;
-    private SpriteSortMode SpriteSortMode = SpriteSortMode.Immediate;
-    private SamplerState[] SamplerStates = new SamplerState[8];
-    private int SamplerDirtyMask = 0;
-
-    private readonly RenderTargetBinding[] TwoTargetBindings = new RenderTargetBinding[2];
-    private readonly RenderTargetBinding[] ThreeTargetBindings = new RenderTargetBinding[3];
-    private readonly RenderTargetBinding[] FourTargetBindings = new RenderTargetBinding[4];
-    private readonly Stack<RenderTargetBinding[]> RenderTargetStack = new();
-    private RenderTargetBinding[] CurrentTargets = null;
-
-    // Pooled arrays for render target bindings (avoids Clone() allocations)
-    private const int BindingPoolSize = 16;
-    private readonly RenderTargetBinding[][] BindingPool2 = new RenderTargetBinding[BindingPoolSize][];
-    private readonly RenderTargetBinding[][] BindingPool3 = new RenderTargetBinding[BindingPoolSize][];
-    private readonly RenderTargetBinding[][] BindingPool4 = new RenderTargetBinding[BindingPoolSize][];
-    private int BindingPool2Index = 0;
-    private int BindingPool3Index = 0;
-    private int BindingPool4Index = 0;
-
-    // Instanced shape rendering
-    private const int DefaultShapeCapacity = 65536;
-    private const int MaxShapeCapacity = int.MaxValue;
-    private VertexBuffer ShapeQuadBuffer;
-    private IndexBuffer ShapeIndexBuffer;
-    private DynamicVertexBuffer ShapeInstanceBuffer;
-    private Effect ShapeShader;
-    private Shape[] Shapes;
-    private int ShapeCount;
-    private int ShapeCapacity;
-
-    // Parallel shape collection
-    private int ParallelThreadCount;
-    private Shape[][] ParallelShapeBuffers;
-    private float[][] ParallelZBuffers;
-    private int[][] ParallelSortIndices;
-    private int[] ParallelShapeCounts;
-    private int[] ParallelMergeIndices;
-    private int ParallelCapacityPerThread;
-
-    // Min-heap for O(N log T) k-way merge (replaces O(N*T) linear scan)
-    private (float z, int thread)[] MergeHeap;
-    private int MergeHeapSize;
-
-    // GPU upload timing stats
-    public float LastSetDataMs { get; private set; }
-    public float LastDrawMs { get; private set; }
-
-    #endregion
-
-    #region Constructor
-
     /// <summary>
     /// Creates a new Renderer bound to the specified window.
     /// </summary>
@@ -252,28 +171,24 @@ public class Renderer : IDisposable
         Device = window.GraphicsDevice;
         SpriteBatch = new SpriteBatch(Device);
 
-        for (int i = 0; i < SamplerStates.Length; i++)
-            SamplerStates[i] = SamplerState.LinearClamp;
-
-        // Pre-allocate binding pools
-        for (int i = 0; i < BindingPoolSize; i++)
-        {
-            BindingPool2[i] = new RenderTargetBinding[2];
-            BindingPool3[i] = new RenderTargetBinding[3];
-            BindingPool4[i] = new RenderTargetBinding[4];
-        }
-
-        InitializeQuad();
-        InitializeShapes();
-        InitializeFonts();
-        UpdateScreenInfo();
-        UpdateScaledScreenInfo();
-
         // Fixed virtual resolution — the world coordinate space.
-        // All entity positions, sizes, and scene layout use these units.
         VirtualWidth = 3840;
         VirtualHeight = 2160;
         VirtualSize = new Vector2(VirtualWidth, VirtualHeight);
+
+        Shaders = new ShaderRegistry(Window.Content);
+        Textures = new TextureManager(Device, Window.Content);
+        Fonts = new FontRegistry(Window.Content.RootDirectory);
+        ShapeBatch = new ShapeBatcher(Device, VirtualWidth, VirtualHeight);
+
+        for (int i = 0; i < SamplerStates.Length; i++)
+            SamplerStates[i] = SamplerState.LinearClamp;
+
+        InitializeBindingPools();
+        InitializeQuad();
+        InitializeFonts();
+        UpdateScreenInfo();
+        UpdateScaledScreenInfo();
 
         NativeWindow.ClientSizeChanged += (_, _) =>
         {
@@ -284,14 +199,10 @@ public class Renderer : IDisposable
 
     private void InitializeFonts()
     {
-        LoadFont("Inter", "fonts/Inter-Regular.ttf");
-        LoadFont("Inter-Bold", "fonts/Inter-Bold.ttf");
-        LoadFont("PressStart2P", "fonts/PressStart2P.ttf");
+        Fonts.Load("Inter", "fonts/Inter-Regular.ttf");
+        Fonts.Load("Inter-Bold", "fonts/Inter-Bold.ttf");
+        Fonts.Load("PressStart2P", "fonts/PressStart2P.ttf");
     }
-
-    #endregion
-
-    #region Screen Info Updates
 
     /// <summary>Updates all screen-related properties from the current viewport.</summary>
     public void UpdateScreenInfo()
@@ -377,1626 +288,6 @@ public class Renderer : IDisposable
         return new Rectangle(px, py, pr - px, pb - py);
     }
 
-    #endregion
-
-    #region Quad Initialization
-
-    private void InitializeQuad()
-    {
-        var vertices = new VertexPositionTexture[]
-        {
-            new(new Vector3(-1,  1, 0), new Vector2(0, 0)),
-            new(new Vector3( 1,  1, 0), new Vector2(1, 0)),
-            new(new Vector3(-1, -1, 0), new Vector2(0, 1)),
-            new(new Vector3( 1, -1, 0), new Vector2(1, 1))
-        };
-
-        QuadVertexBuffer = new VertexBuffer(Device, typeof(VertexPositionTexture), 4, BufferUsage.WriteOnly);
-        QuadVertexBuffer.SetData(vertices);
-
-        var indices = new short[] { 0, 1, 2, 2, 1, 3 };
-        QuadIndexBuffer = new IndexBuffer(Device, IndexElementSize.SixteenBits, 6, BufferUsage.WriteOnly);
-        QuadIndexBuffer.SetData(indices);
-    }
-
-    #endregion
-
-    #region Shape Rendering
-
-    private void InitializeShapes()
-    {
-        var vertices = new ShapeQuadVertex[]
-        {
-            new(new Vector2(0, 0), new Vector2(0, 0)),
-            new(new Vector2(1, 0), new Vector2(1, 0)),
-            new(new Vector2(0, 1), new Vector2(0, 1)),
-            new(new Vector2(1, 1), new Vector2(1, 1))
-        };
-
-        ShapeQuadBuffer = new VertexBuffer(Device, ShapeQuadVertex.Declaration, 4, BufferUsage.WriteOnly);
-        ShapeQuadBuffer.SetData(vertices);
-
-        var indices = new short[] { 0, 1, 2, 2, 1, 3 };
-        ShapeIndexBuffer = new IndexBuffer(Device, IndexElementSize.SixteenBits, 6, BufferUsage.WriteOnly);
-        ShapeIndexBuffer.SetData(indices);
-
-        ShapeCapacity = DefaultShapeCapacity;
-        Shapes = new Shape[ShapeCapacity];
-        ShapeInstanceBuffer = new DynamicVertexBuffer(Device, Shape.Declaration, ShapeCapacity, BufferUsage.WriteOnly);
-    }
-
-    private void EnsureShapeCapacity(int required)
-    {
-        if (required <= ShapeCapacity) return;
-
-        int newCapacity = ShapeCapacity;
-        while (newCapacity < required && newCapacity < MaxShapeCapacity)
-            newCapacity *= 2;
-
-        if (newCapacity > MaxShapeCapacity)
-            newCapacity = MaxShapeCapacity;
-
-        Array.Resize(ref Shapes, newCapacity);
-        ShapeInstanceBuffer?.Dispose();
-        ShapeInstanceBuffer = new DynamicVertexBuffer(Device, Shape.Declaration, newCapacity, BufferUsage.WriteOnly);
-        ShapeCapacity = newCapacity;
-    }
-
-    /// <summary>
-    /// Adds a shape to the current batch. Call FlushShapes() to render.
-    /// Silently drops shapes beyond MaxShapeCapacity.
-    /// </summary>
-    public Renderer DrawShape(Shape shape)
-    {
-        if (ShapeCount >= MaxShapeCapacity) return this; // At capacity limit
-        EnsureShapeCapacity(ShapeCount + 1);
-        Shapes[ShapeCount++] = shape;
-        return this;
-    }
-
-    /// <summary>
-    /// Adds a rectangle shape to the current batch.
-    /// </summary>
-    public Renderer DrawRect(Vector2 position, Vector2 size, Color color)
-    {
-        return DrawShape(Shape.Rect(position, size, color));
-    }
-
-    /// <summary>
-    /// Adds a rectangle shape to the current batch.
-    /// </summary>
-    public Renderer DrawRect(float x, float y, float width, float height, Color color)
-    {
-        return DrawShape(Shape.Rect(x, y, width, height, color));
-    }
-
-    /// <summary>
-    /// Adds a circle shape to the current batch.
-    /// </summary>
-    public Renderer DrawCircle(Vector2 center, float radius, Color color)
-    {
-        return DrawShape(Shape.Circle(center, radius, color));
-    }
-
-    /// <summary>
-    /// Adds a circle shape to the current batch.
-    /// </summary>
-    public Renderer DrawCircle(float x, float y, float radius, Color color)
-    {
-        return DrawShape(Shape.Circle(x, y, radius, color));
-    }
-
-    /// <summary>
-    /// Adds a triangle shape to the current batch.
-    /// </summary>
-    public Renderer DrawTriangle(Vector2 position, Vector2 size, Color color)
-    {
-        return DrawShape(Shape.Triangle(position, size, color));
-    }
-
-    /// <summary>
-    /// Adds a bordered (unfilled) triangle shape to the current batch.
-    /// </summary>
-    public Renderer DrawTriangleBorder(Vector2 position, Vector2 size, Color color)
-    {
-        return DrawShape(Shape.TriangleBorder(position, size, color));
-    }
-
-    /// <summary>
-    /// Renders all batched shapes in a single draw call and clears the batch.
-    /// </summary>
-    /// <param name="target">Render target (null for backbuffer).</param>
-    /// <param name="clearColor">Optional clear color before rendering.</param>
-    /// <param name="technique">Shader technique: "Default" (AA), "Sharp" (no AA), or "Emissive" (sharp SDF for light sources).</param>
-    public Renderer FlushShapes(RenderTarget2D target = null, Color? clearColor = null, string technique = "Default")
-    {
-        CommitTextures();
-
-        Device.SetRenderTarget(target ?? SceneRT);
-
-        if (clearColor.HasValue)
-            Device.Clear(clearColor.Value);
-
-        if (ShapeCount > 0)
-        {
-            ShapeInstanceBuffer.SetData(Shapes, 0, ShapeCount, SetDataOptions.Discard);
-
-            Device.BlendState = BlendState;
-            Device.DepthStencilState = DepthStencilState.None;
-            Device.RasterizerState = RasterizerState.CullNone;
-
-            Device.SetVertexBuffers(
-                new VertexBufferBinding(ShapeQuadBuffer, 0, 0),
-                new VertexBufferBinding(ShapeInstanceBuffer, 0, 1)
-            );
-            Device.Indices = ShapeIndexBuffer;
-
-            var viewProjection = Matrix.CreateOrthographicOffCenter(0, VirtualWidth, VirtualHeight, 0, 0, 1);
-
-            ShapeShader ??= GetShaderEffect("InstancedShapes");
-            ShapeShader.CurrentTechnique = ShapeShader.Techniques[technique];
-            ShapeShader.Parameters["ViewProjection"]?.SetValue(viewProjection);
-
-            foreach (var pass in ShapeShader.CurrentTechnique.Passes)
-            {
-                pass.Apply();
-                Device.DrawInstancedPrimitives(PrimitiveType.TriangleList, 0, 0, 2, ShapeCount);
-            }
-
-            ShapeCount = 0;
-        }
-
-        return this;
-    }
-
-    /// <summary>
-    /// Clears the shape batch without rendering.
-    /// </summary>
-    public Renderer ClearShapes()
-    {
-        ShapeCount = 0;
-        return this;
-    }
-
-    /// <summary>
-    /// Current number of shapes in the batch.
-    /// </summary>
-    public int ShapeBatchCount => ShapeCount;
-
-    /// <summary>
-    /// Renders shapes directly from an external buffer - ZERO COPY.
-    /// Use this when shapes are pre-collected in Renderer.Shape format.
-    /// </summary>
-    public Renderer FlushShapesExternal(Shape[] shapes, int count, RenderTarget2D target = null, Color? clearColor = null, string technique = "Default")
-    {
-        CommitTextures();
-
-        Device.SetRenderTarget(target ?? SceneRT);
-
-        if (clearColor.HasValue)
-            Device.Clear(clearColor.Value);
-
-        if (count > 0)
-        {
-            // Ensure instance buffer can hold the shapes
-            if (count > ShapeCapacity)
-            {
-                int newCapacity = ShapeCapacity;
-                while (newCapacity < count && newCapacity < MaxShapeCapacity)
-                    newCapacity *= 2;
-                if (newCapacity > MaxShapeCapacity)
-                    newCapacity = MaxShapeCapacity;
-
-                ShapeInstanceBuffer?.Dispose();
-                ShapeInstanceBuffer = new DynamicVertexBuffer(Device, Shape.Declaration, newCapacity, BufferUsage.WriteOnly);
-                ShapeCapacity = newCapacity;
-            }
-
-            int uploadCount = Math.Min(count, ShapeCapacity);
-            var swSetData = Stopwatch.StartNew();
-            ShapeInstanceBuffer.SetData(shapes, 0, uploadCount, SetDataOptions.Discard);
-            LastSetDataMs = (float)swSetData.Elapsed.TotalMilliseconds;
-
-            Device.BlendState = BlendState;
-            Device.DepthStencilState = DepthStencilState.None;
-            Device.RasterizerState = RasterizerState.CullNone;
-
-            Device.SetVertexBuffers(
-                new VertexBufferBinding(ShapeQuadBuffer, 0, 0),
-                new VertexBufferBinding(ShapeInstanceBuffer, 0, 1)
-            );
-            Device.Indices = ShapeIndexBuffer;
-
-            var viewProjection = Matrix.CreateOrthographicOffCenter(0, VirtualWidth, VirtualHeight, 0, 0, 1);
-
-            ShapeShader ??= GetShaderEffect("InstancedShapes");
-            ShapeShader.CurrentTechnique = ShapeShader.Techniques[technique];
-            ShapeShader.Parameters["ViewProjection"]?.SetValue(viewProjection);
-
-            var swDraw = Stopwatch.StartNew();
-            foreach (var pass in ShapeShader.CurrentTechnique.Passes)
-            {
-                pass.Apply();
-                Device.DrawInstancedPrimitives(PrimitiveType.TriangleList, 0, 0, 2, uploadCount);
-            }
-            LastDrawMs = (float)swDraw.Elapsed.TotalMilliseconds;
-        }
-
-        return this;
-    }
-
-    #endregion
-
-    #region Parallel Shape Collection
-
-    /// <summary>
-    /// Initializes parallel shape buffers for multi-threaded shape collection.
-    /// Call once at startup or when thread count changes.
-    /// </summary>
-    /// <param name="threadCount">Number of worker threads.</param>
-    /// <param name="capacityPerThread">Initial capacity per thread buffer.</param>
-    public Renderer InitializeParallelShapes(int threadCount, int capacityPerThread = 16384)
-    {
-        ParallelThreadCount = threadCount;
-        ParallelCapacityPerThread = capacityPerThread;
-        ParallelShapeBuffers = new Shape[threadCount][];
-        ParallelZBuffers = new float[threadCount][];
-        ParallelSortIndices = new int[threadCount][];
-        ParallelShapeCounts = new int[threadCount];
-        ParallelMergeIndices = new int[threadCount];
-
-        // Min-heap for O(N log T) k-way merge
-        MergeHeap = new (float, int)[threadCount];
-
-        for (int i = 0; i < threadCount; i++)
-        {
-            ParallelShapeBuffers[i] = new Shape[capacityPerThread];
-            ParallelZBuffers[i] = new float[capacityPerThread];
-            ParallelSortIndices[i] = new int[capacityPerThread];
-        }
-
-        return this;
-    }
-
-    /// <summary>
-    /// Ensures all parallel buffers have at least the specified capacity.
-    /// Call when entity count grows.
-    /// </summary>
-    public Renderer EnsureParallelCapacity(int capacityPerThread)
-    {
-        if (capacityPerThread <= ParallelCapacityPerThread) return this;
-
-        ParallelCapacityPerThread = capacityPerThread;
-        for (int i = 0; i < ParallelThreadCount; i++)
-        {
-            Array.Resize(ref ParallelShapeBuffers[i], capacityPerThread);
-            Array.Resize(ref ParallelZBuffers[i], capacityPerThread);
-            Array.Resize(ref ParallelSortIndices[i], capacityPerThread);
-        }
-
-        return this;
-    }
-
-    /// <summary>
-    /// Ensures parallel buffers can hold totalEntities divided across threads.
-    /// Also ensures the main Shapes array can hold the total.
-    /// Call when entity count grows: EnsureParallelCapacityForEntities(entityCount)
-    /// </summary>
-    public Renderer EnsureParallelCapacityForEntities(int totalEntities)
-    {
-        EnsureShapeCapacity(totalEntities);
-        int perThread = (totalEntities + ParallelThreadCount - 1) / ParallelThreadCount;
-        return EnsureParallelCapacity(perThread);
-    }
-
-    /// <summary>
-    /// Gets the shape buffer for a specific thread for direct indexed writes.
-    /// Thread writes directly: buffer[localIndex] = shape;
-    /// </summary>
-    public Shape[] GetParallelBuffer(int threadIndex) => ParallelShapeBuffers[threadIndex];
-
-    /// <summary>
-    /// Gets the Z buffer for a specific thread for direct indexed writes.
-    /// Thread writes directly: zBuffer[localIndex] = z;
-    /// </summary>
-    public float[] GetParallelZBuffer(int threadIndex) => ParallelZBuffers[threadIndex];
-
-    /// <summary>
-    /// Sets the shape count for a thread after direct indexed writes.
-    /// </summary>
-    public void SetParallelCount(int threadIndex, int count)
-    {
-        ParallelShapeCounts[threadIndex] = count;
-    }
-
-    /// <summary>
-    /// Adds a shape to a thread's buffer (append style).
-    /// Thread-local, no synchronization needed.
-    /// </summary>
-    public void DrawShapeParallel(int threadIndex, Shape shape)
-    {
-        var buffer = ParallelShapeBuffers[threadIndex];
-        var count = ParallelShapeCounts[threadIndex];
-
-        if (count >= buffer.Length)
-        {
-            int newCapacity = Math.Min(buffer.Length * 2, MaxShapeCapacity);
-            Array.Resize(ref ParallelShapeBuffers[threadIndex], newCapacity);
-            buffer = ParallelShapeBuffers[threadIndex];
-        }
-
-        buffer[count] = shape;
-        ParallelShapeCounts[threadIndex] = count + 1;
-    }
-
-    /// <summary>
-    /// Collects all parallel thread buffers into the main Shapes array in order.
-    /// Call on main thread after parallel work completes, before FlushShapes.
-    /// </summary>
-    public Renderer CollectParallelShapes()
-    {
-        int totalCount = 0;
-        for (int i = 0; i < ParallelThreadCount; i++)
-            totalCount += ParallelShapeCounts[i];
-
-        EnsureShapeCapacity(totalCount);
-
-        int offset = 0;
-        for (int t = 0; t < ParallelThreadCount; t++)
-        {
-            var buffer = ParallelShapeBuffers[t];
-            var count = ParallelShapeCounts[t];
-
-            Array.Copy(buffer, 0, Shapes, offset, count);
-            offset += count;
-
-            ParallelShapeCounts[t] = 0;
-        }
-
-        ShapeCount = totalCount;
-        return this;
-    }
-
-    /// <summary>
-    /// Clears all parallel shape buffers without collecting.
-    /// </summary>
-    public Renderer ClearParallelShapes()
-    {
-        for (int i = 0; i < ParallelThreadCount; i++)
-            ParallelShapeCounts[i] = 0;
-        return this;
-    }
-
-    /// <summary>
-    /// Sorts a thread's shapes by Z. Call from within parallel work after populating.
-    /// Cache-friendly: sorts locally within thread's buffer.
-    /// </summary>
-    public void SortParallelBufferByZ(int threadIndex)
-    {
-        int count = ParallelShapeCounts[threadIndex];
-        if (count <= 1) return;
-
-        var shapes = ParallelShapeBuffers[threadIndex];
-        var zValues = ParallelZBuffers[threadIndex];
-        var indices = ParallelSortIndices[threadIndex];
-
-        // Initialize indices
-        for (int i = 0; i < count; i++)
-            indices[i] = i;
-
-        // Sort indices by Z
-        Array.Sort(indices, 0, count, Comparer<int>.Create((a, b) => zValues[a].CompareTo(zValues[b])));
-
-        // Reorder shapes in-place using cycle sort to avoid allocation
-        for (int i = 0; i < count; i++)
-        {
-            while (indices[i] != i)
-            {
-                int target = indices[i];
-                (shapes[i], shapes[target]) = (shapes[target], shapes[i]);
-                (zValues[i], zValues[target]) = (zValues[target], zValues[i]);
-                (indices[i], indices[target]) = (indices[target], indices[i]);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Collects all parallel thread buffers with k-way merge by Z order.
-    /// Each thread's buffer must be pre-sorted via SortParallelBufferByZ.
-    /// Call on main thread after parallel work completes.
-    /// Uses min-heap for O(N log T) instead of O(N*T).
-    /// </summary>
-    public Renderer CollectParallelShapesSorted()
-    {
-        int totalCount = 0;
-        for (int i = 0; i < ParallelThreadCount; i++)
-            totalCount += ParallelShapeCounts[i];
-
-        if (totalCount == 0)
-        {
-            ShapeCount = 0;
-            return this;
-        }
-
-        EnsureShapeCapacity(totalCount);
-
-        // Reset merge indices
-        Array.Clear(ParallelMergeIndices, 0, ParallelThreadCount);
-
-        // Build initial min-heap with first element from each non-empty thread
-        MergeHeapSize = 0;
-        for (int t = 0; t < ParallelThreadCount; t++)
-        {
-            if (ParallelShapeCounts[t] > 0)
-            {
-                MergeHeap[MergeHeapSize++] = (ParallelZBuffers[t][0], t);
-            }
-        }
-        HeapifyAll();
-
-        int outputIndex = 0;
-        while (MergeHeapSize > 0)
-        {
-            // Extract min (root of heap)
-            var (_, bestThread) = MergeHeap[0];
-            int idx = ParallelMergeIndices[bestThread]++;
-            Shapes[outputIndex++] = ParallelShapeBuffers[bestThread][idx];
-
-            // Replace root with next element from same thread, or remove if exhausted
-            if (ParallelMergeIndices[bestThread] < ParallelShapeCounts[bestThread])
-            {
-                MergeHeap[0] = (ParallelZBuffers[bestThread][ParallelMergeIndices[bestThread]], bestThread);
-                HeapSiftDown(0);
-            }
-            else
-            {
-                // Remove root by replacing with last element
-                MergeHeap[0] = MergeHeap[--MergeHeapSize];
-                if (MergeHeapSize > 0) HeapSiftDown(0);
-            }
-        }
-
-        // Reset counts
-        for (int i = 0; i < ParallelThreadCount; i++)
-            ParallelShapeCounts[i] = 0;
-
-        ShapeCount = totalCount;
-        return this;
-    }
-
-    private void HeapifyAll()
-    {
-        for (int i = MergeHeapSize / 2 - 1; i >= 0; i--)
-            HeapSiftDown(i);
-    }
-
-    private void HeapSiftDown(int i)
-    {
-        while (true)
-        {
-            int smallest = i;
-            int left = 2 * i + 1;
-            int right = 2 * i + 2;
-
-            if (left < MergeHeapSize && MergeHeap[left].z < MergeHeap[smallest].z)
-                smallest = left;
-            if (right < MergeHeapSize && MergeHeap[right].z < MergeHeap[smallest].z)
-                smallest = right;
-
-            if (smallest == i) break;
-
-            (MergeHeap[i], MergeHeap[smallest]) = (MergeHeap[smallest], MergeHeap[i]);
-            i = smallest;
-        }
-    }
-
-    #endregion
-
-    #region Shader Management
-
-    /// <summary>
-    /// Loads and sets the active shader by name. Shaders are cached after first load.
-    /// </summary>
-    /// <param name="name">Shader path relative to Content/shaders/ (e.g., "Effects/Blur").</param>
-    /// <returns>This renderer for method chaining.</returns>
-    public Renderer SetShader(string name)
-    {
-        if (!ShaderCache.TryGetValue(name, out var shader))
-        {
-            shader = Window.Content.Load<Effect>($"shaders/{name}");
-            ShaderCache[name] = shader;
-        }
-
-        CurrentShader = shader;
-        CurrentShaderName = name;
-        return this;
-    }
-
-    /// <summary>
-    /// Gets a shader Effect by name without setting it as active. Useful for external parameter setting.
-    /// </summary>
-    /// <param name="name">Shader path relative to Content/shaders/.</param>
-    /// <returns>The loaded Effect object.</returns>
-    public Effect GetShaderEffect(string name)
-    {
-        if (!ShaderCache.TryGetValue(name, out var shader))
-        {
-            shader = Window.Content.Load<Effect>($"shaders/{name}");
-            ShaderCache[name] = shader;
-        }
-        return shader;
-    }
-
-    /// <summary>
-    /// Disposes and removes a shader from the cache.
-    /// </summary>
-    /// <param name="name">Shader path to release.</param>
-    /// <returns>This renderer for method chaining.</returns>
-    public Renderer ReleaseShader(string name)
-    {
-        if (ShaderCache.TryGetValue(name, out var shader))
-        {
-            shader.Dispose();
-            ShaderCache.Remove(name);
-
-            if (CurrentShaderName == name)
-            {
-                CurrentShader = null;
-                CurrentShaderName = null;
-            }
-        }
-        return this;
-    }
-
-    /// <summary>
-    /// Sets the active technique on the current shader.
-    /// </summary>
-    /// <param name="technique">Name of the technique to activate.</param>
-    /// <returns>This renderer for method chaining.</returns>
-    public Renderer SetTechnique(string technique)
-    {
-        if (CurrentShader != null)
-            CurrentShader.CurrentTechnique = CurrentShader.Techniques[technique];
-        return this;
-    }
-
-    #endregion
-
-    #region State Configuration
-
-    /// <summary>Sets the blend state for subsequent draw calls.</summary>
-    public Renderer Configure(BlendState state)
-    {
-        BlendState = state;
-        return this;
-    }
-
-    /// <summary>Sets the depth stencil state for subsequent draw calls.</summary>
-    public Renderer Configure(DepthStencilState state)
-    {
-        DepthStencilState = state;
-        return this;
-    }
-
-    /// <summary>Sets the rasterizer state for subsequent draw calls.</summary>
-    public Renderer Configure(RasterizerState state)
-    {
-        RasterizerState = state;
-        return this;
-    }
-
-    /// <summary>Sets a sampler state at the specified slot.</summary>
-    /// <param name="state">The sampler state to set.</param>
-    /// <param name="slot">Sampler slot index (0-7).</param>
-    public Renderer Configure(SamplerState state, int slot = 0)
-    {
-        if (slot >= 0 && slot < SamplerStates.Length)
-        {
-            SamplerStates[slot] = state;
-            SamplerDirtyMask |= 1 << slot;
-        }
-        return this;
-    }
-
-    /// <summary>Sets the sprite sort mode for DrawTexture operations.</summary>
-    public Renderer Configure(SpriteSortMode mode)
-    {
-        SpriteSortMode = mode;
-        return this;
-    }
-
-    /// <summary>Sets two sampler states at specified slots.</summary>
-    public Renderer Configure((int slot, SamplerState state) s0, (int slot, SamplerState state) s1)
-    {
-        if (s0.slot >= 0 && s0.slot < SamplerStates.Length)
-        {
-            SamplerStates[s0.slot] = s0.state;
-            SamplerDirtyMask |= 1 << s0.slot;
-        }
-        if (s1.slot >= 0 && s1.slot < SamplerStates.Length)
-        {
-            SamplerStates[s1.slot] = s1.state;
-            SamplerDirtyMask |= 1 << s1.slot;
-        }
-        return this;
-    }
-
-    /// <summary>Sets three sampler states at specified slots.</summary>
-    public Renderer Configure((int slot, SamplerState state) s0, (int slot, SamplerState state) s1, (int slot, SamplerState state) s2)
-    {
-        if (s0.slot >= 0 && s0.slot < SamplerStates.Length)
-        {
-            SamplerStates[s0.slot] = s0.state;
-            SamplerDirtyMask |= 1 << s0.slot;
-        }
-        if (s1.slot >= 0 && s1.slot < SamplerStates.Length)
-        {
-            SamplerStates[s1.slot] = s1.state;
-            SamplerDirtyMask |= 1 << s1.slot;
-        }
-        if (s2.slot >= 0 && s2.slot < SamplerStates.Length)
-        {
-            SamplerStates[s2.slot] = s2.state;
-            SamplerDirtyMask |= 1 << s2.slot;
-        }
-        return this;
-    }
-
-    /// <summary>Sets four sampler states at specified slots.</summary>
-    public Renderer Configure((int slot, SamplerState state) s0, (int slot, SamplerState state) s1, (int slot, SamplerState state) s2, (int slot, SamplerState state) s3)
-    {
-        if (s0.slot >= 0 && s0.slot < SamplerStates.Length)
-        {
-            SamplerStates[s0.slot] = s0.state;
-            SamplerDirtyMask |= 1 << s0.slot;
-        }
-        if (s1.slot >= 0 && s1.slot < SamplerStates.Length)
-        {
-            SamplerStates[s1.slot] = s1.state;
-            SamplerDirtyMask |= 1 << s1.slot;
-        }
-        if (s2.slot >= 0 && s2.slot < SamplerStates.Length)
-        {
-            SamplerStates[s2.slot] = s2.state;
-            SamplerDirtyMask |= 1 << s2.slot;
-        }
-        if (s3.slot >= 0 && s3.slot < SamplerStates.Length)
-        {
-            SamplerStates[s3.slot] = s3.state;
-            SamplerDirtyMask |= 1 << s3.slot;
-        }
-        return this;
-    }
-
-    /// <summary>Sets multiple sampler states at specified slots.</summary>
-    public Renderer Configure(params (int slot, SamplerState state)[] samplers)
-    {
-        foreach (var (slot, state) in samplers)
-        {
-            if (slot >= 0 && slot < SamplerStates.Length)
-            {
-                SamplerStates[slot] = state;
-                SamplerDirtyMask |= 1 << slot;
-            }
-        }
-        return this;
-    }
-
-    /// <summary>Sets multiple render states by type detection.</summary>
-    public Renderer Configure(params object[] states)
-    {
-        foreach (var state in states)
-        {
-            switch (state)
-            {
-                case BlendState bs: BlendState = bs; break;
-                case DepthStencilState ds: DepthStencilState = ds; break;
-                case RasterizerState rs: RasterizerState = rs; break;
-                case SpriteSortMode sm: SpriteSortMode = sm; break;
-                case SamplerState ss:
-                    SamplerStates[0] = ss;
-                    SamplerDirtyMask |= 1;
-                    break;
-            }
-        }
-        return this;
-    }
-
-    #endregion
-
-    #region Render Targets
-
-    /// <summary>
-    /// Pushes current render targets onto an internal stack. Use with PopTargets to
-    /// restore state after nested rendering operations without GPU synchronization.
-    /// </summary>
-    public Renderer PushTargets()
-    {
-        RenderTargetStack.Push(CurrentTargets);
-        return this;
-    }
-
-    /// <summary>
-    /// Pops and restores render targets from the internal stack.
-    /// </summary>
-    public Renderer PopTargets()
-    {
-        if (RenderTargetStack.Count > 0)
-        {
-            var targets = RenderTargetStack.Pop();
-            CommitTextures();
-            if (targets == null)
-                Device.SetRenderTarget(SceneRT);
-            else
-                Device.SetRenderTargets(targets);
-            CurrentTargets = targets;
-        }
-        return this;
-    }
-
-    /// <summary>Sets a single render target (or null for SceneRT).</summary>
-    public Renderer SetTarget(RenderTarget2D target)
-    {
-        CommitTextures();
-        Device.SetRenderTarget(target ?? SceneRT);
-        CurrentTargets = target != null ? [new RenderTargetBinding(target)] : null;
-        return this;
-    }
-
-    /// <summary>Sets two render targets for MRT rendering.</summary>
-    public Renderer SetTargets(RenderTarget2D target0, RenderTarget2D target1)
-    {
-        CommitTextures();
-        TwoTargetBindings[0] = new RenderTargetBinding(target0);
-        TwoTargetBindings[1] = new RenderTargetBinding(target1);
-        Device.SetRenderTargets(TwoTargetBindings);
-        // Use pooled array instead of Clone()
-        var pooled = BindingPool2[BindingPool2Index];
-        BindingPool2Index = (BindingPool2Index + 1) & (BindingPoolSize - 1);
-        pooled[0] = TwoTargetBindings[0];
-        pooled[1] = TwoTargetBindings[1];
-        CurrentTargets = pooled;
-        return this;
-    }
-
-    /// <summary>Sets three render targets for MRT rendering.</summary>
-    public Renderer SetTargets(RenderTarget2D target0, RenderTarget2D target1, RenderTarget2D target2)
-    {
-        CommitTextures();
-        ThreeTargetBindings[0] = new RenderTargetBinding(target0);
-        ThreeTargetBindings[1] = new RenderTargetBinding(target1);
-        ThreeTargetBindings[2] = new RenderTargetBinding(target2);
-        Device.SetRenderTargets(ThreeTargetBindings);
-        // Use pooled array instead of Clone()
-        var pooled = BindingPool3[BindingPool3Index];
-        BindingPool3Index = (BindingPool3Index + 1) & (BindingPoolSize - 1);
-        pooled[0] = ThreeTargetBindings[0];
-        pooled[1] = ThreeTargetBindings[1];
-        pooled[2] = ThreeTargetBindings[2];
-        CurrentTargets = pooled;
-        return this;
-    }
-
-    /// <summary>Sets four render targets for MRT rendering.</summary>
-    public Renderer SetTargets(RenderTarget2D target0, RenderTarget2D target1, RenderTarget2D target2, RenderTarget2D target3)
-    {
-        CommitTextures();
-        FourTargetBindings[0] = new RenderTargetBinding(target0);
-        FourTargetBindings[1] = new RenderTargetBinding(target1);
-        FourTargetBindings[2] = new RenderTargetBinding(target2);
-        FourTargetBindings[3] = new RenderTargetBinding(target3);
-        Device.SetRenderTargets(FourTargetBindings);
-        // Use pooled array instead of Clone()
-        var pooled = BindingPool4[BindingPool4Index];
-        BindingPool4Index = (BindingPool4Index + 1) & (BindingPoolSize - 1);
-        pooled[0] = FourTargetBindings[0];
-        pooled[1] = FourTargetBindings[1];
-        pooled[2] = FourTargetBindings[2];
-        pooled[3] = FourTargetBindings[3];
-        CurrentTargets = pooled;
-        return this;
-    }
-
-    /// <summary>Sets multiple render targets for MRT rendering.</summary>
-    public Renderer SetTargets(params RenderTarget2D[] targets)
-    {
-        CommitTextures();
-        var bindings = new RenderTargetBinding[targets.Length];
-        for (int i = 0; i < targets.Length; i++)
-            bindings[i] = new RenderTargetBinding(targets[i]);
-        Device.SetRenderTargets(bindings);
-        CurrentTargets = bindings;
-        return this;
-    }
-
-    /// <summary>Sets render targets from pre-built bindings array.</summary>
-    public Renderer SetTargets(params RenderTargetBinding[] bindings)
-    {
-        CommitTextures();
-        Device.SetRenderTargets(bindings);
-        CurrentTargets = bindings;
-        return this;
-    }
-
-    #endregion
-
-    #region Clear
-
-    /// <summary>
-    /// Clears the current render target(s) to the specified color.
-    /// </summary>
-    /// <param name="color">Clear color (defaults to Black).</param>
-    public Renderer Clear(Color? color = null)
-    {
-        Device.Clear(color ?? Color.Black);
-        return this;
-    }
-
-    #endregion
-
-    #region Shader Parameters
-
-    /// <summary>Sets a float parameter on the current (or specified) shader.</summary>
-    public Renderer SetParameter(string name, float value, Effect shader = null)
-    {
-        (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
-        return this;
-    }
-
-    /// <summary>Sets an int parameter on the current (or specified) shader.</summary>
-    public Renderer SetParameter(string name, int value, Effect shader = null)
-    {
-        (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
-        return this;
-    }
-
-    /// <summary>Sets a bool parameter on the current (or specified) shader.</summary>
-    public Renderer SetParameter(string name, bool value, Effect shader = null)
-    {
-        (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
-        return this;
-    }
-
-    /// <summary>Sets a Vector2 parameter on the current (or specified) shader.</summary>
-    public Renderer SetParameter(string name, Vector2 value, Effect shader = null)
-    {
-        (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
-        return this;
-    }
-
-    /// <summary>Sets a Vector3 parameter on the current (or specified) shader.</summary>
-    public Renderer SetParameter(string name, Vector3 value, Effect shader = null)
-    {
-        (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
-        return this;
-    }
-
-    /// <summary>Sets a Vector4 parameter on the current (or specified) shader.</summary>
-    public Renderer SetParameter(string name, Vector4 value, Effect shader = null)
-    {
-        (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
-        return this;
-    }
-
-    /// <summary>Sets a Matrix parameter on the current (or specified) shader.</summary>
-    public Renderer SetParameter(string name, Matrix value, Effect shader = null)
-    {
-        (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
-        return this;
-    }
-
-    /// <summary>
-    /// Sets a Texture2D parameter on the current (or specified) shader.
-    /// The shader must have a named texture parameter (not just a register binding).
-    /// </summary>
-    public Renderer SetParameter(string name, Texture2D value, Effect shader = null)
-    {
-        (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
-        return this;
-    }
-
-    /// <summary>Sets a float array parameter on the current (or specified) shader.</summary>
-    public Renderer SetParameter(string name, float[] value, Effect shader = null)
-    {
-        (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
-        return this;
-    }
-
-    /// <summary>Sets a Vector2 array parameter on the current (or specified) shader.</summary>
-    public Renderer SetParameter(string name, Vector2[] value, Effect shader = null)
-    {
-        (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
-        return this;
-    }
-
-    /// <summary>Sets a Vector3 array parameter on the current (or specified) shader.</summary>
-    public Renderer SetParameter(string name, Vector3[] value, Effect shader = null)
-    {
-        (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
-        return this;
-    }
-
-    /// <summary>Sets a Vector4 array parameter on the current (or specified) shader.</summary>
-    public Renderer SetParameter(string name, Vector4[] value, Effect shader = null)
-    {
-        (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
-        return this;
-    }
-
-    /// <summary>Sets a Matrix array parameter on the current (or specified) shader.</summary>
-    public Renderer SetParameter(string name, Matrix[] value, Effect shader = null)
-    {
-        (shader ?? CurrentShader)?.Parameters[name]?.SetValue(value);
-        return this;
-    }
-
-    /// <summary>Sets multiple parameters using tuples with type detection.</summary>
-    public Renderer SetParameter(Effect shader = null, params (string name, object value)[] parameters)
-    {
-        var target = shader ?? CurrentShader;
-        if (target == null) return this;
-
-        foreach (var (name, value) in parameters)
-            SetParameter(target, name, value);
-
-        return this;
-    }
-
-    /// <summary>
-    /// Static helper for setting parameters on external Effect objects with automatic type detection.
-    /// </summary>
-    public static void SetParameter(Effect shader, string key, object value)
-    {
-        var parameter = shader?.Parameters[key];
-        if (parameter == null) return;
-
-        switch (value)
-        {
-            case float f: parameter.SetValue(f); break;
-            case int i: parameter.SetValue(i); break;
-            case bool b: parameter.SetValue(b); break;
-            case Vector2 v2: parameter.SetValue(v2); break;
-            case Vector3 v3: parameter.SetValue(v3); break;
-            case Vector4 v4: parameter.SetValue(v4); break;
-            case Matrix m: parameter.SetValue(m); break;
-            case Texture2D t: parameter.SetValue(t); break;
-            case float[] fa: parameter.SetValue(fa); break;
-            case Vector2[] v2a: parameter.SetValue(v2a); break;
-            case Vector3[] v3a: parameter.SetValue(v3a); break;
-            case Vector4[] v4a: parameter.SetValue(v4a); break;
-            case Matrix[] ma: parameter.SetValue(ma); break;
-        }
-    }
-
-    #endregion
-
-    #region Texture Utilities
-
-    /// <summary>
-    /// Loads and caches a content texture by name. Returns the same instance for repeated calls.
-    /// </summary>
-    /// <param name="name">Asset name relative to Content root (e.g., "Ghost", "sprites/Player").</param>
-    /// <returns>The cached Texture2D.</returns>
-    public Texture2D GetTexture(string name)
-    {
-        if (!TextureCache.TryGetValue(name, out var texture))
-        {
-            texture = Window.Content.Load<Texture2D>(name);
-            TextureCache[name] = texture;
-        }
-        return texture;
-    }
-
-    /// <summary>
-    /// Gets or creates a cached solid color texture.
-    /// </summary>
-    /// <param name="color">Fill color for the texture.</param>
-    /// <param name="width">Texture width (default 1).</param>
-    /// <param name="height">Texture height (default 1).</param>
-    /// <returns>Cached texture with the specified color.</returns>
-    public Texture2D GetSolidTexture(Color color, int width = 1, int height = 1)
-    {
-        var key = (color, width, height);
-        if (!SolidTextureCache.TryGetValue(key, out var texture))
-        {
-            texture = new Texture2D(Device, width, height);
-            var data = new Color[width * height];
-            Array.Fill(data, color);
-            texture.SetData(data);
-            SolidTextureCache[key] = texture;
-        }
-        return texture;
-    }
-
-    /// <summary>
-    /// Gets or creates a cached anti-aliased circle texture.
-    /// </summary>
-    /// <param name="diameter">Circle diameter in pixels.</param>
-    /// <returns>Cached white circle texture with premultiplied alpha.</returns>
-    public Texture2D GetCircleTexture(int diameter)
-    {
-        if (diameter < 1) diameter = 1;
-
-        if (!CircleTextureCache.TryGetValue(diameter, out var texture))
-        {
-            texture = new Texture2D(Device, diameter, diameter);
-            var data = new Color[diameter * diameter];
-
-            float radius = diameter / 2f;
-            float centerX = radius - 0.5f;
-            float centerY = radius - 0.5f;
-
-            const float aaWidth = 1.0f;
-            float innerRadius = radius - aaWidth * 0.5f;
-
-            for (int y = 0; y < diameter; y++)
-            {
-                for (int x = 0; x < diameter; x++)
-                {
-                    float dx = x - centerX;
-                    float dy = y - centerY;
-                    float dist = MathF.Sqrt(dx * dx + dy * dy);
-
-                    float alpha = 1.0f - MathHelper.Clamp((dist - innerRadius) / aaWidth, 0f, 1f);
-                    byte a = (byte)(alpha * 255f + 0.5f);
-
-                    data[y * diameter + x] = new Color(a, a, a, a);
-                }
-            }
-
-            texture.SetData(data);
-            CircleTextureCache[diameter] = texture;
-        }
-        return texture;
-    }
-
-    /// <summary>
-    /// Gets or creates a cached anti-aliased downward-pointing triangle texture.
-    /// </summary>
-    /// <param name="size">Texture size in pixels (square).</param>
-    /// <returns>Cached white triangle texture with premultiplied alpha.</returns>
-    public Texture2D GetTriangleTexture(int size)
-    {
-        if (size < 4) size = 4;
-        if (!TriangleTextureCache.TryGetValue(size, out var texture))
-        {
-            texture = new Texture2D(Device, size, size);
-            var data = new Color[size * size];
-            float half = size / 2f;
-            Vector2 a = new(half, size - 0.5f);
-            Vector2 b = new(0.5f, 0.5f);
-            Vector2 c = new(size - 0.5f, 0.5f);
-
-            for (int y = 0; y < size; y++)
-            {
-                for (int x = 0; x < size; x++)
-                {
-                    Vector2 p = new(x + 0.5f, y + 0.5f);
-                    float d0 = EdgeDist(p, b, c);
-                    float d1 = EdgeDist(p, c, a);
-                    float d2 = EdgeDist(p, a, b);
-                    float dist = MathF.Max(d0, MathF.Max(d1, d2));
-                    float alpha = MathHelper.Clamp(0.5f - dist, 0f, 1f);
-                    byte val = (byte)(alpha * 255f + 0.5f);
-                    data[y * size + x] = new Color(val, val, val, val);
-                }
-            }
-            texture.SetData(data);
-            TriangleTextureCache[size] = texture;
-        }
-        return texture;
-
-        static float EdgeDist(Vector2 p, Vector2 v0, Vector2 v1)
-        {
-            Vector2 edge = v1 - v0;
-            Vector2 normal = new(edge.Y, -edge.X);
-            float len = normal.Length();
-            return (normal.X * (p.X - v0.X) + normal.Y * (p.Y - v0.Y)) / len;
-        }
-    }
-
-    /// <summary>
-    /// Gets or creates a cached anti-aliased checkmark texture.
-    /// </summary>
-    /// <param name="size">Texture size in pixels (square).</param>
-    /// <returns>Cached white checkmark texture with premultiplied alpha.</returns>
-    public Texture2D GetCheckmarkTexture(int size)
-    {
-        if (size < 4) size = 4;
-        if (!CheckmarkTextureCache.TryGetValue(size, out var texture))
-        {
-            texture = new Texture2D(Device, size, size);
-            var data = new Color[size * size];
-
-            float s = size;
-            Vector2 a = new(0.18f * s, 0.50f * s);
-            Vector2 b = new(0.40f * s, 0.75f * s);
-            Vector2 c = new(0.82f * s, 0.25f * s);
-            float thickness = s * 0.16f;
-
-            for (int y = 0; y < size; y++)
-            {
-                for (int x = 0; x < size; x++)
-                {
-                    Vector2 p = new(x + 0.5f, y + 0.5f);
-                    float d1 = SegmentDist(p, a, b);
-                    float d2 = SegmentDist(p, b, c);
-                    float dist = MathF.Min(d1, d2);
-                    float alpha = MathHelper.Clamp(1f - (dist - thickness * 0.5f), 0f, 1f);
-                    byte val = (byte)(alpha * 255f + 0.5f);
-                    data[y * size + x] = new Color(val, val, val, val);
-                }
-            }
-            texture.SetData(data);
-            CheckmarkTextureCache[size] = texture;
-        }
-        return texture;
-
-        static float SegmentDist(Vector2 p, Vector2 v0, Vector2 v1)
-        {
-            Vector2 seg = v1 - v0;
-            float len2 = seg.X * seg.X + seg.Y * seg.Y;
-            float t = MathHelper.Clamp(((p.X - v0.X) * seg.X + (p.Y - v0.Y) * seg.Y) / len2, 0f, 1f);
-            float dx = p.X - (v0.X + t * seg.X);
-            float dy = p.Y - (v0.Y + t * seg.Y);
-            return MathF.Sqrt(dx * dx + dy * dy);
-        }
-    }
-
-    /// <summary>
-    /// Gets or creates a cached anti-aliased magnifying glass (search) icon texture.
-    /// </summary>
-    /// <param name="size">Texture size in pixels (square).</param>
-    /// <returns>Cached white search icon texture with premultiplied alpha.</returns>
-    public Texture2D GetSearchTexture(int size)
-    {
-        if (size < 8) size = 8;
-        if (!SearchTextureCache.TryGetValue(size, out var texture))
-        {
-            texture = new Texture2D(Device, size, size);
-            var data = new Color[size * size];
-            float s = size;
-            float cx = 0.42f * s, cy = 0.42f * s;
-            float radius = 0.26f * s;
-            float thickness = s * 0.1f;
-            Vector2 handleStart = new(cx + radius * 0.707f, cy + radius * 0.707f);
-            Vector2 handleEnd = new(0.85f * s, 0.85f * s);
-
-            for (int y = 0; y < size; y++)
-            {
-                for (int x = 0; x < size; x++)
-                {
-                    Vector2 p = new(x + 0.5f, y + 0.5f);
-                    float dx = p.X - cx, dy = p.Y - cy;
-                    float dist = MathF.Sqrt(dx * dx + dy * dy);
-                    float ringDist = MathF.Abs(dist - radius) - thickness * 0.5f;
-                    float ringAlpha = MathHelper.Clamp(0.5f - ringDist, 0f, 1f);
-
-                    Vector2 seg = handleEnd - handleStart;
-                    float len2 = seg.X * seg.X + seg.Y * seg.Y;
-                    float t = MathHelper.Clamp(((p.X - handleStart.X) * seg.X + (p.Y - handleStart.Y) * seg.Y) / len2, 0f, 1f);
-                    float hx = p.X - (handleStart.X + t * seg.X);
-                    float hy = p.Y - (handleStart.Y + t * seg.Y);
-                    float handleDist = MathF.Sqrt(hx * hx + hy * hy) - thickness * 0.45f;
-                    float handleAlpha = MathHelper.Clamp(0.5f - handleDist, 0f, 1f);
-
-                    float alpha = MathF.Max(ringAlpha, handleAlpha);
-                    byte val = (byte)(alpha * 255f + 0.5f);
-                    data[y * size + x] = new Color(val, val, val, val);
-                }
-            }
-            texture.SetData(data);
-            SearchTextureCache[size] = texture;
-        }
-        return texture;
-    }
-
-    /// <summary>
-    /// Gets or creates a cached anti-aliased trash can icon texture.
-    /// </summary>
-    /// <param name="size">Texture size in pixels (square).</param>
-    /// <returns>Cached white trash icon texture with premultiplied alpha.</returns>
-    public Texture2D GetTrashTexture(int size)
-    {
-        if (size < 8) size = 8;
-        if (!TrashTextureCache.TryGetValue(size, out var texture))
-        {
-            texture = new Texture2D(Device, size, size);
-            var data = new Color[size * size];
-            float s = size;
-            float thickness = s * 0.08f;
-
-            float lidY = 0.18f * s, lidBottom = 0.28f * s;
-            float lidLeft = 0.15f * s, lidRight = 0.85f * s;
-            float handleLeft = 0.38f * s, handleRight = 0.62f * s;
-            float handleTop = 0.10f * s;
-            float bodyTop = lidBottom, bodyBottom = 0.88f * s;
-            float bodyLeft = 0.22f * s, bodyRight = 0.78f * s;
-
-            for (int y = 0; y < size; y++)
-            {
-                for (int x = 0; x < size; x++)
-                {
-                    float px = x + 0.5f, py = y + 0.5f;
-                    float alpha = 0;
-
-                    float lidDist = RectDist(px, py, lidLeft, lidY, lidRight, lidBottom);
-                    alpha = MathF.Max(alpha, MathHelper.Clamp(thickness * 0.5f - lidDist + 0.5f, 0f, 1f));
-
-                    float handleDist = RectDist(px, py, handleLeft, handleTop, handleRight, lidY + thickness * 0.5f);
-                    alpha = MathF.Max(alpha, MathHelper.Clamp(thickness * 0.4f - handleDist + 0.5f, 0f, 1f));
-
-                    float bodyDist = RectBorderDist(px, py, bodyLeft, bodyTop, bodyRight, bodyBottom, thickness);
-                    alpha = MathF.Max(alpha, MathHelper.Clamp(0.5f - bodyDist, 0f, 1f));
-
-                    for (int stripe = 0; stripe < 3; stripe++)
-                    {
-                        float stripeX = bodyLeft + (bodyRight - bodyLeft) * (stripe + 1) / 4f;
-                        float stripeTop = bodyTop + thickness + 2;
-                        float stripeBot = bodyBottom - thickness - 2;
-                        float dx = MathF.Abs(px - stripeX);
-                        float dy = MathF.Max(stripeTop - py, py - stripeBot);
-                        float stripeDist = MathF.Max(dx, dy);
-                        alpha = MathF.Max(alpha, MathHelper.Clamp(thickness * 0.35f - stripeDist + 0.5f, 0f, 1f));
-                    }
-
-                    byte val = (byte)(MathHelper.Clamp(alpha, 0f, 1f) * 255f + 0.5f);
-                    data[y * size + x] = new Color(val, val, val, val);
-                }
-            }
-            texture.SetData(data);
-            TrashTextureCache[size] = texture;
-        }
-        return texture;
-
-        static float RectDist(float px, float py, float left, float top, float right, float bottom)
-        {
-            float dx = MathF.Max(left - px, px - right);
-            float dy = MathF.Max(top - py, py - bottom);
-            return MathF.Max(dx, dy);
-        }
-
-        static float RectBorderDist(float px, float py, float left, float top, float right, float bottom, float thick)
-        {
-            float outer = -RectDist(px, py, left, top, right, bottom);
-            float inner = -RectDist(px, py, left + thick, top + thick, right - thick, bottom - thick);
-            return -MathF.Min(outer, -inner);
-        }
-    }
-
-    /// <summary>
-    /// Gets or creates a cached anti-aliased rounded rectangle texture for 9-slice rendering.
-    /// The texture is (radius*2+2) pixels square with premultiplied alpha SDF corners.
-    /// </summary>
-    /// <param name="radius">Corner radius in pixels.</param>
-    /// <returns>Cached white rounded rect texture with premultiplied alpha.</returns>
-    public Texture2D GetRoundedRectTexture(int radius)
-    {
-        if (radius < 1) radius = 1;
-
-        if (!RoundedRectCache.TryGetValue(radius, out var texture))
-        {
-            int size = radius * 2 + 2;
-            texture = new Texture2D(Device, size, size);
-            var data = new Color[size * size];
-            float center = size / 2f;
-            float innerDist = center - radius;
-
-            for (int y = 0; y < size; y++)
-            {
-                for (int x = 0; x < size; x++)
-                {
-                    float px = x + 0.5f;
-                    float py = y + 0.5f;
-                    float dx = MathF.Max(MathF.Abs(px - center) - innerDist, 0f);
-                    float dy = MathF.Max(MathF.Abs(py - center) - innerDist, 0f);
-                    float dist = MathF.Sqrt(dx * dx + dy * dy) - radius;
-                    float alpha = MathHelper.Clamp(0.5f - dist, 0f, 1f);
-                    byte a = (byte)(alpha * 255f + 0.5f);
-                    data[y * size + x] = new Color(a, a, a, a);
-                }
-            }
-
-            texture.SetData(data);
-            RoundedRectCache[radius] = texture;
-        }
-        return texture;
-    }
-
-    /// <summary>
-    /// Draws a rounded rectangle using 9-slice rendering during a BeginDraw/EndDraw session.
-    /// Corner radius is clamped to half the smallest dimension. Falls back to solid rect for tiny sizes.
-    /// </summary>
-    public void DrawRoundedRect(Rectangle bounds, Color color, int cornerRadius, RoundedCorners corners = RoundedCorners.All)
-    {
-        int radius = Math.Min(cornerRadius, Math.Min(bounds.Width, bounds.Height) / 2);
-        if (radius <= 1 || corners == RoundedCorners.None)
-        {
-            SpriteBatch.Draw(GetSolidTexture(Color.White), bounds, color);
-            return;
-        }
-
-        int hdRadius = radius * 4;
-        var tex = GetRoundedRectTexture(hdRadius);
-        int texSize = hdRadius * 2 + 2;
-        int bx = bounds.X, by = bounds.Y, bw = bounds.Width, bh = bounds.Height;
-        int innerW = bw - radius * 2;
-        int innerH = bh - radius * 2;
-        var srcSolid = new Rectangle(hdRadius, hdRadius, 1, 1);
-
-        Rectangle srcTL = corners.HasFlag(RoundedCorners.TL) ? new Rectangle(0, 0, hdRadius, hdRadius) : srcSolid;
-        SpriteBatch.Draw(tex, new Rectangle(bx, by, radius, radius), srcTL, color);
-
-        Rectangle srcTR = corners.HasFlag(RoundedCorners.TR) ? new Rectangle(texSize - hdRadius, 0, hdRadius, hdRadius) : srcSolid;
-        SpriteBatch.Draw(tex, new Rectangle(bx + bw - radius, by, radius, radius), srcTR, color);
-
-        Rectangle srcBL = corners.HasFlag(RoundedCorners.BL) ? new Rectangle(0, texSize - hdRadius, hdRadius, hdRadius) : srcSolid;
-        SpriteBatch.Draw(tex, new Rectangle(bx, by + bh - radius, radius, radius), srcBL, color);
-
-        Rectangle srcBR = corners.HasFlag(RoundedCorners.BR) ? new Rectangle(texSize - hdRadius, texSize - hdRadius, hdRadius, hdRadius) : srcSolid;
-        SpriteBatch.Draw(tex, new Rectangle(bx + bw - radius, by + bh - radius, radius, radius), srcBR, color);
-
-        if (innerW > 0)
-        {
-            SpriteBatch.Draw(tex, new Rectangle(bx + radius, by, innerW, radius), new Rectangle(hdRadius, 0, 2, hdRadius), color);
-            SpriteBatch.Draw(tex, new Rectangle(bx + radius, by + bh - radius, innerW, radius), new Rectangle(hdRadius, texSize - hdRadius, 2, hdRadius), color);
-        }
-
-        if (innerH > 0)
-        {
-            SpriteBatch.Draw(tex, new Rectangle(bx, by + radius, radius, innerH), new Rectangle(0, hdRadius, hdRadius, 2), color);
-            SpriteBatch.Draw(tex, new Rectangle(bx + bw - radius, by + radius, radius, innerH), new Rectangle(texSize - hdRadius, hdRadius, hdRadius, 2), color);
-        }
-
-        if (innerW > 0 && innerH > 0)
-            SpriteBatch.Draw(tex, new Rectangle(bx + radius, by + radius, innerW, innerH), srcSolid, color);
-    }
-
-    /// <summary>
-    /// Uploads raw Color array data to a render target. Use for efficient bulk updates.
-    /// The array should match the texture dimensions (width * height elements).
-    /// </summary>
-    /// <param name="target">The render target to update.</param>
-    /// <param name="data">Color array to upload (must be width * height in length).</param>
-    /// <param name="count">Number of elements to upload (0 = all).</param>
-    public void UploadToTexture(RenderTarget2D target, Color[] data, int count = 0)
-    {
-        if (count <= 0)
-            count = data.Length;
-        target.SetData(data, 0, count);
-    }
-
-    /// <summary>
-    /// Uploads raw Color array data to a texture region.
-    /// </summary>
-    /// <param name="target">The render target to update.</param>
-    /// <param name="data">Color array to upload.</param>
-    /// <param name="region">Destination rectangle within the texture.</param>
-    public void UploadToTexture(RenderTarget2D target, Color[] data, Rectangle region)
-    {
-        target.SetData(0, region, data, 0, region.Width * region.Height);
-    }
-
-    /// <summary>
-    /// Binds a texture directly to a device slot (for register-bound shader textures).
-    /// Prefer SetParameter for named texture parameters.
-    /// </summary>
-    public Renderer SetTexture(int slot, Texture2D texture)
-    {
-        Device.Textures[slot] = texture;
-        return this;
-    }
-
-    /// <summary>Binds a texture and sampler directly to a device slot.</summary>
-    public Renderer SetTexture(int slot, Texture2D texture, SamplerState sampler)
-    {
-        Device.Textures[slot] = texture;
-        Device.SamplerStates[slot] = sampler;
-        return this;
-    }
-
-    /// <summary>Binds multiple textures directly to device slots.</summary>
-    public Renderer SetTextures(params (int slot, Texture2D texture)[] textures)
-    {
-        foreach (var (slot, texture) in textures)
-            Device.Textures[slot] = texture;
-        return this;
-    }
-
-    /// <summary>Binds multiple textures and samplers directly to device slots.</summary>
-    public Renderer SetTextures(params (int slot, Texture2D texture, SamplerState sampler)[] textures)
-    {
-        foreach (var (slot, texture, sampler) in textures)
-        {
-            Device.Textures[slot] = texture;
-            Device.SamplerStates[slot] = sampler;
-        }
-        return this;
-    }
-
-    /// <summary>Clears texture bindings on the first N slots.</summary>
-    public Renderer ClearTextures(int count = 4)
-    {
-        for (int i = 0; i < count; i++)
-            Device.Textures[i] = null;
-        return this;
-    }
-
-    #endregion
-
-    #region Drawing
-
-    /// <summary>
-    /// Draws a fullscreen quad using the current shader. The shader must have a vertex
-    /// shader that accepts POSITION0 and TEXCOORD0 semantics.
-    /// </summary>
-    public Renderer Draw()
-    {
-        CommitTextures();
-
-        Device.BlendState = BlendState;
-        Device.DepthStencilState = DepthStencilState;
-        Device.RasterizerState = RasterizerState;
-
-        for (int i = 0; i < SamplerStates.Length; i++)
-        {
-            if ((SamplerDirtyMask & (1 << i)) != 0)
-                Device.SamplerStates[i] = SamplerStates[i];
-        }
-
-        Device.SetVertexBuffer(QuadVertexBuffer);
-        Device.Indices = QuadIndexBuffer;
-
-        if (CurrentShader != null)
-        {
-            foreach (var pass in CurrentShader.CurrentTechnique.Passes)
-            {
-                pass.Apply();
-                Device.DrawIndexedPrimitives(PrimitiveType.TriangleList, 0, 0, 2);
-            }
-        }
-
-        IsDrawing = true;
-        return this;
-    }
-
-    /// <summary>Draws a texture at the specified position using SpriteBatch.</summary>
-    public Renderer DrawTexture(Texture2D texture, Vector2 position)
-    {
-        return DrawTexture(texture, position, Color.White);
-    }
-
-    /// <summary>Draws a texture at the specified position with tint using SpriteBatch.</summary>
-    public Renderer DrawTexture(Texture2D texture, Vector2 position, Color color)
-    {
-        BeginTextures();
-        SpriteBatch.Draw(texture, position, color);
-        return this;
-    }
-
-    /// <summary>Draws a texture stretched to the destination rectangle using SpriteBatch.</summary>
-    public Renderer DrawTexture(Texture2D texture, Rectangle destination)
-    {
-        return DrawTexture(texture, destination, Color.White);
-    }
-
-    /// <summary>Draws a texture stretched to the destination rectangle with tint using SpriteBatch.</summary>
-    public Renderer DrawTexture(Texture2D texture, Rectangle destination, Color color)
-    {
-        BeginTextures();
-        SpriteBatch.Draw(texture, destination, color);
-        return this;
-    }
-
-    /// <summary>Draws a texture with source rectangle using SpriteBatch.</summary>
-    public Renderer DrawTexture(Texture2D texture, Rectangle destination, Rectangle? source, Color color)
-    {
-        BeginTextures();
-        SpriteBatch.Draw(texture, destination, source, color);
-        return this;
-    }
-
-    /// <summary>Draws a texture with full transform parameters using SpriteBatch.</summary>
-    public Renderer DrawTexture(Texture2D texture, Vector2 position, Rectangle? source, Color color, float rotation, Vector2 origin, Vector2 scale, SpriteEffects effects, float depth)
-    {
-        BeginTextures();
-        SpriteBatch.Draw(texture, position, source, color, rotation, origin, scale, effects, depth);
-        return this;
-    }
-
-    private void BeginTextures()
-    {
-        if (IsDrawingTextures) return;
-
-        SpriteBatch.Begin(
-            SpriteSortMode,
-            BlendState,
-            SamplerStates[0],
-            DepthStencilState,
-            RasterizerState,
-            CurrentShader
-        );
-
-        IsDrawingTextures = true;
-        IsDrawing = true;
-    }
-
-    private void CommitTextures()
-    {
-        if (!IsDrawingTextures) return;
-
-        SpriteBatch.End();
-        IsDrawingTextures = false;
-    }
-
-    #endregion
-
-    #region Ping-Pong Rendering
-
-    /// <summary>
-    /// Performs ping-pong rendering between two render targets for multi-pass effects.
-    /// </summary>
-    /// <param name="a">First render target.</param>
-    /// <param name="b">Second render target.</param>
-    /// <param name="passes">Number of passes to perform.</param>
-    /// <param name="beforePass">Callback before each pass. Receives pass index and current input texture.</param>
-    /// <param name="afterPass">Callback after each pass. Receives pass index.</param>
-    /// <param name="clearColor">Color to clear output target each pass (default Black).</param>
-    /// <returns>The final output render target (may be a or b depending on pass count).</returns>
-    public RenderTarget2D PingPong(
-        RenderTarget2D a,
-        RenderTarget2D b,
-        int passes,
-        Action<int, RenderTarget2D> beforePass = null,
-        Action<int> afterPass = null,
-        Color? clearColor = null)
-    {
-        RenderTarget2D input = a;
-        RenderTarget2D output = b;
-        Color clear = clearColor ?? Color.Black;
-
-        for (int i = 0; i < passes; i++)
-        {
-            beforePass?.Invoke(i, input);
-
-            Device.SetRenderTarget(output);
-            Device.Clear(clear);
-
-            Device.BlendState = BlendState;
-            Device.DepthStencilState = DepthStencilState;
-            Device.RasterizerState = RasterizerState;
-
-            for (int s = 0; s < SamplerStates.Length; s++)
-            {
-                if ((SamplerDirtyMask & (1 << s)) != 0)
-                    Device.SamplerStates[s] = SamplerStates[s];
-            }
-
-            Device.SetVertexBuffer(QuadVertexBuffer);
-            Device.Indices = QuadIndexBuffer;
-
-            if (CurrentShader != null)
-            {
-                foreach (var pass in CurrentShader.CurrentTechnique.Passes)
-                {
-                    pass.Apply();
-                    Device.DrawIndexedPrimitives(PrimitiveType.TriangleList, 0, 0, 2);
-                }
-            }
-
-            afterPass?.Invoke(i);
-
-            (input, output) = (output, input);
-        }
-
-        Device.SetRenderTarget(SceneRT);
-        return input;
-    }
-
-    #endregion
-
-    #region Flow Control
-
     /// <summary>Marks the renderer as actively drawing (rarely needed directly).</summary>
     public Renderer Begin()
     {
@@ -2035,10 +326,6 @@ public class Renderer : IDisposable
 
         return this;
     }
-
-    #endregion
-
-    #region High-Level API (prefer these over raw Device/SpriteBatch/Window access)
 
     /// <summary>Whether the game window is active and focused.</summary>
     public bool IsActive => Window.IsActive;
@@ -2083,56 +370,6 @@ public class Renderer : IDisposable
     }
 
     /// <summary>
-    /// Supersample multiplier for font rendering. Fonts rasterize at size * FontRenderScale
-    /// and draw scaled down for sharp, anti-aliased text.
-    /// </summary>
-    public float FontRenderScale { get; set; } = 1f;
-
-    /// <summary>
-    /// Loads a TTF font family into the font system. Path is relative to Content root.
-    /// </summary>
-    public void LoadFont(string name, string path)
-    {
-        if (FontSystems.ContainsKey(name)) return;
-        var settings = new FontSystemSettings { PremultiplyAlpha = true };
-        var system = new FontSystem(settings);
-        system.AddFont(File.ReadAllBytes(Path.Combine(Window.Content.RootDirectory, path)));
-        FontSystems[name] = system;
-    }
-
-    /// <summary>
-    /// Gets a dynamic font at a specific pixel size (raw, no supersampling applied).
-    /// </summary>
-    public SpriteFontBase GetFont(string name, float size) => FontSystems[name].GetFont(size);
-
-    /// <summary>
-    /// Measures text dimensions using a dynamic font at a specific pixel size.
-    /// Accounts for FontRenderScale internally — returns dimensions at the requested size.
-    /// </summary>
-    public Vector2 MeasureString(string fontName, float size, string text)
-    {
-        var font = FontSystems[fontName].GetFont(size * FontRenderScale);
-        return font.MeasureString(text) / FontRenderScale;
-    }
-
-    /// <summary>
-    /// Gets the line height for a font at a specific size, accounting for FontRenderScale.
-    /// </summary>
-    public float GetLineHeight(string fontName, float size) => FontSystems[fontName].GetFont(size * FontRenderScale).LineHeight / FontRenderScale;
-
-    /// <summary>
-    /// Draws text using a dynamic font at a specific size. Call between BeginDraw/EndDraw.
-    /// Supersampled via FontRenderScale for sharp rendering.
-    /// </summary>
-    public void DrawString(string fontName, float size, string text, Vector2 position, Color color, bool bold = false)
-    {
-        float scale = 1f / FontRenderScale;
-        var font = FontSystems[fontName].GetFont(size * FontRenderScale);
-        SpriteBatch.DrawString(font, text, position, color, scale: new Vector2(scale));
-        if (bold) SpriteBatch.DrawString(font, text, position + Vector2.UnitX, color, scale: new Vector2(scale));
-    }
-
-    /// <summary>
     /// Creates a new RenderTarget2D. Systems should use this instead of new RenderTarget2D(Device, ...).
     /// </summary>
     public RenderTarget2D CreateRenderTarget(int width, int height,
@@ -2151,95 +388,130 @@ public class Renderer : IDisposable
     }
 
     /// <summary>
-    /// Blits a texture fullscreen to the current render target using SpriteBatch.
-    /// Covers the common Begin/Draw(viewport)/End pattern.
+    /// Loads and caches a content texture by name. Returns the same instance for repeated calls.
     /// </summary>
-    public void Blit(Texture2D source, BlendState blend = null, SamplerState sampler = null)
+    /// <param name="name">Asset name relative to Content root (e.g., "Ghost", "sprites/Player").</param>
+    /// <returns>The cached Texture2D.</returns>
+    public Texture2D GetTexture(string name) => Textures.Get(name);
+
+    /// <summary>
+    /// Gets or creates a cached solid color texture.
+    /// </summary>
+    /// <param name="color">Fill color for the texture.</param>
+    /// <param name="width">Texture width (default 1).</param>
+    /// <param name="height">Texture height (default 1).</param>
+    /// <returns>Cached texture with the specified color.</returns>
+    public Texture2D GetSolidTexture(Color color, int width = 1, int height = 1) => Textures.GetSolid(color, width, height);
+
+    /// <summary>
+    /// Gets or creates a cached anti-aliased circle texture.
+    /// </summary>
+    /// <param name="diameter">Circle diameter in pixels.</param>
+    /// <returns>Cached white circle texture with premultiplied alpha.</returns>
+    public Texture2D GetCircleTexture(int diameter) => Textures.GetShape("Circle", diameter);
+
+    /// <summary>
+    /// Gets or creates a cached anti-aliased downward-pointing triangle texture.
+    /// </summary>
+    /// <param name="size">Texture size in pixels (square).</param>
+    /// <returns>Cached white triangle texture with premultiplied alpha.</returns>
+    public Texture2D GetTriangleTexture(int size) => Textures.GetShape("Triangle", size);
+
+    /// <summary>
+    /// Gets the cached checkmark icon texture (loaded from content pipeline).
+    /// </summary>
+    /// <param name="size">Ignored — retained for backward compatibility. Icon is a fixed-size PNG.</param>
+    public Texture2D GetCheckmarkTexture(int size) => GetTexture("presets/icons/Checkmark");
+
+    /// <summary>
+    /// Gets the cached search (magnifying glass) icon texture (loaded from content pipeline).
+    /// </summary>
+    /// <param name="size">Ignored — retained for backward compatibility. Icon is a fixed-size PNG.</param>
+    public Texture2D GetSearchTexture(int size) => GetTexture("presets/icons/Search");
+
+    /// <summary>
+    /// Gets the cached trash can icon texture (loaded from content pipeline).
+    /// </summary>
+    /// <param name="size">Ignored — retained for backward compatibility. Icon is a fixed-size PNG.</param>
+    public Texture2D GetTrashTexture(int size) => GetTexture("presets/icons/Trash");
+
+    /// <summary>
+    /// Gets or creates a cached anti-aliased rounded rectangle texture for 9-slice rendering.
+    /// The texture is (radius*2+2) pixels square with premultiplied alpha SDF corners.
+    /// </summary>
+    /// <param name="radius">Corner radius in pixels.</param>
+    /// <returns>Cached white rounded rect texture with premultiplied alpha.</returns>
+    public Texture2D GetRoundedRectTexture(int radius) => Textures.GetShape("RoundedRect", radius);
+
+    /// <summary>
+    /// Registers a procedural shape texture generator. The generator receives the size parameter
+    /// and must return pixel data (width, height, pixels). The Renderer creates and caches the
+    /// GPU texture internally.
+    /// </summary>
+    /// <param name="name">Unique shape name for later retrieval.</param>
+    /// <param name="generator">Function that produces pixel data for a given size.</param>
+    /// <param name="minSize">Minimum size clamp (requests below this are clamped up).</param>
+    public void RegisterShapeTexture(string name, Func<int, (int Width, int Height, Color[] Pixels)> generator, int minSize = 1)
     {
-        CommitTextures();
-        SpriteBatch.Begin(SpriteSortMode.Immediate, blend ?? BlendState.Opaque, sampler ?? SamplerState.PointClamp);
-        SpriteBatch.Draw(source, Device.Viewport.Bounds, Color.White);
-        SpriteBatch.End();
+        Textures.RegisterShape(name, (device, size) =>
+        {
+            var (width, height, pixels) = generator(size);
+            var texture = new Texture2D(device, width, height);
+            texture.SetData(pixels);
+            return texture;
+        }, minSize);
     }
 
     /// <summary>
-    /// Copies a texture to a render target at origin (native size, no stretching).
+    /// Gets or creates a cached procedural shape texture by name and size.
     /// </summary>
-    public void Blit(Texture2D source, RenderTarget2D target, Color? clearColor = null,
-        BlendState blend = null, SamplerState sampler = null)
+    /// <param name="name">Shape name as registered via RegisterShapeTexture.</param>
+    /// <param name="size">Requested size (clamped to the shape's minimum).</param>
+    public Texture2D GetShapeTexture(string name, int size) => Textures.GetShape(name, size);
+
+
+    /// <summary>
+    /// Supersample multiplier for font rendering. Fonts rasterize at size * FontRenderScale
+    /// and draw scaled down for sharp, anti-aliased text.
+    /// </summary>
+    public float FontRenderScale
     {
-        CommitTextures();
-        Device.SetRenderTarget(target ?? SceneRT);
-        if (clearColor.HasValue)
-            Device.Clear(clearColor.Value);
-        SpriteBatch.Begin(SpriteSortMode.Immediate, blend ?? BlendState.Opaque, sampler ?? SamplerState.PointClamp);
-        SpriteBatch.Draw(source, Vector2.Zero, Color.White);
-        SpriteBatch.End();
+        get => Fonts.FontRenderScale;
+        set => Fonts.FontRenderScale = value;
     }
 
     /// <summary>
-    /// Begins a SpriteBatch drawing session. Use with DrawSprite/DrawString/EndDraw.
+    /// Loads a TTF font family into the font system. Path is relative to Content root.
     /// </summary>
-    public void BeginDraw(SpriteSortMode sort = SpriteSortMode.Deferred,
-        BlendState blend = null, SamplerState sampler = null, Matrix? transform = null)
-    {
-        CommitTextures();
-        SpriteBatch.Begin(sort, blend ?? BlendState.AlphaBlend, sampler, null, null, null, transform);
-    }
-
-    /// <summary>Draws a texture to a destination rectangle during a BeginDraw/EndDraw session.</summary>
-    public void DrawSprite(Texture2D texture, Rectangle destination, Color color)
-    {
-        SpriteBatch.Draw(texture, destination, color);
-    }
-
-    /// <summary>Draws a texture with opacity (premultiplied alpha) during a BeginDraw/EndDraw session.</summary>
-    public void DrawSprite(Texture2D texture, Rectangle destination, Color color, float opacity)
-    {
-        var premul = new Color(
-            (byte)(color.R * opacity),
-            (byte)(color.G * opacity),
-            (byte)(color.B * opacity),
-            (byte)(color.A * opacity));
-        SpriteBatch.Draw(texture, destination, premul);
-    }
-
-    /// <summary>Draws a texture region to a destination rectangle during a BeginDraw/EndDraw session.</summary>
-    public void DrawSprite(Texture2D texture, Rectangle destination, Rectangle? source,
-        Color color, float rotation = 0f, Vector2 origin = default, SpriteEffects effects = SpriteEffects.None)
-    {
-        SpriteBatch.Draw(texture, destination, source, color, rotation, origin, effects, 0);
-    }
-
-    /// <summary>Ends a SpriteBatch drawing session started by BeginDraw.</summary>
-    public void EndDraw()
-    {
-        SpriteBatch.End();
-    }
+    public void LoadFont(string name, string path) => Fonts.Load(name, path);
 
     /// <summary>
-    /// Subtractive mask: erases pixels from the current render target where the mask has alpha.
-    /// Result = dest * (1 - mask.alpha). Supports rotation around origin (source-texture coords).
+    /// Gets a dynamic font at a specific pixel size (raw, no supersampling applied).
     /// </summary>
-    public void BlitMask(Texture2D mask, Rectangle destination, float rotation = 0f, Vector2 origin = default)
+    public SpriteFontBase GetFont(string name, float size) => Fonts.GetFont(name, size);
+
+    /// <summary>
+    /// Measures text dimensions using a dynamic font at a specific pixel size.
+    /// Accounts for FontRenderScale internally — returns dimensions at the requested size.
+    /// </summary>
+    public Vector2 MeasureString(string fontName, float size, string text) => Fonts.Measure(fontName, size, text);
+
+    /// <summary>
+    /// Gets the line height for a font at a specific size, accounting for FontRenderScale.
+    /// </summary>
+    public float GetLineHeight(string fontName, float size) => Fonts.GetLineHeight(fontName, size);
+
+    /// <summary>
+    /// Draws text using a dynamic font at a specific size. Call between BeginDraw/EndDraw.
+    /// Supersampled via FontRenderScale for sharp rendering.
+    /// </summary>
+    public void DrawString(string fontName, float size, string text, Vector2 position, Color color, bool bold = false)
     {
-        CommitTextures();
-        SpriteBatch.Begin(SpriteSortMode.Immediate, MaskSubtract);
-        SpriteBatch.Draw(mask, destination, null, Color.White, rotation, origin, SpriteEffects.None, 0);
-        SpriteBatch.End();
+        float scale = 1f / Fonts.FontRenderScale;
+        var font = Fonts.GetFont(fontName, size * Fonts.FontRenderScale);
+        SpriteBatch.DrawString(font, text, position, color, scale: new Vector2(scale));
+        if (bold) SpriteBatch.DrawString(font, text, position + Vector2.UnitX, color, scale: new Vector2(scale));
     }
-
-    private static readonly BlendState MaskSubtract = new BlendState
-    {
-        ColorSourceBlend = Blend.Zero,
-        ColorDestinationBlend = Blend.InverseSourceAlpha,
-        AlphaSourceBlend = Blend.Zero,
-        AlphaDestinationBlend = Blend.InverseSourceAlpha,
-    };
-
-    #endregion
-
-    #region IDisposable
 
     /// <summary>Disposes all cached resources (shaders, textures, buffers).</summary>
     public void Dispose()
@@ -2247,61 +519,11 @@ public class Renderer : IDisposable
         QuadVertexBuffer?.Dispose();
         QuadIndexBuffer?.Dispose();
         SpriteBatch?.Dispose();
-
         SceneRT?.Dispose();
-        ShapeQuadBuffer?.Dispose();
-        ShapeIndexBuffer?.Dispose();
-        ShapeInstanceBuffer?.Dispose();
 
-        foreach (var texture in TextureCache.Values)
-            texture?.Dispose();
-        TextureCache.Clear();
-
-        foreach (var fontSystem in FontSystems.Values)
-            fontSystem.Dispose();
-        FontSystems.Clear();
-
-        foreach (var texture in SolidTextureCache.Values)
-            texture?.Dispose();
-        SolidTextureCache.Clear();
-
-        foreach (var texture in CircleTextureCache.Values)
-            texture?.Dispose();
-        CircleTextureCache.Clear();
-
-        foreach (var texture in TriangleTextureCache.Values)
-            texture?.Dispose();
-        TriangleTextureCache.Clear();
-
-        foreach (var texture in CheckmarkTextureCache.Values)
-            texture?.Dispose();
-        CheckmarkTextureCache.Clear();
-
-        foreach (var texture in RoundedRectCache.Values)
-            texture?.Dispose();
-        RoundedRectCache.Clear();
-
-        foreach (var shader in ShaderCache.Values)
-            shader?.Dispose();
-        ShaderCache.Clear();
-
-        ParallelShapeBuffers = null;
-        ParallelZBuffers = null;
-        ParallelSortIndices = null;
-        ParallelShapeCounts = null;
-        ParallelMergeIndices = null;
-        MergeHeap = null;
+        Shaders?.Dispose();
+        Textures?.Dispose();
+        Fonts?.Dispose();
+        ShapeBatch?.Dispose();
     }
-
-    #endregion
-}
-
-/// <summary>
-/// Flags for which corners to round in DrawRoundedRect. Combinable for partial rounding.
-/// </summary>
-[Flags]
-public enum RoundedCorners : byte
-{
-    None = 0, TL = 1, TR = 2, BL = 4, BR = 8,
-    Top = TL | TR, Bottom = BL | BR, All = Top | Bottom
 }

@@ -23,6 +23,7 @@ public class Scene : IGameObject
 
     public void Dispose()
     {
+        ECS?.Dispose();
         GC.SuppressFinalize(this);
     }
 

@@ -155,15 +155,16 @@ public class GameServer
 
     public void BroadcastMessage(NetworkMessage message, NetworkClient exclude = null)
     {
+        NetworkClient[] snapshot;
         lock (Lock)
         {
-            foreach (var client in Clients)
-            {
-                if (client != exclude)
-                {
-                    SendToClient(client, message);
-                }
-            }
+            snapshot = Clients.ToArray();
+        }
+
+        foreach (var client in snapshot)
+        {
+            if (client != exclude)
+                SendToClient(client, message);
         }
     }
 }

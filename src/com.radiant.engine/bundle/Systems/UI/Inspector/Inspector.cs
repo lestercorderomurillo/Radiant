@@ -42,6 +42,11 @@ public partial class Inspector : core.System
     private Vector2 ResizeStartMouse;
     private float ResizeStartWidth;
     private float ResizeStartHeight;
+    private bool DraggingListBox;
+    private string ListBoxDragWindowId;
+    private string ListBoxDragWidgetId;
+    private int ListBoxDragStartIndex;
+    private HashSet<int> ListBoxDragBaseSelection;
 
     private string OpenDropdownWindowId;
     private string OpenDropdownWidgetId;
@@ -609,6 +614,40 @@ public partial class Inspector : core.System
             Resizing = false;
         }
 
+        if (DraggingListBox && leftHeld)
+        {
+            if (Windows.TryGetValue(ListBoxDragWindowId, out var listDragWindow) &&
+                listDragWindow.WidgetIndex.TryGetValue(ListBoxDragWidgetId, out int listDragIdx))
+            {
+                var listDragWidget = listDragWindow.Widgets[listDragIdx];
+                if (listDragWidget.ListBoxItems != null && listDragWidget.ListBoxItems.Length > 0)
+                {
+                    int itemHeight = (int)(LineHeight + 4);
+                    int contentY = listDragWidget.Bounds.Y + 4;
+                    int localY = (int)virtualMouse.Y - contentY;
+                    int currentIndex = Math.Clamp(localY / itemHeight + listDragWidget.ListBoxScroll, 0, listDragWidget.ListBoxItems.Length - 1);
+
+                    if (currentIndex != ListBoxDragStartIndex)
+                    {
+                        int rangeStart = Math.Min(ListBoxDragStartIndex, currentIndex);
+                        int rangeEnd = Math.Max(ListBoxDragStartIndex, currentIndex);
+                        listDragWidget.ListBoxSelected.Clear();
+                        if (ListBoxDragBaseSelection != null)
+                            foreach (int baseIdx in ListBoxDragBaseSelection)
+                                listDragWidget.ListBoxSelected.Add(baseIdx);
+                        for (int rangeIdx = rangeStart; rangeIdx <= rangeEnd; rangeIdx++)
+                            listDragWidget.ListBoxSelected.Add(rangeIdx);
+                        listDragWindow.Widgets[listDragIdx] = listDragWidget;
+                    }
+                }
+            }
+            MouseOverUI = true;
+        }
+        else if (DraggingListBox && leftReleased)
+        {
+            DraggingListBox = false;
+        }
+
         ComputeAllLayouts();
 
         int scrollDelta = currentMouse.ScrollWheelValue - PrevMouse.ScrollWheelValue;
@@ -819,11 +858,28 @@ public partial class Inspector : core.System
         if (clickedIndex < 0 || clickedIndex >= widget.ListBoxItems.Length) return;
 
         widget.ListBoxSelected ??= new HashSet<int>();
-        if (widget.ListBoxSelected.Contains(clickedIndex))
-            widget.ListBoxSelected.Remove(clickedIndex);
+        var keyboard = Microsoft.Xna.Framework.Input.Keyboard.GetState();
+        bool ctrlHeld = keyboard.IsKeyDown(Keys.LeftControl) || keyboard.IsKeyDown(Keys.RightControl);
+
+        if (ctrlHeld)
+        {
+            if (widget.ListBoxSelected.Contains(clickedIndex))
+                widget.ListBoxSelected.Remove(clickedIndex);
+            else
+                widget.ListBoxSelected.Add(clickedIndex);
+        }
         else
+        {
+            widget.ListBoxSelected.Clear();
             widget.ListBoxSelected.Add(clickedIndex);
+        }
         Window.Widgets[WidgetIndex] = widget;
+
+        DraggingListBox = true;
+        ListBoxDragWindowId = Window.Id;
+        ListBoxDragWidgetId = widget.Id;
+        ListBoxDragStartIndex = clickedIndex;
+        ListBoxDragBaseSelection = new HashSet<int>(widget.ListBoxSelected);
     }
 
     private void HandleListBoxScroll(Vector2 Mouse, int ScrollDelta)
