@@ -1962,7 +1962,7 @@ public class Renderer : IDisposable
     /// Supersample multiplier for font rendering. Fonts rasterize at size * FontRenderScale
     /// and draw scaled down for sharp, anti-aliased text.
     /// </summary>
-    public float FontRenderScale { get; set; } = 3f;
+    public float FontRenderScale { get; set; } = 1f;
 
     /// <summary>
     /// Loads a TTF font family into the font system. Path is relative to Content root.
@@ -1970,7 +1970,8 @@ public class Renderer : IDisposable
     public void LoadFont(string name, string path)
     {
         if (FontSystems.ContainsKey(name)) return;
-        var system = new FontSystem();
+        var settings = new FontSystemSettings { PremultiplyAlpha = true };
+        var system = new FontSystem(settings);
         system.AddFont(File.ReadAllBytes(Path.Combine(Window.Content.RootDirectory, path)));
         FontSystems[name] = system;
     }

@@ -62,7 +62,17 @@ public partial class Inspector : core.System
     private const int CornerRadius = 8;
     private const int MaxVisibleDropdownItems = 4;
 
-    private static float UIScale = 1.0f;
+    private static float UIScaleBacking = 1.0f;
+    private static float UIScale
+    {
+        get => UIScaleBacking;
+        set
+        {
+            UIScaleBacking = value;
+            if (Instance?.Renderer != null)
+                Instance.Renderer.FontRenderScale = MathF.Max(1f, value);
+        }
+    }
 
     /// <summary> Creates a new window. LayoutOrder controls auto-position column order. </summary>
     public static void CreateWindow(string Id, string Title, int LayoutOrder = 100, bool AutoPosition = true)

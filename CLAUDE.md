@@ -327,7 +327,7 @@ Renderer.EndDraw();
 
 ### Fonts (FontStashSharp)
 
-TTF fonts loaded at runtime — no content pipeline. Request any size dynamically.
+TTF fonts loaded at runtime — no content pipeline. Request any size dynamically. `PremultiplyAlpha = true` on FontSystem to match `BlendState.AlphaBlend`.
 
 ```csharp
 Renderer.LoadFont("MyFont", "fonts/MyFont.ttf");               // Load a TTF (path relative to Content root)
@@ -338,6 +338,8 @@ Renderer.MeasureString("Inter", 24f, text);                    // Returns Vector
 ```
 
 Pre-loaded fonts: `"Inter"` (Inter-Regular.ttf), `"Inter-Bold"` (Inter-Bold.ttf), `"PressStart2P"` (PressStart2P.ttf).
+
+**FontRenderScale**: Dynamic — Inspector sets `max(1, UIScale)`. At UIScale=1 it's 1; at UIScale=3 it's 3. Default is 1.
 
 ### Assets (all cached)
 
