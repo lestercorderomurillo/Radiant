@@ -193,7 +193,7 @@ public class Geometry : core.System
         Inspector.AddDropdown("pipeline", "debugMode", "Buffer", debugModeNames, 0, (index) => CurrentDebug = (DebugMode)index);
         var gameLoop = Renderer.GameLoop;
         Inspector.AddDropdown("pipeline", "fpsCap", "FPS Limit", GameLoop.FpsOptionNames, 2, (index) => gameLoop?.SetTargetFps(GameLoop.FpsOptions[index]));
-        Inspector.AddToggle("pipeline", "throttleUnfocused", "Limit FPS When Unfocused", true, (enabled) => { if (gameLoop != null) gameLoop.ThrottleUnfocused = enabled; });
+        Inspector.AddToggle("pipeline", "throttleUnfocused", "Limit FPS when unfocused", true, (enabled) => { if (gameLoop != null) gameLoop.ThrottleUnfocused = enabled; });
     }
 
     private void InitializeJFA()

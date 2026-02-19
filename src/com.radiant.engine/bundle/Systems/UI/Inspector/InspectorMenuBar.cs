@@ -38,9 +38,14 @@ public partial class Inspector
                 {
                     CreateWindow("about_radiant", "About Radiant", 999, AutoPosition: false);
                     AddSectionLabel("about_radiant", "about_engine", "Radiant Engine");
-                    AddLabel("about_radiant", "about_author", "By Lester Cordero Murillo");
-                    AddLabel("about_radiant", "about_tech", ".NET 8.0 | MonoGame 3.8.5");
-                    AddLabel("about_radiant", "about_build", "Build 2026.02");
+                    AddLabel("about_radiant", "about_desc", "A lightweight 2D engine.");
+                    AddLabel("about_radiant", "about_spacer1", " ");
+                    AddLabel("about_radiant", "about_f2", "High-performance entity system.");
+                    AddLabel("about_radiant", "about_f3", "GPU-accelerated rendering.");
+                    AddLabel("about_radiant", "about_f1", "Built-in editor, systems and tools.");
+                    AddLabel("about_radiant", "about_spacer2", " ");
+                    AddLabel("about_radiant", "about_author", "Developed by Lester Cordero Murillo");
+                    AddLabel("about_radiant", "about_build", ".NET 8.0 | Build 2026.02");
                 }
                 if (Windows.TryGetValue("about_radiant", out var aboutWindow))
                 {

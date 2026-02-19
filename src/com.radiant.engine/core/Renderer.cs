@@ -1593,35 +1593,36 @@ public class Renderer : IDisposable
             return;
         }
 
-        var tex = GetRoundedRectTexture(radius);
-        int texSize = radius * 2 + 2;
+        int hdRadius = radius * 4;
+        var tex = GetRoundedRectTexture(hdRadius);
+        int texSize = hdRadius * 2 + 2;
         int bx = bounds.X, by = bounds.Y, bw = bounds.Width, bh = bounds.Height;
         int innerW = bw - radius * 2;
         int innerH = bh - radius * 2;
-        var srcSolid = new Rectangle(radius, radius, 1, 1);
+        var srcSolid = new Rectangle(hdRadius, hdRadius, 1, 1);
 
-        Rectangle srcTL = corners.HasFlag(RoundedCorners.TL) ? new Rectangle(0, 0, radius, radius) : srcSolid;
+        Rectangle srcTL = corners.HasFlag(RoundedCorners.TL) ? new Rectangle(0, 0, hdRadius, hdRadius) : srcSolid;
         SpriteBatch.Draw(tex, new Rectangle(bx, by, radius, radius), srcTL, color);
 
-        Rectangle srcTR = corners.HasFlag(RoundedCorners.TR) ? new Rectangle(texSize - radius, 0, radius, radius) : srcSolid;
+        Rectangle srcTR = corners.HasFlag(RoundedCorners.TR) ? new Rectangle(texSize - hdRadius, 0, hdRadius, hdRadius) : srcSolid;
         SpriteBatch.Draw(tex, new Rectangle(bx + bw - radius, by, radius, radius), srcTR, color);
 
-        Rectangle srcBL = corners.HasFlag(RoundedCorners.BL) ? new Rectangle(0, texSize - radius, radius, radius) : srcSolid;
+        Rectangle srcBL = corners.HasFlag(RoundedCorners.BL) ? new Rectangle(0, texSize - hdRadius, hdRadius, hdRadius) : srcSolid;
         SpriteBatch.Draw(tex, new Rectangle(bx, by + bh - radius, radius, radius), srcBL, color);
 
-        Rectangle srcBR = corners.HasFlag(RoundedCorners.BR) ? new Rectangle(texSize - radius, texSize - radius, radius, radius) : srcSolid;
+        Rectangle srcBR = corners.HasFlag(RoundedCorners.BR) ? new Rectangle(texSize - hdRadius, texSize - hdRadius, hdRadius, hdRadius) : srcSolid;
         SpriteBatch.Draw(tex, new Rectangle(bx + bw - radius, by + bh - radius, radius, radius), srcBR, color);
 
         if (innerW > 0)
         {
-            SpriteBatch.Draw(tex, new Rectangle(bx + radius, by, innerW, radius), new Rectangle(radius, 0, 2, radius), color);
-            SpriteBatch.Draw(tex, new Rectangle(bx + radius, by + bh - radius, innerW, radius), new Rectangle(radius, texSize - radius, 2, radius), color);
+            SpriteBatch.Draw(tex, new Rectangle(bx + radius, by, innerW, radius), new Rectangle(hdRadius, 0, 2, hdRadius), color);
+            SpriteBatch.Draw(tex, new Rectangle(bx + radius, by + bh - radius, innerW, radius), new Rectangle(hdRadius, texSize - hdRadius, 2, hdRadius), color);
         }
 
         if (innerH > 0)
         {
-            SpriteBatch.Draw(tex, new Rectangle(bx, by + radius, radius, innerH), new Rectangle(0, radius, radius, 2), color);
-            SpriteBatch.Draw(tex, new Rectangle(bx + bw - radius, by + radius, radius, innerH), new Rectangle(texSize - radius, radius, radius, 2), color);
+            SpriteBatch.Draw(tex, new Rectangle(bx, by + radius, radius, innerH), new Rectangle(0, hdRadius, hdRadius, 2), color);
+            SpriteBatch.Draw(tex, new Rectangle(bx + bw - radius, by + radius, radius, innerH), new Rectangle(texSize - hdRadius, hdRadius, hdRadius, 2), color);
         }
 
         if (innerW > 0 && innerH > 0)
