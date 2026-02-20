@@ -40,6 +40,8 @@ public class ECS : IGameObject
     private readonly List<System> Systems;
     private List<System> RenderSystems;
     private readonly Dictionary<Type, System> SystemCache;
+    private readonly List<SystemGroup> SystemGroups = new();
+    private readonly Dictionary<System, SystemGroup> SystemToGroup = new();
 
     // Thread pool
     private static readonly int CachedThreadCount = Environment.ProcessorCount;
@@ -195,6 +197,18 @@ public class ECS : IGameObject
     }
 
     public IReadOnlyList<System> GetAllSystems() => Systems;
+
+    public void RegisterSystemGroup(SystemGroup group)
+    {
+        SystemGroups.Add(group);
+        group.ForEach(system => SystemToGroup[system] = group);
+    }
+
+    public SystemGroup GetSystemGroup(System system) =>
+        SystemToGroup.TryGetValue(system, out var group) ? group : null;
+
+    public string GetGroupName(System system) =>
+        SystemToGroup.TryGetValue(system, out var group) ? group.Name : null;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private int GetTypeId(Type type)

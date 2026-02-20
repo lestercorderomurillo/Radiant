@@ -118,20 +118,23 @@ public class PerformanceMonitor : core.System
             }
         }
 
-        // GPU
+        // GPU — individual counters can go stale as GPU processes start/stop
         if (GpuCounters != null && GpuCounters.Count > 0)
         {
-            try
+            float totalGpu = 0f;
+            for (int i = GpuCounters.Count - 1; i >= 0; i--)
             {
-                float totalGpu = 0f;
-                foreach (var counter in GpuCounters)
-                    totalGpu += counter.NextValue();
-                GpuUsage = totalGpu;
+                try
+                {
+                    totalGpu += GpuCounters[i].NextValue();
+                }
+                catch
+                {
+                    GpuCounters[i].Dispose();
+                    GpuCounters.RemoveAt(i);
+                }
             }
-            catch
-            {
-                GpuUsage = -1f;
-            }
+            GpuUsage = totalGpu;
         }
 
         // Memory - Process.Refresh() is expensive, now runs in background

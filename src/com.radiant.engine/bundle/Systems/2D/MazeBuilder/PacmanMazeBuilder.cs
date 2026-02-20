@@ -5,6 +5,7 @@ using Microsoft.Xna.Framework.Graphics;
 
 namespace com.radiant.engine.bundle;
 
+[SystemTag("Pacman")]
 public class PacmanMazeBuilder : core.System
 {
     public string[] Layout { get; set; }
@@ -15,9 +16,6 @@ public class PacmanMazeBuilder : core.System
     public Color WallLight { get; set; } = new Color(100, 180, 255);
     public Color[] WallColors { get; set; }
     public string[] Sections { get; set; }
-
-    private RenderTarget2D MazeEmissiveRT;
-    private RenderTarget2D MazeAbsorptionRT;
 
     public Dictionary<(int, int), int> CoinCells { get; private set; } = new();
     public Dictionary<(int, int), int> PowerPelletCells { get; private set; } = new();
@@ -31,6 +29,7 @@ public class PacmanMazeBuilder : core.System
     public int Rows { get; private set; }
     public float OffsetX { get; private set; }
     public float OffsetY { get; private set; }
+    public bool HasGrid => Grid != null;
 
     private bool[,] Grid;
 
@@ -43,7 +42,7 @@ public class PacmanMazeBuilder : core.System
         return 0;
     }
 
-    private Color GetWallColor(int x, int y)
+    public Color GetWallColor(int x, int y)
     {
         if (WallColors == null || WallColors.Length == 0) return WallLight;
         int section = GetSection(x, y);
@@ -236,168 +235,10 @@ public class PacmanMazeBuilder : core.System
         for (int y = 0; y < Rows; y++)
             for (int x = 0; x < Cols; x++)
                 Grid[x, y] = Layout[y][x] == '1';
-
-        DrawMazeToRenderTargets();
     }
 
     public void ClearMaze()
     {
-        MazeEmissiveRT?.Dispose();
-        MazeEmissiveRT = null;
-        MazeAbsorptionRT?.Dispose();
-        MazeAbsorptionRT = null;
-
-        var geometry = Scene.ECS.GetSystem<Geometry>();
-        if (geometry != null)
-        {
-            geometry.BackgroundEmissive = null;
-            geometry.BackgroundAbsorption = null;
-        }
-
         Grid = null;
     }
-
-    public override void OnResize()
-    {
-        if (Grid != null) DrawMazeToRenderTargets();
-    }
-
-    public override void Dispose()
-    {
-        MazeEmissiveRT?.Dispose();
-        MazeAbsorptionRT?.Dispose();
-    }
-
-    private void DrawMazeToRenderTargets()
-    {
-        MazeEmissiveRT?.Dispose();
-        MazeAbsorptionRT?.Dispose();
-        MazeEmissiveRT = Renderer.CreateRenderTarget(Renderer.ScreenWidth, Renderer.ScreenHeight);
-        MazeAbsorptionRT = Renderer.CreateRenderTarget(Renderer.ScreenWidth, Renderer.ScreenHeight);
-
-        var pixel = Renderer.GetSolidTexture(Color.White);
-
-        float[] gridX = new float[Cols + 1];
-        float[] gridY = new float[Rows + 1];
-        for (int i = 0; i <= Cols; i++) gridX[i] = OffsetX + i * CellSize;
-        for (int i = 0; i <= Rows; i++) gridY[i] = OffsetY + i * CellSize;
-
-        var fills = new List<Rectangle>();
-        var borders = new List<(Rectangle rect, Color color)>();
-
-        for (int y = 0; y < Rows; y++)
-            for (int x = 0; x < Cols; x++)
-            {
-                if (!Grid[x, y]) continue;
-
-                float fx = gridX[x];
-                float fy = gridY[y];
-                float fxr = gridX[x + 1];
-                float fyb = gridY[y + 1];
-
-                bool cL = !IsWall(x - 1, y);
-                bool cR = !IsWall(x + 1, y);
-                bool cU = !IsWall(x, y - 1);
-                bool cD = !IsWall(x, y + 1);
-
-                float l = fx + (cL ? WallMargin : 0);
-                float t = fy + (cU ? WallMargin : 0);
-                float r = fxr - (cR ? WallMargin : 0);
-                float b = fyb - (cD ? WallMargin : 0);
-
-                bool cutTL = !cL && !cU && !IsWall(x - 1, y - 1);
-                bool cutTR = !cR && !cU && !IsWall(x + 1, y - 1);
-                bool cutBL = !cL && !cD && !IsWall(x - 1, y + 1);
-                bool cutBR = !cR && !cD && !IsWall(x + 1, y + 1);
-
-                if (!cutTL && !cutTR && !cutBL && !cutBR)
-                {
-                    fills.Add(Renderer.VirtualToScreenRect(l, t, r - l, b - t));
-                }
-                else
-                {
-                    float cy1 = fy + WallMargin;
-                    float cy2 = fyb - WallMargin;
-                    if (t < cy1)
-                    {
-                        float sl = cutTL ? fx + WallMargin : l;
-                        float sr = cutTR ? fxr - WallMargin : r;
-                        fills.Add(Renderer.VirtualToScreenRect(sl, t, sr - sl, cy1 - t));
-                    }
-                    if (cy1 < cy2)
-                        fills.Add(Renderer.VirtualToScreenRect(l, cy1, r - l, cy2 - cy1));
-                    if (cy2 < b)
-                    {
-                        float sl = cutBL ? fx + WallMargin : l;
-                        float sr = cutBR ? fxr - WallMargin : r;
-                        fills.Add(Renderer.VirtualToScreenRect(sl, cy2, sr - sl, b - cy2));
-                    }
-                }
-
-                if (!cL && !cR && !cU && !cD && !cutTL && !cutTR && !cutBL && !cutBR) continue;
-                Color color = GetWallColor(x, y);
-
-                if (cU)
-                    borders.Add((Renderer.VirtualToScreenRect(l, t - WallThickness, r - l, WallThickness), color));
-                if (cD)
-                    borders.Add((Renderer.VirtualToScreenRect(l, b, r - l, WallThickness), color));
-                if (cL)
-                {
-                    float vt = cU ? t - WallThickness : t;
-                    float vb = cD ? b + WallThickness : b;
-                    borders.Add((Renderer.VirtualToScreenRect(l - WallThickness, vt, WallThickness, vb - vt), color));
-                }
-                if (cR)
-                {
-                    float vt = cU ? t - WallThickness : t;
-                    float vb = cD ? b + WallThickness : b;
-                    borders.Add((Renderer.VirtualToScreenRect(r, vt, WallThickness, vb - vt), color));
-                }
-
-                if (cutTL)
-                {
-                    borders.Add((Renderer.VirtualToScreenRect(fx, fy + WallMargin - WallThickness, WallMargin, WallThickness), color));
-                    borders.Add((Renderer.VirtualToScreenRect(fx + WallMargin - WallThickness, fy, WallThickness, WallMargin - WallThickness), color));
-                }
-                if (cutTR)
-                {
-                    borders.Add((Renderer.VirtualToScreenRect(fxr - WallMargin, fy + WallMargin - WallThickness, WallMargin, WallThickness), color));
-                    borders.Add((Renderer.VirtualToScreenRect(fxr - WallMargin, fy, WallThickness, WallMargin - WallThickness), color));
-                }
-                if (cutBL)
-                {
-                    borders.Add((Renderer.VirtualToScreenRect(fx, fyb - WallMargin, WallMargin, WallThickness), color));
-                    borders.Add((Renderer.VirtualToScreenRect(fx + WallMargin - WallThickness, fyb - WallMargin + WallThickness, WallThickness, WallMargin - WallThickness), color));
-                }
-                if (cutBR)
-                {
-                    borders.Add((Renderer.VirtualToScreenRect(fxr - WallMargin, fyb - WallMargin, WallMargin, WallThickness), color));
-                    borders.Add((Renderer.VirtualToScreenRect(fxr - WallMargin, fyb - WallMargin + WallThickness, WallThickness, WallMargin - WallThickness), color));
-                }
-            }
-
-        // Draw absorption RT: fills (white = inverted black albedo) + borders (emissive color)
-        Renderer.Reset().Configure(BlendState.Opaque).SetTarget(MazeAbsorptionRT).Clear(Color.Transparent);
-        for (int i = 0; i < fills.Count; i++)
-            Renderer.DrawTexture(pixel, fills[i], Color.White);
-        for (int i = 0; i < borders.Count; i++)
-            Renderer.DrawTexture(pixel, borders[i].rect, borders[i].color);
-        Renderer.Commit();
-
-        // Draw emissive RT: borders only
-        Renderer.Reset().Configure(BlendState.Opaque).SetTarget(MazeEmissiveRT).Clear(Color.Transparent);
-        for (int i = 0; i < borders.Count; i++)
-            Renderer.DrawTexture(pixel, borders[i].rect, borders[i].color);
-        Renderer.Commit();
-
-        Renderer.SetTarget(null);
-
-        var geometry = Scene.ECS.GetSystem<Geometry>();
-        if (geometry != null)
-        {
-            geometry.BackgroundEmissive = MazeEmissiveRT;
-            geometry.BackgroundAbsorption = MazeAbsorptionRT;
-        }
-    }
-
 }

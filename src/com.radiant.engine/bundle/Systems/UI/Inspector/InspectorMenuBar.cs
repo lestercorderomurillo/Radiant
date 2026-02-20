@@ -58,58 +58,18 @@ public partial class Inspector
             }
         });
         var workspace = new MenuData { Id = "workspace", Label = "Workspaces" };
-        Menus.Add(workspace);
-
         var entities = new MenuData { Id = "entities", Label = "Entities" };
-        entities.Items.Add(new MenuItem
-        {
-            Id = "entity_inspector",
-            Label = "Open Entity Inspector",
-            Type = MenuItemType.Action,
-            ActionCallback = () =>
-            {
-                if (!Windows.ContainsKey("entity_inspector"))
-                {
-                    CreateWindow("entity_inspector", "Entity Inspector", 50);
-                    if (Windows.TryGetValue("entity_inspector", out var entityInspectorWindow))
-                        entityInspectorWindow.Resizable = true;
-                    AddSectionLabel("entity_inspector", "find_section", "Find Entity");
-                    AddTextInput("entity_inspector", "find_input", "Search by ID...", (value) => RefreshEntityList(), 0.8f);
-                    AddButton("entity_inspector", "find_btn", "", () => RefreshEntityList(), 0.2f);
-                    AddListBox("entity_inspector", "results_list", 500);
-                    AddButton("entity_inspector", "delete_btn", "trash", () => DeleteSelectedEntities());
-                    RefreshEntityList();
-                }
-                ShowWindow("entity_inspector");
-            }
-        });
-        Menus.Add(entities);
-
         var components = new MenuData { Id = "components", Label = "Components" };
-        components.Items.Add(new MenuItem
-        {
-            Id = "component_registry",
-            Label = "Open Component Registry",
-            Type = MenuItemType.Action,
-            ActionCallback = () =>
-            {
-                if (!Windows.ContainsKey("component_registry"))
-                    CreateWindow("component_registry", "Component Registry", 52);
-                ShowWindow("component_registry");
-            }
-        });
-        Menus.Add(components);
-
         var systems = new MenuData { Id = "systems", Label = "Systems" };
-        systems.Items.Add(new MenuItem
-        {
-            Id = "system_inspector",
-            Label = "Open Systems Inspector",
-            Type = MenuItemType.Action,
-            ActionCallback = OpenSystemsInspector
-        });
-        Menus.Add(systems);
 
+        entities.Items.Add(new MenuItem { Id = "entity_inspector", Label = "Open Entity Inspector", Type = MenuItemType.Action, ActionCallback = OpenEntityInspector });
+        components.Items.Add(new MenuItem { Id = "component_registry", Label = "Open Component Registry", Type = MenuItemType.Action, ActionCallback = OpenComponentRegistry });
+        systems.Items.Add(new MenuItem { Id = "system_inspector", Label = "Configure Running Systems", Type = MenuItemType.Action, ActionCallback = OpenSystemsInspector });
+
+        Menus.Add(workspace);
+        Menus.Add(entities);
+        Menus.Add(components);
+        Menus.Add(systems);
         Menus.Add(about);
 
         RebuildWorkspaceMenu();
@@ -497,11 +457,35 @@ public partial class Inspector
         return result.Count > 0 ? result : null;
     }
 
+    private void OpenEntityInspector()
+    {
+        if (!Windows.ContainsKey("entity_inspector"))
+        {
+            CreateWindow("entity_inspector", "Entity Inspector", 50);
+            if (Windows.TryGetValue("entity_inspector", out var entityInspectorWindow))
+                entityInspectorWindow.Resizable = true;
+            AddSectionLabel("entity_inspector", "find_section", "Find Entity");
+            AddTextInput("entity_inspector", "find_input", "Search by ID...", (value) => RefreshEntityList(), 0.8f);
+            AddButton("entity_inspector", "find_btn", "", () => RefreshEntityList(), 0.2f);
+            AddListBox("entity_inspector", "results_list", 500);
+            AddButton("entity_inspector", "delete_btn", "trash", () => DeleteSelectedEntities());
+            RefreshEntityList();
+        }
+        ShowWindow("entity_inspector");
+    }
+
+    private void OpenComponentRegistry()
+    {
+        if (!Windows.ContainsKey("component_registry"))
+            CreateWindow("component_registry", "Component Registry", 52);
+        ShowWindow("component_registry");
+    }
+
     private void OpenSystemsInspector()
     {
         if (!Windows.ContainsKey("system_inspector"))
         {
-            CreateWindow("system_inspector", "Systems Inspector", 51);
+            CreateWindow("system_inspector", "System Manager", 51);
             if (Windows.TryGetValue("system_inspector", out var systemWindow))
                 systemWindow.Resizable = true;
             AddSectionLabel("system_inspector", "systems_section", "Registered Systems");
@@ -513,8 +497,42 @@ public partial class Inspector
         ShowWindow("system_inspector");
     }
 
+    private void UpdateSystemsInspector()
+    {
+        if (!IsWindowVisibleInternal("system_inspector")) return;
+
+        if (!Windows.TryGetValue("system_inspector", out var window)) return;
+        if (!window.WidgetIndex.TryGetValue("systems_list", out int widgetIdx)) return;
+        var widget = window.Widgets[widgetIdx];
+        var items = widget.ListBoxItems;
+        if (items == null || items.Length != SystemListMapping.Count) { RefreshSystemList(preserveSelection: true); return; }
+
+        bool changed = false;
+        for (int i = 0; i < SystemListMapping.Count; i++)
+        {
+            var system = SystemListMapping[i];
+            if (system == null) continue;
+            if (items[i].Length == 0) { changed = true; break; }
+            bool dotEnabled = items[i][0] == '\x01' || items[i][0] == '\x04';
+            if (dotEnabled != system.Enabled) { changed = true; break; }
+        }
+        if (changed) RefreshSystemList(preserveSelection: true);
+    }
+
     private static bool IsCoreSystem(core.System system) =>
         Attribute.IsDefined(system.GetType(), typeof(CoreSystemAttribute));
+
+    private string BuildSystemGroupKey(core.System system) => Scene.ECS.GetGroupName(system);
+
+    private string BuildSystemTags(core.System system)
+    {
+        var parts = new List<string>();
+        var groupName = Scene.ECS.GetGroupName(system);
+        if (groupName != null) parts.Add(groupName);
+        var tagAttr = (SystemTagAttribute)Attribute.GetCustomAttribute(system.GetType(), typeof(SystemTagAttribute));
+        if (tagAttr != null) parts.AddRange(tagAttr.Tags);
+        return parts.Count > 0 ? string.Join(", ", parts) : null;
+    }
 
     private List<core.System> GetFilteredSystems()
     {
@@ -524,12 +542,20 @@ public partial class Inspector
         foreach (var system in allSystems)
         {
             if (IsCoreSystem(system)) continue;
-            string name = system.GetType().Name;
-            if (filter.Length > 0 && !name.Contains(filter, StringComparison.OrdinalIgnoreCase)) continue;
+            if (filter.Length > 0)
+            {
+                string name = system.GetType().Name;
+                string tags = BuildSystemTags(system);
+                bool matches = name.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                    || (tags != null && tags.Contains(filter, StringComparison.OrdinalIgnoreCase));
+                if (!matches) continue;
+            }
             filtered.Add(system);
         }
         return filtered;
     }
+
+    private readonly List<core.System> SystemListMapping = new();
 
     private void RefreshSystemList(bool preserveSelection = false)
     {
@@ -542,12 +568,55 @@ public partial class Inspector
         }
 
         var filtered = GetFilteredSystems();
-        List<string> items = new();
+
+        var groups = new List<(string Name, List<core.System> Systems)>();
+        var groupMap = new Dictionary<string, int>();
+        var ungrouped = new List<core.System>();
+
         foreach (var system in filtered)
         {
-            string marker = system.Enabled ? "\x01" : "\x02";
-            items.Add($"{marker}{system.GetType().Name}");
+            string groupKey = BuildSystemGroupKey(system);
+            if (groupKey != null)
+            {
+                if (!groupMap.TryGetValue(groupKey, out int gi))
+                {
+                    gi = groups.Count;
+                    groupMap[groupKey] = gi;
+                    groups.Add((groupKey, new List<core.System>()));
+                }
+                groups[gi].Systems.Add(system);
+            }
+            else
+            {
+                ungrouped.Add(system);
+            }
         }
+
+        List<string> items = new();
+        SystemListMapping.Clear();
+
+        foreach (var (name, systems) in groups)
+        {
+            items.Add($"\x03{name}");
+            SystemListMapping.Add(null);
+            foreach (var system in systems)
+            {
+                string marker = system.Enabled ? "\x04" : "\x05";
+                items.Add($"{marker}{system.GetType().Name}");
+                SystemListMapping.Add(system);
+            }
+        }
+
+        if (ungrouped.Count > 0)
+        {
+            foreach (var system in ungrouped)
+            {
+                string marker = system.Enabled ? "\x01" : "\x02";
+                items.Add($"{marker}{system.GetType().Name}");
+                SystemListMapping.Add(system);
+            }
+        }
+
         SetListBoxItems("system_inspector", "systems_list", items.ToArray());
 
         if (savedSelection != null && savedSelection.Count > 0)
@@ -567,11 +636,29 @@ public partial class Inspector
         var selected = GetListBoxSelected("system_inspector", "systems_list");
         if (selected == null || selected.Count == 0) return;
 
-        var filtered = GetFilteredSystems();
         foreach (int index in selected)
         {
-            if (index >= 0 && index < filtered.Count)
-                filtered[index].Enabled = !filtered[index].Enabled;
+            if (index < 0 || index >= SystemListMapping.Count) continue;
+            var system = SystemListMapping[index];
+            if (system == null) continue;
+
+            var group = Scene.ECS.GetSystemGroup(system);
+
+            if (group != null)
+            {
+                int groupIndex = group.IndexOf(system);
+                if (groupIndex >= 0)
+                {
+                    if (system.Enabled)
+                        group.DisableActive();
+                    else
+                        group.SetActive(groupIndex);
+                }
+            }
+            else
+            {
+                system.Enabled = !system.Enabled;
+            }
         }
 
         RefreshSystemList(preserveSelection: true);

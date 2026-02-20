@@ -5,7 +5,6 @@ using Microsoft.Xna.Framework.Graphics;
 
 namespace com.radiant.engine.bundle;
 
-[CoreSystem]
 public class UDR1 : core.System
 {
     public override RenderLayer RenderLayer => RenderLayer.World;

@@ -369,6 +369,29 @@ public partial class Inspector
         {
             int itemIndex = i + scrollOffset;
             int itemY = Widget.Bounds.Y + 4 + i * itemHeight;
+            string fullText = items[itemIndex];
+
+            bool isSeparator = fullText.Length > 0 && fullText[0] == '\x03';
+            if (isSeparator)
+            {
+                string headerText = fullText[1..];
+                var headerSize = Renderer.MeasureString("Inter-Bold", FontSize, headerText);
+                float textY = itemY + (itemHeight - headerSize.Y) / 2;
+                float textX = Widget.Bounds.X + Padding;
+                Renderer.DrawString("Inter-Bold", FontSize, headerText, new Vector2(textX, textY), LabelDim);
+                int lineStartX = (int)(textX + headerSize.X + Padding);
+                int lineEndX = Widget.Bounds.Right - Padding;
+                if (lineStartX < lineEndX)
+                {
+                    int lineY = itemY + itemHeight / 2;
+                    byte lineAlpha = 40;
+                    float lineFactor = lineAlpha / 255f;
+                    var lineColor = new Color((byte)(TextColor.R * lineFactor), (byte)(TextColor.G * lineFactor), (byte)(TextColor.B * lineFactor), lineAlpha);
+                    Renderer.DrawSprite(Renderer.GetSolidTexture(Color.White), new Rectangle(lineStartX, lineY, lineEndX - lineStartX, 1), lineColor);
+                }
+                continue;
+            }
+
             bool isSelected = selected != null && selected.Contains(itemIndex);
 
             if (isSelected)
@@ -377,16 +400,17 @@ public partial class Inspector
                 Renderer.DrawRoundedRect(highlightRect, SliderFill, 4);
             }
 
-            string fullText = items[itemIndex];
-            float maxWidth = Widget.Bounds.Width - Padding * 2;
-            var itemPos = new Vector2(Widget.Bounds.X + Padding, itemY);
+            bool isIndented = fullText.Length > 0 && (fullText[0] == '\x04' || fullText[0] == '\x05');
+            int indent = isIndented ? 16 : 0;
+            float maxWidth = Widget.Bounds.Width - Padding * 2 - indent;
+            var itemPos = new Vector2(Widget.Bounds.X + Padding + indent, itemY);
             Color primaryColor = isSelected ? CloseText : TextColor;
 
-            bool hasDot = fullText.Length > 0 && (fullText[0] == '\x01' || fullText[0] == '\x02');
+            bool hasDot = fullText.Length > 0 && (fullText[0] == '\x01' || fullText[0] == '\x02' || fullText[0] == '\x04' || fullText[0] == '\x05');
             if (hasDot)
             {
                 int dotSize = 8;
-                Color dotColor = fullText[0] == '\x01' ? new Color(80, 200, 80) : new Color(200, 70, 70);
+                Color dotColor = (fullText[0] == '\x01' || fullText[0] == '\x04') ? new Color(80, 200, 80) : new Color(200, 70, 70);
                 var dotTex = Renderer.GetCircleTexture(dotSize * 4);
                 int dotY = itemY + (itemHeight - dotSize) / 2;
                 Renderer.DrawSprite(dotTex, new Rectangle((int)itemPos.X, dotY, dotSize, dotSize), dotColor);

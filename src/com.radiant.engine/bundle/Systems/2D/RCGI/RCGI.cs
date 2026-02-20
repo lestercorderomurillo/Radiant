@@ -299,6 +299,8 @@ public class RCGI : core.System
 
     public override void Dispose()
     {
+        if (Geometry != null)
+            Geometry.EnableSDF = false;
         Inspector.DestroyWindow("rcgi");
         Renderer.RenderScaleChanged -= OnRenderScaleChanged;
 

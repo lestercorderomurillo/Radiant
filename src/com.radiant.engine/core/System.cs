@@ -47,6 +47,13 @@ public class PausableAttribute : Attribute
 [AttributeUsage(AttributeTargets.Class)]
 public class CoreSystemAttribute : Attribute { }
 
+[AttributeUsage(AttributeTargets.Class)]
+public class SystemTagAttribute : Attribute
+{
+    public string[] Tags { get; }
+    public SystemTagAttribute(params string[] tags) => Tags = tags;
+}
+
 public enum RenderLayer : byte { World = 0, Gameplay = 1, Overlay = 2, UI = 3 }
 
 public abstract class System

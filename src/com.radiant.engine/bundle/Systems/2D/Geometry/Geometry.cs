@@ -10,6 +10,7 @@ using RendererShape = com.radiant.engine.core.Shape;
 
 namespace com.radiant.engine.bundle;
 
+[CoreSystem]
 public class Geometry : core.System
 {
     public override RenderLayer RenderLayer => RenderLayer.World;
@@ -658,6 +659,9 @@ public class Geometry : core.System
             Renderer.Commit();
         }
 
+        BackgroundEmissive = null;
+        BackgroundAbsorption = null;
+
         RenderMotionFromBuffer(ref buf);
         RenderMs = (float)sw.Elapsed.TotalMilliseconds;
     }
@@ -772,6 +776,10 @@ public class Geometry : core.System
     private void UpdateGizmos()
     {
         Inspector.SetDropdownValue("pipeline", "debugMode", (int)CurrentDebug);
+
+        var perfMonitor = Scene.ECS.GetSystem<PerformanceMonitor>();
+        if (perfMonitor != null && !perfMonitor.Enabled) return;
+
         Inspector.SetLabel("perf", "emissive", $"Emissive Entities: {EmissiveCount:N0}");
         Inspector.SetLabel("perf", "absorption", $"Absorptive Entities: {AbsorptionCount:N0}");
         Inspector.SetLabel("perf", "buffers", $"World Size: {WorldBounds.X}x{WorldBounds.Y}");
@@ -788,7 +796,7 @@ public class Geometry : core.System
         }
         else
         {
-            Inspector.SetLabel("perf", "sdf", "SDF Resolution: Disabled");
+            Inspector.SetLabel("perf", "sdf", "SDF Resolution: Not used");
             Inspector.SetLabel("perf", "jfa", "");
         }
     }

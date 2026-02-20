@@ -5,7 +5,6 @@ using Microsoft.Xna.Framework.Graphics;
 
 namespace com.radiant.engine.bundle;
 
-[CoreSystem]
 public class UDR2 : core.System
 {
     public override RenderLayer RenderLayer => RenderLayer.World;
@@ -193,6 +192,9 @@ public class UDR2 : core.System
 
     public override void Dispose()
     {
+        var geometry = Scene?.ECS?.GetSystem<Geometry>();
+        if (geometry != null)
+            geometry.EnableSDF = false;
         Inspector.DestroyWindow("udr2");
         Renderer.RenderScale = 1.0f;
 

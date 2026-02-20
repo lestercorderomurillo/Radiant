@@ -2,6 +2,10 @@ using Microsoft.Xna.Framework;
 
 namespace com.radiant.engine.bundle;
 
+public enum PacmanGhostType : byte { Blinky, Pinky, Inky, Clyde, Dinky, Shadow, Rainbow }
+public enum PacmanGhostMode : byte { Scatter, Chase, Frightened }
+public enum RainbowPhase : byte { Solo, Duo, Trio, Merging }
+
 public struct GhostEntry
 {
     public PacmanGhostType Type;

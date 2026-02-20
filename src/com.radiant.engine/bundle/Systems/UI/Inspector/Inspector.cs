@@ -550,6 +550,8 @@ public partial class Inspector : core.System
             LayoutDone = true;
         }
 
+        UpdateSystemsInspector();
+
         var keyboard = Microsoft.Xna.Framework.Input.Keyboard.GetState();
         if (keyboard.IsKeyDown(Keys.F1) && PrevKeyState.IsKeyUp(Keys.F1))
         {
@@ -640,7 +642,10 @@ public partial class Inspector : core.System
                             foreach (int baseIdx in ListBoxDragBaseSelection)
                                 listDragWidget.ListBoxSelected.Add(baseIdx);
                         for (int rangeIdx = rangeStart; rangeIdx <= rangeEnd; rangeIdx++)
+                        {
+                            if (listDragWidget.ListBoxItems[rangeIdx].Length > 0 && listDragWidget.ListBoxItems[rangeIdx][0] == '\x03') continue;
                             listDragWidget.ListBoxSelected.Add(rangeIdx);
+                        }
                         listDragWindow.Widgets[listDragIdx] = listDragWidget;
                     }
                 }
@@ -903,6 +908,7 @@ public partial class Inspector : core.System
 
         int clickedIndex = localY / itemHeight + widget.ListBoxScroll;
         if (clickedIndex < 0 || clickedIndex >= widget.ListBoxItems.Length) return;
+        if (widget.ListBoxItems[clickedIndex].Length > 0 && widget.ListBoxItems[clickedIndex][0] == '\x03') return;
 
         widget.ListBoxSelected ??= new HashSet<int>();
         var keyboard = Microsoft.Xna.Framework.Input.Keyboard.GetState();

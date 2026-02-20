@@ -65,7 +65,10 @@ radiant/
 │   │   ├── Extensions/ (LightFactory, VectorExtensions)
 │   │   └── Systems/
 │   │       ├── 2D/ Geometry, HRCGI, RCGI, Tileset, WorldGen, PerlinNoise2D,
-│   │       │       MouseLight, PaintBrush, MazeBuilder, AI/Pacman
+│   │       │       MouseLight, PaintBrush,
+│   │       │       MazeBuilder/ (PacmanMazeBuilder, PacmanMazeGenerator, PacmanMazeRenderer, PacmanLevelConfig),
+│   │       │       AI/Pacman/ (PacmanGhostAI, PacmanHUD,
+│   │       │                   Player/PacmanPlayerController)
 │   │       ├── 3D/ Tileset3D
 │   │       ├── FX/ ColorManagement, UDR
 │   │       └── UI/ Gizmos, UIWindow, Profiler
@@ -190,6 +193,7 @@ public abstract class System
 
 `[RunAfter(typeof(A), typeof(B))]`, `[RunBefore(...)]` — params Type[], AllowMultiple.
 `[Pausable]` — skipped when `ECS.GameplayPaused` (default). `[Pausable(PauseGroup.Animation)]` — skipped when `ECS.AnimationPaused`.
+`[SystemTag("Pacman")]` — tags for inspector display/filtering. `[CoreSystem]` — hidden from Systems Inspector.
 Topological sort (Kahn's) at `ECS.Initialize()`. Disabled systems (`Enabled = false`) are skipped during initialization — SystemGroup activates them later via `SetActive()`.
 
 ### RenderLayer
@@ -205,19 +209,32 @@ Topological sort (Kahn's) at `ECS.Initialize()`. Disabled systems (`Enabled = fa
 
 ### SystemGroup
 
-Mutually exclusive systems (e.g., HRCGI vs RCGI):
+Mutually exclusive systems (e.g., HRCGI vs RCGI). Supports "all disabled" state (ActiveIndex = -1).
 
 ```csharp
-var group = new SystemGroup(
+var group = new SystemGroup("GI",
     ("HRCGI", ECS.AddSystem<HRCGI>()),
     ("RCGI",  ECS.AddSystem<RCGI>(enabled: false))
 );
 
-group.Toggle();              // Dispose current → Initialize next
-group.ActiveName;            // Current system name
-group.Active;                // Current System instance
+group.Toggle();              // Cycle: 0 → 1 → ... → N-1 → -1 (none) → 0
+group.ActiveName;            // Current system name, null when none active
+group.Active;                // Current System instance, null when none active
+group.Name;                  // Group name ("GI")
+group.DisableActive();       // Dispose + disable current, set ActiveIndex = -1
 group.ForEach(system => {}); // Iterate all systems in group
 ```
+
+### SystemTag Attribute
+
+Tag systems for inspector display and filtering:
+
+```csharp
+[SystemTag("Pacman")]
+public class PacmanGhostAI : System { }
+```
+
+Tags appear in the Systems Inspector after `|`: "PacmanGhostAI  |  Pacman". Group names also shown: "HRCGI  |  GI".
 
 ## Renderer API
 
