@@ -10,6 +10,7 @@ namespace com.radiant.engine.bundle;
 /// Retained-mode UI system with draggable windows, themes, and blurry glass.
 /// All public methods are static and null-safe (no-op if Inspector is not registered).
 /// </summary>
+[CoreSystem]
 [RunAfter(typeof(Geometry))]
 [RunBefore(typeof(GizmosRenderer))]
 public partial class Inspector : core.System
@@ -47,6 +48,9 @@ public partial class Inspector : core.System
     private string ListBoxDragWidgetId;
     private int ListBoxDragStartIndex;
     private HashSet<int> ListBoxDragBaseSelection;
+    private bool DraggingScrollbar;
+    private string ScrollbarDragWindowId;
+    private string ScrollbarDragWidgetId;
 
     private string OpenDropdownWindowId;
     private string OpenDropdownWidgetId;
@@ -94,8 +98,8 @@ public partial class Inspector : core.System
     }
 
     /// <summary> Creates a new window. LayoutOrder controls auto-position column order. </summary>
-    public static void CreateWindow(string Id, string Title, int LayoutOrder = 100, bool AutoPosition = true)
-        => Instance?.CreateWindowInternal(Id, Title, LayoutOrder, AutoPosition);
+    public static void CreateWindow(string Id, string Title, int LayoutOrder = 100, bool AutoPosition = true, bool Visible = true)
+        => Instance?.CreateWindowInternal(Id, Title, LayoutOrder, AutoPosition, Visible);
 
     /// <summary> Destroys a window and all its widgets. </summary>
     public static void DestroyWindow(string Id)
@@ -200,7 +204,7 @@ public partial class Inspector : core.System
     /// <summary> Returns true if the mouse is over any Inspector window or popup. </summary>
     public static bool IsMouseOverUI() => Instance?.MouseOverUI ?? false;
 
-    private void CreateWindowInternal(string Id, string Title, int LayoutOrder, bool AutoPosition = true)
+    private void CreateWindowInternal(string Id, string Title, int LayoutOrder, bool AutoPosition = true, bool Visible = true)
     {
         if (Windows.ContainsKey(Id)) return;
         var window = new WindowData
@@ -209,7 +213,7 @@ public partial class Inspector : core.System
             Title = Title,
             Position = Vector2.Zero,
             Size = new Vector2(DefaultWindowWidth, 0),
-            Visible = true,
+            Visible = Visible,
             ZOrder = NextZOrder++,
             CreationIndex = NextCreationIndex++,
             LayoutOrder = LayoutOrder,
@@ -648,6 +652,31 @@ public partial class Inspector : core.System
             DraggingListBox = false;
         }
 
+        if (DraggingScrollbar && leftHeld)
+        {
+            if (Windows.TryGetValue(ScrollbarDragWindowId, out var scrollWindow) &&
+                scrollWindow.WidgetIndex.TryGetValue(ScrollbarDragWidgetId, out int scrollIdx))
+            {
+                var scrollWidget = scrollWindow.Widgets[scrollIdx];
+                if (scrollWidget.ListBoxItems != null && scrollWidget.ListBoxItems.Length > 0)
+                {
+                    int itemHeight = (int)(LineHeight + 4);
+                    int maxVisible = (scrollWidget.Bounds.Height - 8) / itemHeight;
+                    int trackY = scrollWidget.Bounds.Y + 4;
+                    int trackHeight = scrollWidget.Bounds.Height - 8;
+                    float dragRatio = Math.Clamp(((float)virtualMouse.Y - trackY) / trackHeight, 0f, 1f);
+                    int maxScroll = Math.Max(0, scrollWidget.ListBoxItems.Length - maxVisible);
+                    scrollWidget.ListBoxScroll = (int)(dragRatio * maxScroll);
+                    scrollWindow.Widgets[scrollIdx] = scrollWidget;
+                }
+            }
+            MouseOverUI = true;
+        }
+        else if (DraggingScrollbar && leftReleased)
+        {
+            DraggingScrollbar = false;
+        }
+
         ComputeAllLayouts();
 
         int scrollDelta = currentMouse.ScrollWheelValue - PrevMouse.ScrollWheelValue;
@@ -844,12 +873,30 @@ public partial class Inspector : core.System
         }
     }
 
+    private const int ScrollbarTrackWidth = 14;
+
     private void HandleListBoxClick(WindowData Window, int WidgetIndex, Vector2 Mouse)
     {
         var widget = Window.Widgets[WidgetIndex];
         if (widget.ListBoxItems == null || widget.ListBoxItems.Length == 0) return;
 
         int itemHeight = (int)(LineHeight + 4);
+        int maxVisible = (widget.Bounds.Height - 8) / itemHeight;
+
+        if (widget.ListBoxItems.Length > maxVisible && Mouse.X >= widget.Bounds.Right - ScrollbarTrackWidth)
+        {
+            int trackY = widget.Bounds.Y + 4;
+            int trackHeight = widget.Bounds.Height - 8;
+            float clickRatio = Math.Clamp(((float)Mouse.Y - trackY) / trackHeight, 0f, 1f);
+            int maxScroll = Math.Max(0, widget.ListBoxItems.Length - maxVisible);
+            widget.ListBoxScroll = (int)(clickRatio * maxScroll);
+            Window.Widgets[WidgetIndex] = widget;
+            DraggingScrollbar = true;
+            ScrollbarDragWindowId = Window.Id;
+            ScrollbarDragWidgetId = widget.Id;
+            return;
+        }
+
         int contentY = widget.Bounds.Y + 4;
         int localY = (int)Mouse.Y - contentY;
         if (localY < 0) return;

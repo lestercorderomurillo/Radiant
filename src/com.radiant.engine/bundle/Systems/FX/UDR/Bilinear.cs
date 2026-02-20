@@ -15,7 +15,7 @@ public class Bilinear : core.System
         ApplyRenderScale();
         UDRQuality.Changed += _ => ApplyRenderScale();
 
-        Inspector.CreateWindow("bilinear", "Bilinear");
+        Inspector.CreateWindow("bilinear", "Bilinear", Visible: false);
         Inspector.AddLabel("bilinear", "quality", "...");
         Inspector.AddLabel("bilinear", "input", "...");
         Inspector.AddLabel("bilinear", "output", "...");

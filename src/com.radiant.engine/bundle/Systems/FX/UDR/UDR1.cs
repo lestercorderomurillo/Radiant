@@ -5,6 +5,7 @@ using Microsoft.Xna.Framework.Graphics;
 
 namespace com.radiant.engine.bundle;
 
+[CoreSystem]
 public class UDR1 : core.System
 {
     public override RenderLayer RenderLayer => RenderLayer.World;
@@ -27,7 +28,7 @@ public class UDR1 : core.System
         ApplyRenderScale();
         UDRQuality.Changed += _ => ApplyRenderScale();
 
-        Inspector.CreateWindow("udr1", "UDR1");
+        Inspector.CreateWindow("udr1", "UDR1", Visible: false);
         Inspector.AddLabel("udr1", "quality", "...");
         Inspector.AddLabel("udr1", "input", "...");
         Inspector.AddLabel("udr1", "output", "...");

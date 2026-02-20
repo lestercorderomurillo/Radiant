@@ -74,7 +74,7 @@ public class HRCGI : core.System
 
         Renderer.RenderScaleChanged += OnRenderScaleChanged;
 
-        Inspector.CreateWindow("hrcgi", "Holographic Radiance Cascades");
+        Inspector.CreateWindow("hrcgi", "Holographic Radiance Cascades", Visible: false);
         Inspector.AddLabel("hrcgi", "world", "World Size: ...");
         Inspector.AddLabel("hrcgi", "cascades", "Number of Cascades: ...");
         Inspector.AddDropdown("hrcgi", "quality", "Quality", QualityNames, ProbeScaleIndex, (index) =>

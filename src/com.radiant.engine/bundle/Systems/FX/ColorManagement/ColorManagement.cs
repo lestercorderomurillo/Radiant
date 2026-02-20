@@ -5,6 +5,7 @@ using Microsoft.Xna.Framework.Graphics;
 
 namespace com.radiant.engine.bundle;
 
+[CoreSystem]
 [RunAfter(typeof(HRCGI), typeof(RCGI))]
 [RunBefore(typeof(Bilinear), typeof(UDR1), typeof(UDR2), typeof(UDR3))]
 public class ColorManagement : core.System
@@ -19,7 +20,7 @@ public class ColorManagement : core.System
 
     public override void Initialize()
     {
-        Inspector.CreateWindow("colorProfile", "Color Profile");
+        Inspector.CreateWindow("colorProfile", "Color Profile", Visible: false);
         Inspector.AddToggle("colorProfile", "tonemapToggle", "Enable Tonemapping", TonemappingEnabled, (enabled) =>
         {
             TonemappingEnabled = enabled;

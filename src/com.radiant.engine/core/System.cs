@@ -40,6 +40,13 @@ public class PausableAttribute : Attribute
     public PausableAttribute(PauseGroup groups) => Groups = groups;
 }
 
+/// <summary>
+/// Marks a system as core infrastructure that cannot be disabled via the Systems Inspector.
+/// Core systems are hidden from the Systems Inspector list entirely.
+/// </summary>
+[AttributeUsage(AttributeTargets.Class)]
+public class CoreSystemAttribute : Attribute { }
+
 public enum RenderLayer : byte { World = 0, Gameplay = 1, Overlay = 2, UI = 3 }
 
 public abstract class System

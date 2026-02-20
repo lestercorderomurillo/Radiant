@@ -8,21 +8,21 @@ public partial class Inspector
     private static readonly Dictionary<string, InspectorTheme> Themes = new();
     private static readonly List<string> ThemeNameList = new();
 
-    private static Color WindowBg = new(12, 12, 16, 220);
-    private static Color TitleBarColor = new(28, 28, 36, 240);
-    private static Color TitleBarHover = new(38, 38, 50, 240);
-    private static Color ButtonColor = new(40, 40, 55, 220);
-    private static Color ButtonHover = new(55, 55, 75, 240);
-    private static Color SliderTrack = new(30, 30, 42, 200);
-    private static Color SliderFill = new(70, 105, 180, 255);
-    private static Color SliderHandle = new(140, 140, 160, 255);
-    private static Color ToggleOn = new(70, 70, 160, 255);
-    private static Color ToggleOff = new(50, 50, 55, 200);
-    private static Color CloseColor = new(180, 60, 60, 255);
-    private static Color CloseHover = new(220, 80, 80, 255);
-    private static Color TextColor = new(220, 220, 230, 255);
-    private static Color CloseText = new(220, 220, 230, 255);
-    private static Color LabelDim = new(160, 160, 170, 255);
+    private static Color WindowBg = new(235, 235, 235, 225);
+    private static Color TitleBarColor = new(215, 215, 215, 240);
+    private static Color TitleBarHover = new(205, 205, 205, 240);
+    private static Color ButtonColor = new(200, 200, 200, 230);
+    private static Color ButtonHover = new(185, 185, 185, 245);
+    private static Color SliderTrack = new(195, 195, 195, 215);
+    private static Color SliderFill = new(55, 55, 55, 255);
+    private static Color SliderHandle = new(35, 35, 35, 255);
+    private static Color ToggleOn = new(50, 50, 50, 255);
+    private static Color ToggleOff = new(255, 255, 255, 255);
+    private static Color CloseColor = new(195, 75, 70, 255);
+    private static Color CloseHover = new(220, 90, 85, 255);
+    private static Color TextColor = new(15, 15, 15, 255);
+    private static Color CloseText = new(245, 245, 245, 255);
+    private static Color LabelDim = new(15, 15, 15, 255);
 
     /// <summary> Returns the names of all registered themes. </summary>
     public static string[] GetThemeNames() => ThemeNameList.ToArray();
@@ -67,6 +67,16 @@ public partial class Inspector
     {
         if (Themes.Count > 0) return;
 
+        RegisterTheme("Sentinel", new InspectorTheme
+        {
+            WindowBg = new(235, 235, 235, 225), TitleBarColor = new(215, 215, 215, 240), TitleBarHover = new(205, 205, 205, 240),
+            ButtonColor = new(200, 200, 200, 230), ButtonHover = new(185, 185, 185, 245),
+            SliderTrack = new(195, 195, 195, 215), SliderFill = new(55, 55, 55, 255), SliderHandle = new(35, 35, 35, 255),
+            ToggleOn = new(50, 50, 50, 255), ToggleOff = new(255, 255, 255, 255),
+            CloseColor = new(195, 75, 70, 255), CloseHover = new(220, 90, 85, 255),
+            TextColor = new(15, 15, 15, 255), CloseText = new(245, 245, 245, 255), LabelDim = new(15, 15, 15, 255)
+        });
+
         RegisterTheme("Solaris", new InspectorTheme
         {
             WindowBg = new(16, 15, 14, 235), TitleBarColor = new(32, 30, 26, 250), TitleBarHover = new(48, 44, 36, 250),
@@ -95,16 +105,6 @@ public partial class Inspector
             ToggleOn = new(90, 100, 195, 255), ToggleOff = new(35, 32, 55, 220),
             CloseColor = new(80, 85, 170, 255), CloseHover = new(110, 115, 210, 255),
             TextColor = new(200, 205, 235, 255), CloseText = new(200, 205, 235, 255), LabelDim = new(130, 135, 170, 255)
-        });
-
-        RegisterTheme("Sentinel", new InspectorTheme
-        {
-            WindowBg = new(235, 235, 235, 225), TitleBarColor = new(215, 215, 215, 240), TitleBarHover = new(205, 205, 205, 240),
-            ButtonColor = new(200, 200, 200, 230), ButtonHover = new(185, 185, 185, 245),
-            SliderTrack = new(195, 195, 195, 215), SliderFill = new(55, 55, 55, 255), SliderHandle = new(35, 35, 35, 255),
-            ToggleOn = new(50, 50, 50, 255), ToggleOff = new(255, 255, 255, 255),
-            CloseColor = new(195, 75, 70, 255), CloseHover = new(220, 90, 85, 255),
-            TextColor = new(15, 15, 15, 255), CloseText = new(245, 245, 245, 255), LabelDim = new(15, 15, 15, 255)
         });
 
         RegisterTheme("Greenfields", new InspectorTheme

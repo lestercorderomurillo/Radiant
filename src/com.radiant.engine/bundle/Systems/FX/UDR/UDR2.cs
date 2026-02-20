@@ -5,6 +5,7 @@ using Microsoft.Xna.Framework.Graphics;
 
 namespace com.radiant.engine.bundle;
 
+[CoreSystem]
 public class UDR2 : core.System
 {
     public override RenderLayer RenderLayer => RenderLayer.World;
@@ -39,7 +40,7 @@ public class UDR2 : core.System
         if (Geometry != null)
             Geometry.EnableSDF = true;
 
-        Inspector.CreateWindow("udr2", "UDR2");
+        Inspector.CreateWindow("udr2", "UDR2", Visible: false);
         Inspector.AddLabel("udr2", "quality", "...");
         Inspector.AddLabel("udr2", "input", "...");
         Inspector.AddLabel("udr2", "output", "...");

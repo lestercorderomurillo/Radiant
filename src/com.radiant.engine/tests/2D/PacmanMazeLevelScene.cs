@@ -562,19 +562,13 @@ public class PacmanMazeLevelScene : Scene
 
     private void UpdateWindowVisibility()
     {
-        // GI: show active, hide inactive
+        // GI: hide inactive, only show active if already visible
         if (GIGroup.Active is HRCGI)
-        {
-            Inspector.ShowWindow("hrcgi");
             Inspector.HideWindow("rcgi");
-        }
         else
-        {
             Inspector.HideWindow("hrcgi");
-            Inspector.ShowWindow("rcgi");
-        }
 
-        // Upscaler: show active, hide rest (hide all if disabled)
+        // Upscaler: hide inactive, only show active if already visible
         string[] upscalerWindows = ["udr1", "udr2", "udr3"];
         string activeWindow = UpscalerEnabled ? UpscalerGroup.Active switch
         {
@@ -586,9 +580,7 @@ public class PacmanMazeLevelScene : Scene
 
         foreach (var windowId in upscalerWindows)
         {
-            if (windowId == activeWindow)
-                Inspector.ShowWindow(windowId);
-            else
+            if (windowId != activeWindow)
                 Inspector.HideWindow(windowId);
         }
     }

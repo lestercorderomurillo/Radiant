@@ -379,10 +379,23 @@ public partial class Inspector
 
             string fullText = items[itemIndex];
             float maxWidth = Widget.Bounds.Width - Padding * 2;
-            int separatorIdx = fullText.IndexOf("  |  ", StringComparison.Ordinal);
             var itemPos = new Vector2(Widget.Bounds.X + Padding, itemY);
             Color primaryColor = isSelected ? CloseText : TextColor;
 
+            bool hasDot = fullText.Length > 0 && (fullText[0] == '\x01' || fullText[0] == '\x02');
+            if (hasDot)
+            {
+                int dotSize = 8;
+                Color dotColor = fullText[0] == '\x01' ? new Color(80, 200, 80) : new Color(200, 70, 70);
+                var dotTex = Renderer.GetCircleTexture(dotSize * 4);
+                int dotY = itemY + (itemHeight - dotSize) / 2;
+                Renderer.DrawSprite(dotTex, new Rectangle((int)itemPos.X, dotY, dotSize, dotSize), dotColor);
+                itemPos.X += dotSize + 12;
+                maxWidth -= dotSize + 12;
+                fullText = fullText[1..];
+            }
+
+            int separatorIdx = fullText.IndexOf("  |  ", StringComparison.Ordinal);
             if (separatorIdx < 0)
             {
                 DrawText(TruncateText(fullText, maxWidth), itemPos, primaryColor);
@@ -404,12 +417,12 @@ public partial class Inspector
 
         if (items.Length > maxVisible)
         {
-            int thumbWidth = 4;
-            int thumbMargin = 3;
+            int thumbWidth = 6;
+            int thumbMargin = 4;
             int thumbX = Widget.Bounds.Right - thumbMargin - thumbWidth;
             int trackHeight = Widget.Bounds.Height - 8;
             float thumbRatio = (float)maxVisible / items.Length;
-            int thumbHeight = Math.Max(8, (int)(trackHeight * thumbRatio));
+            int thumbHeight = Math.Max(16, (int)(trackHeight * thumbRatio));
             int scrollRange = trackHeight - thumbHeight;
             int maxScroll = Math.Max(1, items.Length - maxVisible);
             int thumbY = Widget.Bounds.Y + 4 + (int)(scrollRange * ((float)scrollOffset / maxScroll));
@@ -501,8 +514,8 @@ public partial class Inspector
 
         if (scrollable)
         {
-            int thumbWidth = 4;
-            int thumbMargin = 3;
+            int thumbWidth = 6;
+            int thumbMargin = 4;
             int thumbX = OpenDropdownPopupBounds.Right - thumbMargin - thumbWidth;
             float thumbRatio = (float)MaxVisibleDropdownItems / DropdownTotalOptions;
             int thumbHeight = Math.Max(8, (int)(OpenDropdownPopupBounds.Height * thumbRatio));

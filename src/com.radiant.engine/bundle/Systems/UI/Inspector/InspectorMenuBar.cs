@@ -100,6 +100,16 @@ public partial class Inspector
         });
         Menus.Add(components);
 
+        var systems = new MenuData { Id = "systems", Label = "Systems" };
+        systems.Items.Add(new MenuItem
+        {
+            Id = "system_inspector",
+            Label = "Open Systems Inspector",
+            Type = MenuItemType.Action,
+            ActionCallback = OpenSystemsInspector
+        });
+        Menus.Add(systems);
+
         Menus.Add(about);
 
         RebuildWorkspaceMenu();
@@ -485,6 +495,86 @@ public partial class Inspector
                 result.Add(filteredIds[index]);
         }
         return result.Count > 0 ? result : null;
+    }
+
+    private void OpenSystemsInspector()
+    {
+        if (!Windows.ContainsKey("system_inspector"))
+        {
+            CreateWindow("system_inspector", "Systems Inspector", 51);
+            if (Windows.TryGetValue("system_inspector", out var systemWindow))
+                systemWindow.Resizable = true;
+            AddSectionLabel("system_inspector", "systems_section", "Registered Systems");
+            AddTextInput("system_inspector", "systems_filter", "Filter...", (value) => RefreshSystemList(), 1f);
+            AddListBox("system_inspector", "systems_list", 500);
+            AddButton("system_inspector", "toggle_btn", "Toggle Enabled", () => ToggleSelectedSystems());
+            RefreshSystemList();
+        }
+        ShowWindow("system_inspector");
+    }
+
+    private static bool IsCoreSystem(core.System system) =>
+        Attribute.IsDefined(system.GetType(), typeof(CoreSystemAttribute));
+
+    private List<core.System> GetFilteredSystems()
+    {
+        var allSystems = Scene.ECS.GetAllSystems();
+        string filter = GetTextInputValue("system_inspector", "systems_filter");
+        List<core.System> filtered = new();
+        foreach (var system in allSystems)
+        {
+            if (IsCoreSystem(system)) continue;
+            string name = system.GetType().Name;
+            if (filter.Length > 0 && !name.Contains(filter, StringComparison.OrdinalIgnoreCase)) continue;
+            filtered.Add(system);
+        }
+        return filtered;
+    }
+
+    private void RefreshSystemList(bool preserveSelection = false)
+    {
+        HashSet<int> savedSelection = null;
+        if (preserveSelection)
+        {
+            var current = GetListBoxSelected("system_inspector", "systems_list");
+            if (current != null && current.Count > 0)
+                savedSelection = new HashSet<int>(current);
+        }
+
+        var filtered = GetFilteredSystems();
+        List<string> items = new();
+        foreach (var system in filtered)
+        {
+            string marker = system.Enabled ? "\x01" : "\x02";
+            items.Add($"{marker}{system.GetType().Name}");
+        }
+        SetListBoxItems("system_inspector", "systems_list", items.ToArray());
+
+        if (savedSelection != null && savedSelection.Count > 0)
+        {
+            if (Windows.TryGetValue("system_inspector", out var window) &&
+                window.WidgetIndex.TryGetValue("systems_list", out int widgetIdx))
+            {
+                var widget = window.Widgets[widgetIdx];
+                widget.ListBoxSelected = savedSelection;
+                window.Widgets[widgetIdx] = widget;
+            }
+        }
+    }
+
+    private void ToggleSelectedSystems()
+    {
+        var selected = GetListBoxSelected("system_inspector", "systems_list");
+        if (selected == null || selected.Count == 0) return;
+
+        var filtered = GetFilteredSystems();
+        foreach (int index in selected)
+        {
+            if (index >= 0 && index < filtered.Count)
+                filtered[index].Enabled = !filtered[index].Enabled;
+        }
+
+        RefreshSystemList(preserveSelection: true);
     }
 
     private static readonly Color GizmoSelectionColor = new(0, 255, 100, 200);

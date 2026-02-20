@@ -194,6 +194,8 @@ public class ECS : IGameObject
         return SystemCache.TryGetValue(typeof(T), out var system) ? (T)system : null;
     }
 
+    public IReadOnlyList<System> GetAllSystems() => Systems;
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private int GetTypeId(Type type)
     {

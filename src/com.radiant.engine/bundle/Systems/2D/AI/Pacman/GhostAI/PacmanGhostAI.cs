@@ -216,6 +216,9 @@ public class PacmanGhostAI : core.System
         for (int i = 0; i < GhostIds.Length; i++)
         {
             EyePositions[i] = PrevPositions[i];
+
+            if (GhostIds[i] == -1 || !Scene.ECS.IsAlive(GhostIds[i])) break; // Skip updating positions for dead entities (e.g. just eaten, waiting to respawn)
+
             ref var t = ref Scene.ECS.GetComponent<Transform>(GhostIds[i]);
             PrevPositions[i] = new Vector2(t.Position.X, t.Position.Y);
         }
@@ -225,6 +228,8 @@ public class PacmanGhostAI : core.System
             // Idle floating wobble before match starts
             for (int i = 0; i < GhostIds.Length; i++)
             {
+                if (GhostIds[i] == -1 || !Scene.ECS.IsAlive(GhostIds[i])) break; // Skip updating positions for dead entities (e.g. just eaten, waiting to respawn)
+
                 ref var transform = ref Scene.ECS.GetComponent<Transform>(GhostIds[i]);
                 float wobble = MathF.Sin(IdleTime * 3f + i * 1.7f) * 3f;
                 var pos = Positions[i];

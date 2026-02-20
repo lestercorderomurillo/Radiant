@@ -118,7 +118,11 @@ public class PacmanPlayer : core.System
         float dt = (float)GameTime.ElapsedGameTime.TotalSeconds;
         float step = Speed * dt;
 
+
+        if (!Scene.ECS.IsAlive(EntityId)) return;
+
         ref var transform = ref Scene.ECS.GetComponent<Transform>(EntityId);
+
         var pos = WorldPosition;
         var target = Maze.CellCenter(TargetCell.x, TargetCell.y);
 
@@ -249,6 +253,10 @@ public class PacmanPlayer : core.System
 
     void DrawEyes()
     {
+        if (!Scene.ECS.IsAlive(EntityId)) return;
+
+        float Radius = Scene.ECS.GetComponent<Circle2D>(EntityId).Radius;
+
         // No eyes when facing up/down
         if (PlayerEyesTexture == null || FacingDir.dy != 0) return;
 
@@ -257,7 +265,6 @@ public class PacmanPlayer : core.System
         float Pcx = RenderPosition.X + WobbleX;
         float Pcy = RenderPosition.Y + WobbleY;
 
-        float Radius = Scene.ECS.GetComponent<Circle2D>(EntityId).Radius;
         float EyeR = Radius * 0.767f;
         float EyeD = EyeR * 2f;
         float EyeOff = Radius * 0.133f;
