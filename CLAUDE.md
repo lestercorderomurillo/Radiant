@@ -560,16 +560,16 @@ Inspector.RegisterTheme("name", new InspectorTheme { ... });
 Inspector.ApplyTheme("name");
 Inspector.GetThemeNames();
 
-Inspector.WindowsRestored += () => {}; // Fired by Workspace > Reorder Windows
+Inspector.WindowsRestored += () => {}; // Fired by View > Reorder Windows
 ```
 
 Built-in themes: Solaris, Carbon, Midnight, Sentinel (light), Greenfields (olive), Neon, Nord.
 
 ### Menu Bar
 
-F1 toggles a top-of-screen menu bar with **Workspaces**, **Entities**, **Components**, and **Help** menus. Workspaces dynamically lists all registered Inspector windows with show/hide toggles plus a "Reset Positions" action. Entities has "Open Entity Inspector" (search bar + results list). Components has "Open Component Registry". Help has "About Radiant" (centered info window). Implementation is in `InspectorMenuBar.cs` (partial class Inspector). Menu bar uses frosted glass blur (45% opacity). Renders last (always on top). Hover-to-switch between menus when a dropdown is open (macOS behavior). Toggle items keep the dropdown open; action items close it.
+F1 toggles a top-of-screen menu bar with **File**, **ECS**, **View**, and **Help** menus. ECS has "Open Entity Inspector" (search bar + results list), "Open Component Registry", and "Open System Inspector". View dynamically lists all registered Inspector windows with show/hide toggles plus "Reorder Windows", "Show All", and "Hide All" actions. Help has "About Radiant" (centered info window). File has "Close". Implementation is in `InspectorMenuBar.cs` (partial class Inspector). Menu bar uses frosted glass blur (45% opacity). Renders last (always on top). Hover-to-switch between menus when a dropdown is open (macOS behavior). Toggle items keep the dropdown open; action items close it.
 
-**Auto-positioning**: Windows are only repositioned on: game window resize, UI scale change, or Workspace > Reorder Windows. Toggling visibility or creating/destroying windows does NOT reposition.
+**Auto-positioning**: Windows are only repositioned on: game window resize, UI scale change, or View > Reorder Windows. Toggling visibility or creating/destroying windows does NOT reposition.
 
 ## GizmosRenderer
 

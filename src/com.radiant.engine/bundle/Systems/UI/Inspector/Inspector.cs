@@ -64,7 +64,7 @@ public partial class Inspector : core.System
     private const float CursorBlinkRate = 0.53f;
     private const int InlineGap = 10;
 
-    /// <summary> Raised when "Restore Defaults" is clicked in the Workspace menu. </summary>
+    /// <summary> Raised when "Reorder Windows" is clicked in the View menu. </summary>
     public static event Action WindowsRestored;
 
     private const int DefaultWindowWidth = 600;
@@ -230,7 +230,7 @@ public partial class Inspector : core.System
         Windows[Id] = window;
         RenderOrder.Add(window);
         SortRenderOrder();
-        RebuildWorkspaceMenu();
+        RebuildViewMenu();
         PlaceNewWindow(window);
     }
 
@@ -239,7 +239,7 @@ public partial class Inspector : core.System
         if (!Windows.TryGetValue(Id, out var window)) return;
         Windows.Remove(Id);
         RenderOrder.Remove(window);
-        RebuildWorkspaceMenu();
+        RebuildViewMenu();
     }
 
     private void SetWindowVisible(string Id, bool Visible)
@@ -350,7 +350,8 @@ public partial class Inspector : core.System
         widget.ListBoxItems = Items ?? Array.Empty<string>();
         widget.ListBoxSelected ??= new HashSet<int>();
         widget.ListBoxSelected.Clear();
-        widget.ListBoxScroll = 0;
+        if (widget.ListBoxScroll >= widget.ListBoxItems.Length)
+            widget.ListBoxScroll = Math.Max(0, widget.ListBoxItems.Length - 1);
         window.Widgets[index] = widget;
     }
 
@@ -586,6 +587,7 @@ public partial class Inspector : core.System
         }
 
         UpdateSystemsInspector();
+        UpdateEntityInspector();
 
         var keyboard = Microsoft.Xna.Framework.Input.Keyboard.GetState();
         if (keyboard.IsKeyDown(Keys.F1) && PrevKeyState.IsKeyUp(Keys.F1))
@@ -631,7 +633,14 @@ public partial class Inspector : core.System
         if (Dragging && leftHeld)
         {
             if (Windows.TryGetValue(DragWindowId, out var dragWin))
-                dragWin.Position = virtualMouse - DragOffset;
+            {
+                float screenW = Renderer.VirtualWidth / UIScale;
+                float screenH = Renderer.VirtualHeight / UIScale;
+                var pos = virtualMouse - DragOffset;
+                pos.X = MathHelper.Clamp(pos.X, -dragWin.Size.X + Padding * 4, screenW - Padding * 4);
+                pos.Y = MathHelper.Clamp(pos.Y, MenuBarHeight, screenH - TitleBarHeight);
+                dragWin.Position = pos;
+            }
             MouseOverUI = true;
         }
         else if (Dragging && leftReleased)
@@ -643,10 +652,14 @@ public partial class Inspector : core.System
         {
             if (Windows.TryGetValue(ResizeWindowId, out var resizeWin))
             {
+                float screenW = Renderer.VirtualWidth / UIScale;
+                float screenH = Renderer.VirtualHeight / UIScale;
                 float deltaX = virtualMouse.X - ResizeStartMouse.X;
                 float deltaY = virtualMouse.Y - ResizeStartMouse.Y;
-                resizeWin.Size = new Vector2(Math.Max(MinWindowWidth, ResizeStartWidth + deltaX), resizeWin.Size.Y);
-                resizeWin.ResizedHeight = Math.Max(MinWindowHeight, ResizeStartHeight + deltaY);
+                float maxW = screenW - resizeWin.Position.X;
+                float maxH = screenH - resizeWin.Position.Y;
+                resizeWin.Size = new Vector2(MathHelper.Clamp(ResizeStartWidth + deltaX, MinWindowWidth, maxW), resizeWin.Size.Y);
+                resizeWin.ResizedHeight = MathHelper.Clamp(ResizeStartHeight + deltaY, MinWindowHeight, maxH);
             }
             MouseOverUI = true;
         }
@@ -941,6 +954,12 @@ public partial class Inspector : core.System
         int itemHeight = (int)(LineHeight + 4);
         int headerOffset = widget.ListBoxHeader != null ? itemHeight + 2 : 0;
         int maxVisible = (widget.Bounds.Height - 8 - headerOffset) / itemHeight;
+        int scrollClamp = Math.Max(0, widget.ListBoxItems.Length - maxVisible);
+        if (widget.ListBoxScroll > scrollClamp)
+        {
+            widget.ListBoxScroll = scrollClamp;
+            Window.Widgets[WidgetIndex] = widget;
+        }
 
         if (widget.ListBoxItems.Length > maxVisible && Mouse.X >= widget.Bounds.Right - ScrollbarTrackWidth)
         {
@@ -967,7 +986,7 @@ public partial class Inspector : core.System
         if (widget.ListBoxToggleCallback != null)
         {
             string itemText = widget.ListBoxItems[clickedIndex];
-            bool hasStatus = itemText.Length > 0 && (itemText[0] == '\x01' || itemText[0] == '\x02' || itemText[0] == '\x04' || itemText[0] == '\x05');
+            bool hasStatus = itemText.Length > 0 && (itemText[0] == '\x01' || itemText[0] == '\x02' || itemText[0] == '\x04' || itemText[0] == '\x05' || itemText[0] == '\x06' || itemText[0] == '\x07');
             if (hasStatus)
             {
                 bool isIndented = itemText[0] == '\x04' || itemText[0] == '\x05';

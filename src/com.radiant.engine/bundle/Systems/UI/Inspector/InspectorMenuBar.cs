@@ -57,14 +57,12 @@ public partial class Inspector
                 ShowWindow("about_radiant");
             }
         });
-        var workspace = new MenuData { Id = "workspace", Label = "View" };
-        var entities = new MenuData { Id = "entities", Label = "Entities" };
-        var components = new MenuData { Id = "components", Label = "Components" };
-        var systems = new MenuData { Id = "systems", Label = "Systems" };
+        var view = new MenuData { Id = "view", Label = "View" };
 
-        entities.Items.Add(new MenuItem { Id = "entity_inspector", Label = "Open Entity Inspector", Type = MenuItemType.Action, ActionCallback = OpenEntityInspector });
-        components.Items.Add(new MenuItem { Id = "component_registry", Label = "Open Component Registry", Type = MenuItemType.Action, ActionCallback = OpenComponentRegistry });
-        systems.Items.Add(new MenuItem { Id = "system_inspector", Label = "Open System Inspector", Type = MenuItemType.Action, ActionCallback = OpenSystemsInspector });
+        var ecs = new MenuData { Id = "ecs", Label = "ECS" };
+        ecs.Items.Add(new MenuItem { Id = "entity_inspector", Label = "Open Entity Inspector", Type = MenuItemType.Action, ActionCallback = OpenEntityInspector });
+        ecs.Items.Add(new MenuItem { Id = "component_registry", Label = "Open Component Registry", Type = MenuItemType.Action, ActionCallback = OpenComponentRegistry });
+        ecs.Items.Add(new MenuItem { Id = "system_inspector", Label = "Open System Inspector", Type = MenuItemType.Action, ActionCallback = OpenSystemsInspector });
 
         var file = new MenuData { Id = "file", Label = "File" };
         file.Items.Add(new MenuItem
@@ -76,28 +74,26 @@ public partial class Inspector
         });
 
         Menus.Add(file);
-        Menus.Add(entities);
-        Menus.Add(components);
-        Menus.Add(systems);
-        Menus.Add(workspace);
+        Menus.Add(ecs);
+        Menus.Add(view);
         Menus.Add(about);
 
-        RebuildWorkspaceMenu();
+        RebuildViewMenu();
         ComputeMenuBarLayout();
     }
 
-    private void RebuildWorkspaceMenu()
+    private void RebuildViewMenu()
     {
-        MenuData workspace = null;
+        MenuData viewMenu = null;
         foreach (var menu in Menus)
         {
-            if (menu.Id == "workspace") { workspace = menu; break; }
+            if (menu.Id == "view") { viewMenu = menu; break; }
         }
-        if (workspace == null) return;
+        if (viewMenu == null) return;
 
-        workspace.Items.Clear();
+        viewMenu.Items.Clear();
 
-        workspace.Items.Add(new MenuItem
+        viewMenu.Items.Add(new MenuItem
         {
             Id = "reorder_windows",
             Label = "Reorder Windows",
@@ -109,7 +105,7 @@ public partial class Inspector
             }
         });
 
-        workspace.Items.Add(new MenuItem
+        viewMenu.Items.Add(new MenuItem
         {
             Id = "show_all",
             Label = "Show All",
@@ -121,11 +117,11 @@ public partial class Inspector
                     if (win.Id == "about_radiant") continue;
                     win.Visible = true;
                 }
-                SyncWorkspaceToggleValues();
+                SyncViewToggleValues();
             }
         });
 
-        workspace.Items.Add(new MenuItem
+        viewMenu.Items.Add(new MenuItem
         {
             Id = "hide_all",
             Label = "Hide All",
@@ -134,7 +130,7 @@ public partial class Inspector
             {
                 foreach (var win in Windows.Values)
                     win.Visible = false;
-                SyncWorkspaceToggleValues();
+                SyncViewToggleValues();
             }
         });
 
@@ -149,7 +145,7 @@ public partial class Inspector
         {
             if (window.Id == "about_radiant") continue;
             string windowId = window.Id;
-            workspace.Items.Add(new MenuItem
+            viewMenu.Items.Add(new MenuItem
             {
                 Id = "show_" + windowId,
                 Label = window.Title,
@@ -160,25 +156,25 @@ public partial class Inspector
         }
     }
 
-    private void SyncWorkspaceToggleValues()
+    private void SyncViewToggleValues()
     {
-        MenuData workspace = null;
+        MenuData viewMenu = null;
         foreach (var menu in Menus)
         {
-            if (menu.Id == "workspace") { workspace = menu; break; }
+            if (menu.Id == "view") { viewMenu = menu; break; }
         }
-        if (workspace == null) return;
+        if (viewMenu == null) return;
 
-        for (int i = 0; i < workspace.Items.Count; i++)
+        for (int i = 0; i < viewMenu.Items.Count; i++)
         {
-            var item = workspace.Items[i];
+            var item = viewMenu.Items[i];
             if (item.Type != MenuItemType.Toggle) continue;
 
             string windowId = item.Id.Length > 5 ? item.Id[5..] : "";
             if (Windows.TryGetValue(windowId, out var window))
             {
                 item.ToggleValue = window.Visible;
-                workspace.Items[i] = item;
+                viewMenu.Items[i] = item;
             }
         }
     }
@@ -264,10 +260,10 @@ public partial class Inspector
     {
         OpenMenuId = MenuId;
 
-        if (MenuId == "workspace")
+        if (MenuId == "view")
         {
-            RebuildWorkspaceMenu();
-            SyncWorkspaceToggleValues();
+            RebuildViewMenu();
+            SyncViewToggleValues();
         }
 
         MenuData menu = null;
@@ -420,6 +416,19 @@ public partial class Inspector
     }
 
     private readonly List<int> EntityIdCache = new();
+    private bool EntityListDirty;
+
+    private void UpdateEntityInspector()
+    {
+        if (!IsWindowVisibleInternal("entity_inspector")) return;
+
+        int currentCount = Scene.ECS.EntityCount;
+        if (currentCount != EntityIdCache.Count || EntityListDirty)
+        {
+            EntityListDirty = false;
+            RefreshEntityList();
+        }
+    }
 
     private void RefreshEntityList()
     {
@@ -431,10 +440,11 @@ public partial class Inspector
         foreach (int id in EntityIdCache)
         {
             if (filter.Length > 0 && !id.ToString().Contains(filter)) continue;
+            char prefix = Scene.ECS.IsDisabled(id) ? '\x07' : '\x06';
             var types = Scene.ECS.GetComponentTypes(id);
             if (types.Length == 0)
             {
-                items.Add($"{id}");
+                items.Add($"{prefix}{id}");
                 continue;
             }
             var componentNames = new System.Text.StringBuilder();
@@ -443,9 +453,41 @@ public partial class Inspector
                 if (i > 0) componentNames.Append(", ");
                 componentNames.Append(types[i].Name);
             }
-            items.Add($"{id}  |  {componentNames}");
+            items.Add($"{prefix}{id}  |  {componentNames}");
         }
         SetListBoxItems("entity_inspector", "results_list", items.ToArray());
+    }
+
+    private void ToggleEntityVisibility(int listIndex)
+    {
+        string filter = GetTextInputValue("entity_inspector", "find_input");
+        List<int> filteredIds = new();
+        foreach (int id in EntityIdCache)
+        {
+            if (filter.Length > 0 && !id.ToString().Contains(filter)) continue;
+            filteredIds.Add(id);
+        }
+
+        if (listIndex < 0 || listIndex >= filteredIds.Count) return;
+        int entityId = filteredIds[listIndex];
+        if (!Scene.ECS.IsAlive(entityId)) return;
+
+        bool hidden = Scene.ECS.IsDisabled(entityId);
+        if (hidden)
+            Scene.ECS.EnableEntity(entityId);
+        else
+            Scene.ECS.DisableEntity(entityId);
+
+        if (Windows.TryGetValue("entity_inspector", out var window) && window.WidgetIndex.TryGetValue("results_list", out int widgetIdx))
+        {
+            var widget = window.Widgets[widgetIdx];
+            if (widget.ListBoxItems != null && listIndex < widget.ListBoxItems.Length)
+            {
+                string item = widget.ListBoxItems[listIndex];
+                if (item.Length > 0)
+                    widget.ListBoxItems[listIndex] = (hidden ? '\x06' : '\x07') + item[1..];
+            }
+        }
     }
 
     private void DeleteSelectedEntities()
@@ -471,7 +513,7 @@ public partial class Inspector
         foreach (int entityId in toDelete)
             Scene.ECS.ScheduleDestroy(entityId);
 
-        RefreshEntityList();
+        EntityListDirty = true;
     }
 
     private List<int> GetSelectedEntityIds()
@@ -507,6 +549,7 @@ public partial class Inspector
             AddTextInput("entity_inspector", "find_input", "Search by ID...", (value) => RefreshEntityList(), 1f);
             AddListBox("entity_inspector", "results_list", 500);
             SetListBoxHeader("entity_inspector", "results_list", "ID  |  Components");
+            SetListBoxToggleCallback("entity_inspector", "results_list", ToggleEntityVisibility);
             AddButton("entity_inspector", "delete_btn", "trash", () => DeleteSelectedEntities());
             RefreshEntityList();
         }

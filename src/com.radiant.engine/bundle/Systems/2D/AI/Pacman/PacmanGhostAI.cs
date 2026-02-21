@@ -344,7 +344,8 @@ public class PacmanGhostAI : core.System
         for (int index = 0; index < GhostIds.Length; index++)
         {
             EyePositions[index] = PrevPositions[index];
-            if (GhostIds[index] == -1 || !Scene.ECS.IsAlive(GhostIds[index])) break;
+            if (GhostIds[index] == -1 || !Scene.ECS.IsAlive(GhostIds[index])) continue;
+            if (Scene.ECS.IsDisabled(GhostIds[index])) continue;
             ref var transform = ref Scene.ECS.GetComponent<Transform>(GhostIds[index]);
             PrevPositions[index] = new Vector2(transform.Position.X, transform.Position.Y);
         }
@@ -353,7 +354,8 @@ public class PacmanGhostAI : core.System
         {
             for (int index = 0; index < GhostIds.Length; index++)
             {
-                if (GhostIds[index] == -1 || !Scene.ECS.IsAlive(GhostIds[index])) break;
+                if (GhostIds[index] == -1 || !Scene.ECS.IsAlive(GhostIds[index])) continue;
+                if (Scene.ECS.IsDisabled(GhostIds[index])) continue;
                 ref var transform = ref Scene.ECS.GetComponent<Transform>(GhostIds[index]);
                 float wobble = MathF.Sin(IdleTime * 3f + index * 1.7f) * 3f;
                 var pos = Positions[index];
@@ -370,6 +372,9 @@ public class PacmanGhostAI : core.System
 
         for (int index = 0; index < GhostIds.Length; index++)
         {
+            if (GhostIds[index] == -1 || !Scene.ECS.IsAlive(GhostIds[index])) continue;
+            if (Scene.ECS.IsDisabled(GhostIds[index])) continue;
+
             if (RespawnTimer[index] > 0f)
             {
                 RespawnTimer[index] -= DeltaTime;
@@ -1701,6 +1706,7 @@ public class PacmanGhostAI : core.System
         for (int i = 0; i < regularCount; i++)
         {
             if (GhostIds[i] == -1 || !Scene.ECS.IsAlive(GhostIds[i])) continue;
+            if (Scene.ECS.IsDisabled(GhostIds[i])) continue;
             float radius = IsGhostFrightened(i) ? BodyRadius * FrightenedShrink : BodyRadius;
             float eyeR = radius * 0.667f;
             float eyeD = eyeR * 2f;

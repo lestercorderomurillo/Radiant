@@ -33,6 +33,9 @@ public class ECS : IGameObject
     // Tags — lightweight string-based entity grouping
     private readonly Dictionary<string, PagedBitSet> TagSets = new();
 
+    // Disabled entities — skipped by Query, still alive and restorable
+    private readonly PagedBitSet DisabledEntities = new();
+
     // Deferred destruction — queued during frame, flushed at start of next Update
     private readonly HashSet<int> DeferredDestroyQueue = new();
 
@@ -326,6 +329,7 @@ public class ECS : IGameObject
 
         foreach (var bitset in TagSets.Values)
             bitset.Remove(entity);
+        DisabledEntities.Remove(entity);
 
         int movedEntity = record.Arch.Remove(record.Index);
         if (movedEntity >= 0)
@@ -465,6 +469,18 @@ public class ECS : IGameObject
             bitset.Clear();
     }
 
+    /// <summary> Disables an entity. Disabled entities are skipped by Query but remain alive and restorable. </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void DisableEntity(int entity) => DisabledEntities.Add(entity);
+
+    /// <summary> Re-enables a previously disabled entity so it participates in queries again. </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void EnableEntity(int entity) => DisabledEntities.Remove(entity);
+
+    /// <summary> Returns true if the entity is currently disabled. </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool IsDisabled(int entity) => DisabledEntities.Contains(entity);
+
     public static int ThreadCount => CachedThreadCount;
 
     // Job system
@@ -547,6 +563,8 @@ public class ECS : IGameObject
 
         if (totalCount == 0) return;
 
+        var disabled = DisabledEntities;
+
         if (QueryMatchCache.Count == 1)
         {
             var arch = QueryMatchCache[0];
@@ -555,7 +573,10 @@ public class ECS : IGameObject
             RunParallel(arch.EntityCount, (threadIdx, start, end) =>
             {
                 for (int i = start; i < end; i++)
+                {
+                    if (disabled.Contains(entities[i])) continue;
                     action(threadIdx, entities[i], ref data1[i]);
+                }
             });
             return;
         }
@@ -576,7 +597,10 @@ public class ECS : IGameObject
                 var data1 = arch.GetArray<T1>();
 
                 for (int i = localStart; i < localEnd; i++)
+                {
+                    if (disabled.Contains(entities[i])) continue;
                     action(threadIdx, entities[i], ref data1[i]);
+                }
 
                 globalIdx = archEnd;
             }
@@ -601,6 +625,8 @@ public class ECS : IGameObject
 
         if (totalCount == 0) return;
 
+        var disabled = DisabledEntities;
+
         if (QueryMatchCache.Count == 1)
         {
             var arch = QueryMatchCache[0];
@@ -610,7 +636,10 @@ public class ECS : IGameObject
             RunParallel(arch.EntityCount, (threadIdx, start, end) =>
             {
                 for (int i = start; i < end; i++)
+                {
+                    if (disabled.Contains(entities[i])) continue;
                     action(threadIdx, entities[i], ref data1[i], ref data2[i]);
+                }
             });
             return;
         }
@@ -632,7 +661,10 @@ public class ECS : IGameObject
                 var data2 = arch.GetArray<T2>();
 
                 for (int i = localStart; i < localEnd; i++)
+                {
+                    if (disabled.Contains(entities[i])) continue;
                     action(threadIdx, entities[i], ref data1[i], ref data2[i]);
+                }
 
                 globalIdx = archEnd;
             }
@@ -662,6 +694,8 @@ public class ECS : IGameObject
 
         if (totalCount == 0) return;
 
+        var disabled = DisabledEntities;
+
         // Single archetype - fast path
         if (QueryMatchCache.Count == 1)
         {
@@ -675,7 +709,10 @@ public class ECS : IGameObject
             RunParallel(count, (threadIdx, start, end) =>
             {
                 for (int i = start; i < end; i++)
+                {
+                    if (disabled.Contains(entities[i])) continue;
                     action(threadIdx, entities[i], ref data1[i], ref data2[i], ref data3[i]);
+                }
             });
             return;
         }
@@ -701,7 +738,10 @@ public class ECS : IGameObject
                 var data3 = arch.GetArray<T3>();
 
                 for (int i = localStart; i < localEnd; i++)
+                {
+                    if (disabled.Contains(entities[i])) continue;
                     action(threadIdx, entities[i], ref data1[i], ref data2[i], ref data3[i]);
+                }
 
                 globalIdx = archEnd;
             }

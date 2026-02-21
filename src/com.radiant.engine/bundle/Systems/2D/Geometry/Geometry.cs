@@ -326,6 +326,7 @@ public class Geometry : core.System
 
         Scene.ECS.Query((int threadIndex, int entity, ref Rectangle2D rectangle, ref Transform transform, ref Material material) =>
         {
+
             Vector2 position = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
             if (position.X + rectangle.Size.X < 0 || position.X >= WorldBounds.X ||
                 position.Y + rectangle.Size.Y < 0 || position.Y >= WorldBounds.Y) return;
@@ -378,6 +379,7 @@ public class Geometry : core.System
 
         Scene.ECS.Query((int threadIndex, int entity, ref Circle2D circle, ref Transform transform, ref Material material) =>
         {
+
             Vector2 center = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
             if (center.X + circle.Radius < 0 || center.X - circle.Radius >= WorldBounds.X ||
                 center.Y + circle.Radius < 0 || center.Y - circle.Radius >= WorldBounds.Y) return;
@@ -432,6 +434,7 @@ public class Geometry : core.System
 
         Scene.ECS.Query((int threadIndex, int entity, ref Triangle2D triangle, ref Transform transform, ref Material material) =>
         {
+
             Vector2 position = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
             if (position.X + triangle.Size.X < 0 || position.X >= WorldBounds.X ||
                 position.Y + triangle.Size.Y < 0 || position.Y >= WorldBounds.Y) return;
@@ -510,6 +513,7 @@ public class Geometry : core.System
         // Motion tracking
         Scene.ECS.Query((int threadIndex, int entity, ref Transform transform, ref Rectangle2D rectangle, ref MotionTrackable motion) =>
         {
+
             Vector2 position = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
             Vector2 velocity = motion.CalculateVelocity(transform.Position, MotionHistoryFrames);
             if (velocity.LengthSquared() > 0.0001f)
@@ -519,6 +523,7 @@ public class Geometry : core.System
 
         Scene.ECS.Query((int threadIndex, int entity, ref Transform transform, ref Circle2D circle, ref MotionTrackable motion) =>
         {
+
             Vector2 center = new Vector2(MathF.Round(transform.Position.X), MathF.Round(transform.Position.Y));
             Vector2 velocity = motion.CalculateVelocity(transform.Position, MotionHistoryFrames);
             if (velocity.LengthSquared() > 0.0001f)

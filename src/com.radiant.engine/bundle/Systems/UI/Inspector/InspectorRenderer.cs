@@ -415,7 +415,8 @@ public partial class Inspector
         }
 
         int maxVisible = (Widget.Bounds.Height - 8 - headerOffset) / itemHeight;
-        int scrollOffset = Widget.ListBoxScroll;
+        int scrollClamp = Math.Max(0, items.Length - maxVisible);
+        int scrollOffset = Math.Clamp(Widget.ListBoxScroll, 0, scrollClamp);
         int count = Math.Min(items.Length - scrollOffset, maxVisible);
         var selected = Widget.ListBoxSelected;
 
@@ -459,6 +460,21 @@ public partial class Inspector
             float maxWidth = Widget.Bounds.Width - Padding * 2 - indent;
             var itemPos = new Vector2(Widget.Bounds.X + Padding + indent, itemY);
             Color primaryColor = isSelected ? CloseText : TextColor;
+
+            bool hasEye = fullText.Length > 0 && (fullText[0] == '\x06' || fullText[0] == '\x07');
+            if (hasEye)
+            {
+                bool isEntityVisible = fullText[0] == '\x06';
+                int eyeSize = 20;
+                int eyeY = itemY + (itemHeight - eyeSize) / 2;
+                var eyeTex = isEntityVisible ? Renderer.GetVisibilityTexture() : Renderer.GetVisibilityOffTexture();
+                Color eyeColor = isEntityVisible ? ToggleOn : new Color(TextColor.R, TextColor.G, TextColor.B, (byte)60);
+                Renderer.DrawSprite(eyeTex, new Rectangle((int)itemPos.X, eyeY, eyeSize, eyeSize), eyeColor);
+
+                itemPos.X += eyeSize + 10;
+                maxWidth -= eyeSize + 10;
+                fullText = fullText[1..];
+            }
 
             bool hasStatus = fullText.Length > 0 && (fullText[0] == '\x01' || fullText[0] == '\x02' || fullText[0] == '\x04' || fullText[0] == '\x05');
             if (hasStatus)

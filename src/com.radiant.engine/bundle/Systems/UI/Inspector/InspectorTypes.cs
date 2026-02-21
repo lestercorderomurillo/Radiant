@@ -72,7 +72,7 @@ public struct MenuItem
     public Action<bool> ToggleCallback;
 }
 
-/// <summary> A top-level menu in the menu bar (e.g. Workspace, About). </summary>
+/// <summary> A top-level menu in the menu bar (e.g. View, Help). </summary>
 public class MenuData
 {
     public string Id;

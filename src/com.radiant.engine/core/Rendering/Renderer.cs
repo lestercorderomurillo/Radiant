@@ -435,6 +435,12 @@ public partial class Renderer : IDisposable
     /// <param name="size">Ignored — retained for backward compatibility. Icon is a fixed-size PNG.</param>
     public Texture2D GetTrashTexture(int size) => GetTexture("presets/icons/Trash");
 
+    /// <summary> Gets the cached visibility (eye open) icon texture. </summary>
+    public Texture2D GetVisibilityTexture() => GetTexture("presets/icons/Visibility");
+
+    /// <summary> Gets the cached visibility off (eye closed) icon texture. </summary>
+    public Texture2D GetVisibilityOffTexture() => GetTexture("presets/icons/VisibilityOff");
+
     /// <summary>
     /// Gets or creates a cached anti-aliased rounded rectangle texture for 9-slice rendering.
     /// The texture is (radius*2+2) pixels square with premultiplied alpha SDF corners.

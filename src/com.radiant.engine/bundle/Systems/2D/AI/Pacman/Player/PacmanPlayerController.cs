@@ -130,6 +130,7 @@ public class PacmanPlayerController : core.System
     public override void Update()
     {
         if (Maze == null || !IsTracked) return;
+        if (Scene.ECS.IsDisabled(EntityId)) return;
 
         RenderPosition = PrevRenderPos;
         PrevRenderPos = WorldPosition;
@@ -283,6 +284,7 @@ public class PacmanPlayerController : core.System
     public override void LateRender()
     {
         if (Geometry.IsDebugHidingGameplay) return;
+        if (Scene.ECS.IsDisabled(EntityId)) return;
         DrawPlayerEyes();
     }
 

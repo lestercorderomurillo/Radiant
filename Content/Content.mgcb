@@ -115,3 +115,17 @@
 /processorParam:PremultiplyAlpha=True
 /processorParam:TextureFormat=Color
 /build:presets/icons/Trash.png
+
+#begin presets/icons/Visibility.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:PremultiplyAlpha=True
+/processorParam:TextureFormat=Color
+/build:presets/icons/Visibility.png
+
+#begin presets/icons/VisibilityOff.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:PremultiplyAlpha=True
+/processorParam:TextureFormat=Color
+/build:presets/icons/VisibilityOff.png
