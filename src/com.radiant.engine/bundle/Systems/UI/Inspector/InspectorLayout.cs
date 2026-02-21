@@ -6,6 +6,88 @@ namespace com.radiant.engine.bundle;
 
 public partial class Inspector
 {
+    /// <summary> Places a single new window in the first available spot without moving existing windows. </summary>
+    private void PlaceNewWindow(WindowData NewWindow)
+    {
+        if (!NewWindow.AutoPosition)
+        {
+            int windowHeight = ComputeWindowHeight(NewWindow);
+            NewWindow.Position = new Vector2(
+                (Renderer.VirtualWidth / UIScale - NewWindow.Size.X) / 2,
+                (Renderer.VirtualHeight / UIScale - windowHeight) / 2);
+            return;
+        }
+
+        int newWidth = (int)NewWindow.Size.X;
+        int newHeight = ComputeWindowHeight(NewWindow);
+        float screenW = Renderer.VirtualWidth / UIScale;
+        float screenH = Renderer.VirtualHeight / UIScale - AutoLayoutGap;
+        float startY = MenuBarHeight + AutoLayoutGap;
+
+        var existing = new List<Rectangle>();
+        foreach (var window in Windows.Values)
+        {
+            if (window == NewWindow || !window.Visible) continue;
+            existing.Add(new Rectangle((int)window.Position.X, (int)window.Position.Y, (int)window.Size.X, ComputeWindowHeight(window)));
+        }
+
+        var tryX = new List<float> { AutoLayoutGap };
+        foreach (var rect in existing)
+            tryX.Add(rect.Right + AutoLayoutGap);
+        tryX.Sort();
+
+        foreach (float candidateX in tryX)
+        {
+            if (candidateX + newWidth > screenW) continue;
+
+            var tryY = new List<float> { startY };
+            foreach (var rect in existing)
+                tryY.Add(rect.Bottom + AutoLayoutGap);
+            tryY.Sort();
+
+            foreach (float candidateY in tryY)
+            {
+                if (candidateY + newHeight > screenH) continue;
+
+                var candidate = new Rectangle((int)candidateX, (int)candidateY, newWidth, newHeight);
+                bool overlaps = false;
+                foreach (var rect in existing)
+                {
+                    if (candidate.Intersects(rect)) { overlaps = true; break; }
+                }
+
+                if (!overlaps)
+                {
+                    NewWindow.Position = new Vector2(candidateX, candidateY);
+                    return;
+                }
+            }
+        }
+
+        float fallbackX = MathHelper.Clamp(AutoLayoutGap, 0, Math.Max(0, screenW - newWidth));
+        float fallbackY = MathHelper.Clamp(startY, startY, Math.Max(startY, screenH - newHeight));
+        int leastOverlap = int.MaxValue;
+
+        foreach (float candidateX in tryX)
+        {
+            float clampedX = MathHelper.Clamp(candidateX, 0, Math.Max(0, screenW - newWidth));
+            var candidate = new Rectangle((int)clampedX, (int)startY, newWidth, newHeight);
+            int count = 0;
+            foreach (var rect in existing)
+            {
+                if (candidate.Intersects(rect)) count++;
+            }
+            if (count < leastOverlap)
+            {
+                leastOverlap = count;
+                fallbackX = clampedX;
+                fallbackY = startY;
+            }
+        }
+
+        NewWindow.Position = new Vector2(fallbackX, fallbackY);
+    }
+
     /// <summary> Arranges all windows in columns, wrapping to a new column when vertical space runs out. </summary>
     private void AutoPositionAll()
     {

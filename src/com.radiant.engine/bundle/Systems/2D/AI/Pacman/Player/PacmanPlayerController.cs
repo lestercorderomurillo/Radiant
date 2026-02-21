@@ -43,6 +43,9 @@ public class PacmanPlayerController : core.System
     Texture2D MouthTexture;
     Texture2D EyesTexture;
     Geometry Geometry;
+    bool PlayerHidden;
+    Color SavedAlbedo;
+    Color SavedEmissive;
 
     PacmanMazeBuilder Maze;
     public float Speed { get; set; } = 200f;
@@ -92,6 +95,26 @@ public class PacmanPlayerController : core.System
         IsTracked = false;
         CoinsCollected = 0;
         CoinsTotal = 0;
+    }
+
+    public void HidePlayer()
+    {
+        if (PlayerHidden || !IsTracked || !Scene.ECS.IsAlive(EntityId)) return;
+        ref var material = ref Scene.ECS.GetComponent<Material>(EntityId);
+        SavedAlbedo = material.Albedo;
+        SavedEmissive = material.Emissive;
+        material.Albedo = Color.Transparent;
+        material.Emissive = Color.Transparent;
+        PlayerHidden = true;
+    }
+
+    public void ShowPlayer()
+    {
+        if (!PlayerHidden || !IsTracked || !Scene.ECS.IsAlive(EntityId)) return;
+        ref var material = ref Scene.ECS.GetComponent<Material>(EntityId);
+        material.Albedo = SavedAlbedo;
+        material.Emissive = SavedEmissive;
+        PlayerHidden = false;
     }
 
     public override void Initialize()

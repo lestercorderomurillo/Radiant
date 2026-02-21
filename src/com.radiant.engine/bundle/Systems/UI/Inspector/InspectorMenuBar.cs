@@ -9,12 +9,12 @@ namespace com.radiant.engine.bundle;
 
 public partial class Inspector
 {
-    private const int MenuBarHeight = 36;
-    private const int MenuBarPaddingX = 20;
-    private const int MenuItemPaddingX = 24;
-    private const int MenuItemHeight = 40;
-    private const int MenuDropdownWidth = 320;
-    private const float MenuBarFontSize = 22f;
+    private const int MenuBarHeight = 44;
+    private const int MenuBarPaddingX = 24;
+    private const int MenuItemPaddingX = 30;
+    private const int MenuItemHeight = 48;
+    private const int MenuDropdownWidth = 400;
+    private const float MenuBarFontSize = 28f;
 
 
     private List<MenuData> Menus = new();
@@ -57,19 +57,29 @@ public partial class Inspector
                 ShowWindow("about_radiant");
             }
         });
-        var workspace = new MenuData { Id = "workspace", Label = "Workspaces" };
+        var workspace = new MenuData { Id = "workspace", Label = "View" };
         var entities = new MenuData { Id = "entities", Label = "Entities" };
         var components = new MenuData { Id = "components", Label = "Components" };
         var systems = new MenuData { Id = "systems", Label = "Systems" };
 
         entities.Items.Add(new MenuItem { Id = "entity_inspector", Label = "Open Entity Inspector", Type = MenuItemType.Action, ActionCallback = OpenEntityInspector });
         components.Items.Add(new MenuItem { Id = "component_registry", Label = "Open Component Registry", Type = MenuItemType.Action, ActionCallback = OpenComponentRegistry });
-        systems.Items.Add(new MenuItem { Id = "system_inspector", Label = "Configure Running Systems", Type = MenuItemType.Action, ActionCallback = OpenSystemsInspector });
+        systems.Items.Add(new MenuItem { Id = "system_inspector", Label = "Open System Inspector", Type = MenuItemType.Action, ActionCallback = OpenSystemsInspector });
 
-        Menus.Add(workspace);
+        var file = new MenuData { Id = "file", Label = "File" };
+        file.Items.Add(new MenuItem
+        {
+            Id = "close",
+            Label = "Close",
+            Type = MenuItemType.Action,
+            ActionCallback = () => Renderer.Window.Exit()
+        });
+
+        Menus.Add(file);
         Menus.Add(entities);
         Menus.Add(components);
         Menus.Add(systems);
+        Menus.Add(workspace);
         Menus.Add(about);
 
         RebuildWorkspaceMenu();
@@ -86,6 +96,47 @@ public partial class Inspector
         if (workspace == null) return;
 
         workspace.Items.Clear();
+
+        workspace.Items.Add(new MenuItem
+        {
+            Id = "reorder_windows",
+            Label = "Reorder Windows",
+            Type = MenuItemType.Action,
+            ActionCallback = () =>
+            {
+                LayoutDone = false;
+                WindowsRestored?.Invoke();
+            }
+        });
+
+        workspace.Items.Add(new MenuItem
+        {
+            Id = "show_all",
+            Label = "Show All",
+            Type = MenuItemType.Action,
+            ActionCallback = () =>
+            {
+                foreach (var win in Windows.Values)
+                {
+                    if (win.Id == "about_radiant") continue;
+                    win.Visible = true;
+                }
+                SyncWorkspaceToggleValues();
+            }
+        });
+
+        workspace.Items.Add(new MenuItem
+        {
+            Id = "hide_all",
+            Label = "Hide All",
+            Type = MenuItemType.Action,
+            ActionCallback = () =>
+            {
+                foreach (var win in Windows.Values)
+                    win.Visible = false;
+                SyncWorkspaceToggleValues();
+            }
+        });
 
         var ordered = new List<WindowData>(Windows.Values);
         ordered.Sort((a, b) =>
@@ -107,18 +158,6 @@ public partial class Inspector
                 ToggleCallback = (value) => SetWindowVisible(windowId, value)
             });
         }
-
-        workspace.Items.Add(new MenuItem
-        {
-            Id = "reorder_windows",
-            Label = "Reset Positions",
-            Type = MenuItemType.Action,
-            ActionCallback = () =>
-            {
-                LayoutDone = false;
-                WindowsRestored?.Invoke();
-            }
-        });
     }
 
     private void SyncWorkspaceToggleValues()
@@ -298,7 +337,7 @@ public partial class Inspector
         }
     }
 
-    private const float MenuBarSmallFontSize = 18f;
+    private const float MenuBarSmallFontSize = 22f;
 
     private (string Text, float FontSize) FitMenuItemText(string label, float maxWidth)
     {
@@ -395,7 +434,7 @@ public partial class Inspector
             var types = Scene.ECS.GetComponentTypes(id);
             if (types.Length == 0)
             {
-                items.Add($"Entity {id}");
+                items.Add($"{id}");
                 continue;
             }
             var componentNames = new System.Text.StringBuilder();
@@ -404,7 +443,7 @@ public partial class Inspector
                 if (i > 0) componentNames.Append(", ");
                 componentNames.Append(types[i].Name);
             }
-            items.Add($"Entity {id}  |  {componentNames}");
+            items.Add($"{id}  |  {componentNames}");
         }
         SetListBoxItems("entity_inspector", "results_list", items.ToArray());
     }
@@ -465,9 +504,9 @@ public partial class Inspector
             if (Windows.TryGetValue("entity_inspector", out var entityInspectorWindow))
                 entityInspectorWindow.Resizable = true;
             AddSectionLabel("entity_inspector", "find_section", "Find Entity");
-            AddTextInput("entity_inspector", "find_input", "Search by ID...", (value) => RefreshEntityList(), 0.8f);
-            AddButton("entity_inspector", "find_btn", "", () => RefreshEntityList(), 0.2f);
+            AddTextInput("entity_inspector", "find_input", "Search by ID...", (value) => RefreshEntityList(), 1f);
             AddListBox("entity_inspector", "results_list", 500);
+            SetListBoxHeader("entity_inspector", "results_list", "ID  |  Components");
             AddButton("entity_inspector", "delete_btn", "trash", () => DeleteSelectedEntities());
             RefreshEntityList();
         }
@@ -486,12 +525,15 @@ public partial class Inspector
         if (!Windows.ContainsKey("system_inspector"))
         {
             CreateWindow("system_inspector", "System Manager", 51);
+
             if (Windows.TryGetValue("system_inspector", out var systemWindow))
                 systemWindow.Resizable = true;
-            AddSectionLabel("system_inspector", "systems_section", "Registered Systems");
-            AddTextInput("system_inspector", "systems_filter", "Filter...", (value) => RefreshSystemList(), 1f);
+
+            AddSectionLabel("system_inspector", "systems_section", "Find System");
+            AddTextInput("system_inspector", "systems_filter", "Search by Name...", (value) => RefreshSystemList(), 1f);
             AddListBox("system_inspector", "systems_list", 500);
-            AddButton("system_inspector", "toggle_btn", "Toggle Enabled", () => ToggleSelectedSystems());
+            SetListBoxToggleCallback("system_inspector", "systems_list", ToggleSystemAtIndex);
+
             RefreshSystemList();
         }
         ShowWindow("system_inspector");
@@ -503,8 +545,10 @@ public partial class Inspector
 
         if (!Windows.TryGetValue("system_inspector", out var window)) return;
         if (!window.WidgetIndex.TryGetValue("systems_list", out int widgetIdx)) return;
+
         var widget = window.Widgets[widgetIdx];
         var items = widget.ListBoxItems;
+
         if (items == null || items.Length != SystemListMapping.Count) { RefreshSystemList(preserveSelection: true); return; }
 
         bool changed = false;
@@ -516,6 +560,7 @@ public partial class Inspector
             bool dotEnabled = items[i][0] == '\x01' || items[i][0] == '\x04';
             if (dotEnabled != system.Enabled) { changed = true; break; }
         }
+
         if (changed) RefreshSystemList(preserveSelection: true);
     }
 
@@ -530,6 +575,7 @@ public partial class Inspector
         var groupName = Scene.ECS.GetGroupName(system);
         if (groupName != null) parts.Add(groupName);
         var tagAttr = (SystemTagAttribute)Attribute.GetCustomAttribute(system.GetType(), typeof(SystemTagAttribute));
+
         if (tagAttr != null) parts.AddRange(tagAttr.Tags);
         return parts.Count > 0 ? string.Join(", ", parts) : null;
     }
@@ -631,34 +677,28 @@ public partial class Inspector
         }
     }
 
-    private void ToggleSelectedSystems()
+    private void ToggleSystemAtIndex(int index)
     {
-        var selected = GetListBoxSelected("system_inspector", "systems_list");
-        if (selected == null || selected.Count == 0) return;
+        if (index < 0 || index >= SystemListMapping.Count) return;
+        var system = SystemListMapping[index];
+        if (system == null) return;
 
-        foreach (int index in selected)
+        var group = Scene.ECS.GetSystemGroup(system);
+
+        if (group != null)
         {
-            if (index < 0 || index >= SystemListMapping.Count) continue;
-            var system = SystemListMapping[index];
-            if (system == null) continue;
-
-            var group = Scene.ECS.GetSystemGroup(system);
-
-            if (group != null)
+            int groupIndex = group.IndexOf(system);
+            if (groupIndex >= 0)
             {
-                int groupIndex = group.IndexOf(system);
-                if (groupIndex >= 0)
-                {
-                    if (system.Enabled)
-                        group.DisableActive();
-                    else
-                        group.SetActive(groupIndex);
-                }
+                if (system.Enabled)
+                    group.DisableActive();
+                else
+                    group.SetActive(groupIndex);
             }
-            else
-            {
-                system.Enabled = !system.Enabled;
-            }
+        }
+        else
+        {
+            system.Enabled = !system.Enabled;
         }
 
         RefreshSystemList(preserveSelection: true);
@@ -680,6 +720,7 @@ public partial class Inspector
         foreach (int entityId in selectedIds)
         {
             if (!Scene.ECS.IsAlive(entityId)) continue;
+            
             ref var transform = ref Scene.ECS.GetComponent<Transform>(entityId);
             var position = new Vector2(transform.Position.X, transform.Position.Y);
 
@@ -691,11 +732,13 @@ public partial class Inspector
             else if (Scene.ECS.HasComponent<Rectangle2D>(entityId))
             {
                 ref var rectangle = ref Scene.ECS.GetComponent<Rectangle2D>(entityId);
+
                 var rect = new Rectangle(
                     (int)(position.X - rectangle.Size.X / 2 - 4),
                     (int)(position.Y - rectangle.Size.Y / 2 - 4),
                     (int)(rectangle.Size.X + 8),
                     (int)(rectangle.Size.Y + 8));
+
                 gizmos.AddGizmoRect(rect, GizmoSelectionColor);
             }
             else if (Scene.ECS.HasComponent<Triangle2D>(entityId))

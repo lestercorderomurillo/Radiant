@@ -23,6 +23,8 @@ public class PacmanMazeLevelScene : Scene
     private Color BasePowerPelletColor;
     private float CoinWaveTime;
     private int CurrentLevel;
+    private bool GhostAIWasEnabled = true;
+    private bool PlayerWasEnabled = true;
 
     private static readonly string[] PacmanLayout =
     [
@@ -222,7 +224,7 @@ public class PacmanMazeLevelScene : Scene
         LoadLevel(0);
         UpdateUpscalerInput();
 
-        Inspector.CreateWindow("scene", "Scene", 2);
+        Inspector.CreateWindow("scene", "Scene", 2, Visible: false);
 
         Inspector.AddLabel("scene", "level", $"Level: 1/{Levels.Length}");
 
@@ -395,6 +397,26 @@ public class PacmanMazeLevelScene : Scene
 
     public override void Update()
     {
+        bool ghostEnabled = GhostAI.Enabled;
+        if (ghostEnabled != GhostAIWasEnabled)
+        {
+            if (ghostEnabled)
+                GhostAI.ShowGhostEntities();
+            else
+                GhostAI.HideGhostEntities();
+            GhostAIWasEnabled = ghostEnabled;
+        }
+
+        bool playerEnabled = PlayerController.Enabled;
+        if (playerEnabled != PlayerWasEnabled)
+        {
+            if (playerEnabled)
+                PlayerController.ShowPlayer();
+            else
+                PlayerController.HidePlayer();
+            PlayerWasEnabled = playerEnabled;
+        }
+
         if (PlayerController.PlayerCaught)
         {
             LoadLevel(CurrentLevel);

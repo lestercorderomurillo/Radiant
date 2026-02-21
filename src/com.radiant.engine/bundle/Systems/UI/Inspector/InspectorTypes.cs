@@ -41,6 +41,8 @@ public struct Widget
     public string[] ListBoxItems;
     public HashSet<int> ListBoxSelected;
     public int ListBoxScroll;
+    public string ListBoxHeader;
+    public Action<int> ListBoxToggleCallback;
 
     public float InlineRatio;
 }

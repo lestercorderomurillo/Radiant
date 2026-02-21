@@ -222,7 +222,7 @@ public partial class Inspector
 
         if (string.IsNullOrEmpty(Widget.Text) || Widget.Text == "trash")
         {
-            int iconSize = Math.Min(Widget.Bounds.Width, Widget.Bounds.Height) - 16;
+            int iconSize = Math.Min(Widget.Bounds.Width, Widget.Bounds.Height) - 20;
             if (iconSize < 4) iconSize = 4;
             var iconTex = Widget.Text == "trash"
                 ? Renderer.GetTrashTexture(iconSize * 4)
@@ -257,7 +257,7 @@ public partial class Inspector
             Renderer.DrawSprite(checkTex, checkRect, CloseText);
         }
 
-        var textPos = new Vector2(Widget.Bounds.X + ToggleBoxSize + 8, Widget.Bounds.Y + (Widget.Bounds.Height - LineHeight) / 2);
+        var textPos = new Vector2(Widget.Bounds.X + ToggleBoxSize + 10, Widget.Bounds.Y + (Widget.Bounds.Height - LineHeight) / 2);
         DrawText(Widget.Text, textPos, TextColor);
     }
 
@@ -268,7 +268,7 @@ public partial class Inspector
         var textPos = new Vector2(Widget.Bounds.X + 4, Widget.Bounds.Y + 2);
         DrawText(valueText, textPos, TextColor);
 
-        int trackY = (int)(Widget.Bounds.Y + LineHeight + 20);
+        int trackY = (int)(Widget.Bounds.Y + LineHeight + 24);
         int trackLeft = Widget.Bounds.X + 4;
         int trackWidth = Widget.Bounds.Width - 8;
         var trackRect = new Rectangle(trackLeft, trackY, trackWidth, SliderTrackHeight);
@@ -290,7 +290,7 @@ public partial class Inspector
         Renderer.DrawSprite(Renderer.GetCircleTexture(64), handleRect, SliderHandle);
     }
 
-    /// <summary> Draws a text input field with placeholder, cursor, and border. </summary>
+    /// <summary> Draws a text input field with search icon, placeholder, cursor, and clear button. </summary>
     private void DrawTextInput(Widget Widget, Vector2 Mouse, bool HoverBlocked, string WindowId)
     {
         bool focused = IsTextInputFocused(WindowId, Widget.Id);
@@ -307,23 +307,45 @@ public partial class Inspector
         Color bgColor = hovered || focused ? ButtonHover : ButtonColor;
         Renderer.DrawRoundedRect(Widget.Bounds, bgColor, CornerRadius);
 
+        int iconSize = Widget.Bounds.Height - 36;
+        int iconPad = 12;
+        var searchTex = Renderer.GetSearchTexture(iconSize * 4);
+        var searchRect = new Rectangle(Widget.Bounds.X + iconPad, Widget.Bounds.Y + (Widget.Bounds.Height - iconSize) / 2, iconSize, iconSize);
+        Renderer.DrawSprite(searchTex, searchRect, LabelDim);
+
         string value = Widget.TextInputValue ?? "";
-        int textPadding = Padding / 2 + 4;
-        float maxTextWidth = Widget.Bounds.Width - textPadding * 2;
+        int leftPadding = iconPad + iconSize + 8;
+        int rightPadding = Padding / 2 + 4;
+
+        if (value.Length > 0)
+        {
+            int clearSize = iconSize;
+            int clearX = Widget.Bounds.Right - iconPad - clearSize;
+            int clearY = Widget.Bounds.Y + (Widget.Bounds.Height - clearSize) / 2;
+            var clearBounds = new Rectangle(clearX, clearY, clearSize, clearSize);
+            bool clearHovered = !HoverBlocked && clearBounds.Contains((int)Mouse.X, (int)Mouse.Y);
+            const float clearFontSize = FontSize * 0.75f;
+            var clearTextSize = Renderer.MeasureString("Inter-Bold", clearFontSize, "X");
+            var clearTextPos = new Vector2(clearBounds.X + (clearBounds.Width - clearTextSize.X) / 2, clearBounds.Y + (clearBounds.Height - clearTextSize.Y) / 2);
+            Renderer.DrawString("Inter-Bold", clearFontSize, "X", clearTextPos, clearHovered ? TextColor : LabelDim, bold: true);
+            rightPadding = iconPad + clearSize + 8;
+        }
+
+        float maxTextWidth = Widget.Bounds.Width - leftPadding - rightPadding;
 
         if (value.Length == 0 && !focused)
         {
             string placeholder = Widget.TextInputPlaceholder ?? "";
             placeholder = TruncateText(placeholder, maxTextWidth);
             var placeholderSize = MeasureText(placeholder);
-            var placeholderPos = new Vector2(Widget.Bounds.X + textPadding, Widget.Bounds.Y + (Widget.Bounds.Height - placeholderSize.Y) / 2);
+            var placeholderPos = new Vector2(Widget.Bounds.X + leftPadding, Widget.Bounds.Y + (Widget.Bounds.Height - placeholderSize.Y) / 2);
             DrawText(placeholder, placeholderPos, LabelDim);
             return;
         }
 
         string displayText = TruncateText(value, maxTextWidth);
         var textSize = MeasureText(displayText);
-        var textPos = new Vector2(Widget.Bounds.X + textPadding, Widget.Bounds.Y + (Widget.Bounds.Height - textSize.Y) / 2);
+        var textPos = new Vector2(Widget.Bounds.X + leftPadding, Widget.Bounds.Y + (Widget.Bounds.Height - textSize.Y) / 2);
         DrawText(displayText, textPos, TextColor);
 
         if (focused && ((int)(CursorBlinkTimer / CursorBlinkRate) % 2 == 0))
@@ -332,7 +354,7 @@ public partial class Inspector
             string beforeCursor = cursor <= displayText.Length ? displayText[..cursor] : displayText;
             float cursorX = textPos.X + MeasureText(beforeCursor).X;
             var solid = Renderer.GetSolidTexture(Color.White);
-            var cursorRect = new Rectangle((int)cursorX, Widget.Bounds.Y + 8, 2, Widget.Bounds.Height - 16);
+            var cursorRect = new Rectangle((int)cursorX, Widget.Bounds.Y + 10, 2, Widget.Bounds.Height - 20);
             Renderer.DrawSprite(solid, cursorRect, TextColor);
         }
     }
@@ -347,6 +369,39 @@ public partial class Inspector
         Renderer.DrawRoundedRect(borderRect, borderColor, CornerRadius + 1);
         Renderer.DrawRoundedRect(Widget.Bounds, ButtonColor, CornerRadius);
 
+        int itemHeight = (int)(LineHeight + 4);
+        int headerOffset = 0;
+
+        if (Widget.ListBoxHeader != null)
+        {
+            int headerY = Widget.Bounds.Y + 4;
+            var headerPos = new Vector2(Widget.Bounds.X + Padding, headerY);
+            float headerMaxWidth = Widget.Bounds.Width - Padding * 2;
+            string headerText = Widget.ListBoxHeader;
+            int sepIdx = headerText.IndexOf("  |  ", StringComparison.Ordinal);
+            if (sepIdx < 0)
+            {
+                DrawTextBold(TruncateText(headerText, headerMaxWidth), headerPos, LabelDim);
+            }
+            else
+            {
+                string headerPrimary = headerText[..sepIdx];
+                string headerSecondary = headerText[(sepIdx + 5)..];
+                DrawTextBold(headerPrimary, headerPos, LabelDim);
+                float headerPrimaryWidth = MeasureText(headerPrimary + "  ").X;
+                float headerRemaining = headerMaxWidth - headerPrimaryWidth;
+                if (headerRemaining > 20)
+                    DrawTextBold(TruncateText(headerSecondary, headerRemaining), new Vector2(headerPos.X + headerPrimaryWidth, headerY), LabelDim);
+            }
+
+            int lineY = headerY + itemHeight;
+            byte lineAlpha = 60;
+            float lineFactor = lineAlpha / 255f;
+            var lineColor = new Color((byte)(TextColor.R * lineFactor), (byte)(TextColor.G * lineFactor), (byte)(TextColor.B * lineFactor), lineAlpha);
+            Renderer.DrawSprite(Renderer.GetSolidTexture(Color.White), new Rectangle(Widget.Bounds.X + 4, lineY, Widget.Bounds.Width - 8, 1), lineColor);
+            headerOffset = itemHeight + 2;
+        }
+
         string[] items = Widget.ListBoxItems;
         if (items == null || items.Length == 0)
         {
@@ -354,13 +409,12 @@ public partial class Inspector
             var emptySize = MeasureText(emptyText);
             var emptyPos = new Vector2(
                 Widget.Bounds.X + (Widget.Bounds.Width - emptySize.X) / 2,
-                Widget.Bounds.Y + (Widget.Bounds.Height - emptySize.Y) / 2);
+                Widget.Bounds.Y + headerOffset + (Widget.Bounds.Height - headerOffset - emptySize.Y) / 2);
             DrawText(emptyText, emptyPos, LabelDim);
             return;
         }
 
-        int itemHeight = (int)(LineHeight + 4);
-        int maxVisible = (Widget.Bounds.Height - 8) / itemHeight;
+        int maxVisible = (Widget.Bounds.Height - 8 - headerOffset) / itemHeight;
         int scrollOffset = Widget.ListBoxScroll;
         int count = Math.Min(items.Length - scrollOffset, maxVisible);
         var selected = Widget.ListBoxSelected;
@@ -368,7 +422,7 @@ public partial class Inspector
         for (int i = 0; i < count; i++)
         {
             int itemIndex = i + scrollOffset;
-            int itemY = Widget.Bounds.Y + 4 + i * itemHeight;
+            int itemY = Widget.Bounds.Y + 4 + headerOffset + i * itemHeight;
             string fullText = items[itemIndex];
 
             bool isSeparator = fullText.Length > 0 && fullText[0] == '\x03';
@@ -406,16 +460,41 @@ public partial class Inspector
             var itemPos = new Vector2(Widget.Bounds.X + Padding + indent, itemY);
             Color primaryColor = isSelected ? CloseText : TextColor;
 
-            bool hasDot = fullText.Length > 0 && (fullText[0] == '\x01' || fullText[0] == '\x02' || fullText[0] == '\x04' || fullText[0] == '\x05');
-            if (hasDot)
+            bool hasStatus = fullText.Length > 0 && (fullText[0] == '\x01' || fullText[0] == '\x02' || fullText[0] == '\x04' || fullText[0] == '\x05');
+            if (hasStatus)
             {
-                int dotSize = 8;
-                Color dotColor = (fullText[0] == '\x01' || fullText[0] == '\x04') ? new Color(80, 200, 80) : new Color(200, 70, 70);
-                var dotTex = Renderer.GetCircleTexture(dotSize * 4);
-                int dotY = itemY + (itemHeight - dotSize) / 2;
-                Renderer.DrawSprite(dotTex, new Rectangle((int)itemPos.X, dotY, dotSize, dotSize), dotColor);
-                itemPos.X += dotSize + 12;
-                maxWidth -= dotSize + 12;
+                bool isItemEnabled = fullText[0] == '\x01' || fullText[0] == '\x04';
+                bool isGrouped = fullText[0] == '\x04' || fullText[0] == '\x05';
+                int controlSize = 20;
+                int controlY = itemY + (itemHeight - controlSize) / 2;
+
+                if (isGrouped)
+                {
+                    var circleTex = Renderer.GetCircleTexture(controlSize * 4);
+                    Renderer.DrawSprite(circleTex, new Rectangle((int)itemPos.X, controlY, controlSize, controlSize), isItemEnabled ? ToggleOn : ToggleOff);
+                    int hollowSize = controlSize - 4;
+                    Color hollowColor = isSelected ? SliderFill : ButtonColor;
+                    Renderer.DrawSprite(circleTex, new Rectangle((int)itemPos.X + 2, controlY + 2, hollowSize, hollowSize), hollowColor);
+                    if (isItemEnabled)
+                    {
+                        int dotSize = controlSize - 8;
+                        Renderer.DrawSprite(circleTex, new Rectangle((int)itemPos.X + 4, controlY + 4, dotSize, dotSize), SliderFill);
+                    }
+                }
+                else
+                {
+                    var boxRect = new Rectangle((int)itemPos.X, controlY, controlSize, controlSize);
+                    Renderer.DrawRoundedRect(boxRect, isItemEnabled ? ToggleOn : ToggleOff, 4);
+                    if (isItemEnabled)
+                    {
+                        int checkSize = controlSize - 4;
+                        var checkTex = Renderer.GetCheckmarkTexture(checkSize * 4);
+                        Renderer.DrawSprite(checkTex, new Rectangle(boxRect.X + 2, boxRect.Y + 2, checkSize, checkSize), CloseText);
+                    }
+                }
+
+                itemPos.X += controlSize + 10;
+                maxWidth -= controlSize + 10;
                 fullText = fullText[1..];
             }
 
@@ -444,12 +523,12 @@ public partial class Inspector
             int thumbWidth = 6;
             int thumbMargin = 4;
             int thumbX = Widget.Bounds.Right - thumbMargin - thumbWidth;
-            int trackHeight = Widget.Bounds.Height - 8;
+            int trackHeight = Widget.Bounds.Height - 8 - headerOffset;
             float thumbRatio = (float)maxVisible / items.Length;
             int thumbHeight = Math.Max(16, (int)(trackHeight * thumbRatio));
             int scrollRange = trackHeight - thumbHeight;
             int maxScroll = Math.Max(1, items.Length - maxVisible);
-            int thumbY = Widget.Bounds.Y + 4 + (int)(scrollRange * ((float)scrollOffset / maxScroll));
+            int thumbY = Widget.Bounds.Y + 4 + headerOffset + (int)(scrollRange * ((float)scrollOffset / maxScroll));
             Renderer.DrawRoundedRect(new Rectangle(thumbX, thumbY, thumbWidth, thumbHeight), SliderFill, thumbWidth / 2);
         }
     }
@@ -471,7 +550,7 @@ public partial class Inspector
             ? Widget.DropdownOptions[Widget.DropdownSelected] : "?";
         string displayText = $"{Widget.Text}: {selectedLabel}";
 
-        const int triSize = 7;
+        const int triSize = 8;
         float availableWidth = Widget.Bounds.Width - Padding * 2 - triSize - 4;
         displayText = TruncateText(displayText, availableWidth);
 

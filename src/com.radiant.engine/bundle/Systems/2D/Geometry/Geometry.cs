@@ -188,7 +188,7 @@ public class Geometry : core.System
         Inspector.AddLabel("perf", "sdf", "SDF Resolution: -");
         Inspector.AddLabel("perf", "jfa", "JFA Passes: -");
 
-        Inspector.CreateWindow("pipeline", "Pipeline");
+        Inspector.CreateWindow("pipeline", "Pipeline", Visible: false);
         Inspector.AddSectionLabel("pipeline", "outputHeader", "Output");
         string[] debugModeNames = ["Composite", "Emissive", "Absorption", "Signed Distance Field", "JFA Direction", "JFA Raw", "Motion Vectors"];
         Inspector.AddDropdown("pipeline", "debugMode", "Buffer", debugModeNames, 0, (index) => CurrentDebug = (DebugMode)index);

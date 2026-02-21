@@ -258,6 +258,76 @@ public class PacmanGhostAI : core.System
         UpdateRainbowGhost(dt);
     }
 
+    public void HideGhostEntities()
+    {
+        if (GhostIds != null)
+        {
+            for (int index = 0; index < GhostIds.Length; index++)
+            {
+                if (GhostIds[index] == -1 || !Scene.ECS.IsAlive(GhostIds[index])) continue;
+                ref var material = ref Scene.ECS.GetComponent<Material>(GhostIds[index]);
+                material.Albedo = Color.Transparent;
+                material.Emissive = Color.Transparent;
+            }
+        }
+        if (RainbowInitialized)
+        {
+            if (Scene.ECS.IsAlive(RainbowMainId))
+            {
+                ref var material = ref Scene.ECS.GetComponent<Material>(RainbowMainId);
+                material.Albedo = Color.Transparent;
+                material.Emissive = Color.Transparent;
+            }
+            for (int index = 0; index < RainbowCloneCount; index++)
+            {
+                if (!Scene.ECS.IsAlive(RainbowCloneIds[index])) continue;
+                ref var material = ref Scene.ECS.GetComponent<Material>(RainbowCloneIds[index]);
+                material.Albedo = Color.Transparent;
+                material.Emissive = Color.Transparent;
+            }
+        }
+    }
+
+    public void ShowGhostEntities()
+    {
+        if (GhostIds != null)
+        {
+            for (int index = 0; index < GhostIds.Length; index++)
+            {
+                if (GhostIds[index] == -1 || !Scene.ECS.IsAlive(GhostIds[index])) continue;
+                if (Eaten[index]) continue;
+                if (Frightened[index])
+                {
+                    ref var material = ref Scene.ECS.GetComponent<Material>(GhostIds[index]);
+                    material.Albedo = Color.Transparent;
+                    material.Emissive = FrightenedColor;
+                    continue;
+                }
+                ref var mat = ref Scene.ECS.GetComponent<Material>(GhostIds[index]);
+                if (GhostEntries[index].Type == PacmanGhostType.Shadow)
+                {
+                    mat.Albedo = GhostColors[index];
+                    mat.Emissive = Color.Black;
+                }
+                else
+                {
+                    mat.Albedo = Color.Transparent;
+                    mat.Emissive = GhostColors[index];
+                }
+            }
+        }
+        if (RainbowInitialized)
+        {
+            if (Scene.ECS.IsAlive(RainbowMainId) && !RainbowMainEaten)
+                RainbowUpdateMainColor();
+            for (int index = 0; index < RainbowCloneCount; index++)
+            {
+                if (Scene.ECS.IsAlive(RainbowCloneIds[index]))
+                    RainbowUpdateCloneColor(index);
+            }
+        }
+    }
+
     public override void Dispose()
     {
         if (!RainbowInitialized) return;

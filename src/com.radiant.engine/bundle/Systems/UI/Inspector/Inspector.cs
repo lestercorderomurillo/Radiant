@@ -20,7 +20,7 @@ public partial class Inspector : core.System
 
     public Inspector() => Instance = this;
 
-    private const float FontSize = 24f;
+    private const float FontSize = 30f;
     private float LineHeight;
     private Dictionary<string, WindowData> Windows = new();
     private List<WindowData> RenderOrder = new();
@@ -62,28 +62,28 @@ public partial class Inspector : core.System
     private string FocusedTextInputWidgetId;
     private float CursorBlinkTimer;
     private const float CursorBlinkRate = 0.53f;
-    private const int InlineGap = 8;
+    private const int InlineGap = 10;
 
     /// <summary> Raised when "Restore Defaults" is clicked in the Workspace menu. </summary>
     public static event Action WindowsRestored;
 
-    private const int DefaultWindowWidth = 480;
-    private const int TitleBarHeight = 52;
-    private const int WidgetHeight = 48;
-    private const int WidgetSpacing = 14;
-    private const int LabelSpacing = 4;
-    private const int Padding = 16;
-    private const int CloseButtonSize = 28;
-    private const int CloseButtonWidth = 48;
-    private const int AutoLayoutGap = 26;
-    private const int SliderTrackHeight = 6;
-    private const int SliderHandleSize = 18;
-    private const int ToggleBoxSize = 28;
-    private const int CornerRadius = 8;
+    private const int DefaultWindowWidth = 600;
+    private const int TitleBarHeight = 64;
+    private const int WidgetHeight = 60;
+    private const int WidgetSpacing = 18;
+    private const int LabelSpacing = 6;
+    private const int Padding = 20;
+    private const int CloseButtonSize = 34;
+    private const int CloseButtonWidth = 60;
+    private const int AutoLayoutGap = 32;
+    private const int SliderTrackHeight = 8;
+    private const int SliderHandleSize = 22;
+    private const int ToggleBoxSize = 34;
+    private const int CornerRadius = 10;
     private const int MaxVisibleDropdownItems = 4;
-    private const int ResizeHandleSize = 20;
-    private const int MinWindowWidth = 280;
-    private const int MinWindowHeight = 300;
+    private const int ResizeHandleSize = 24;
+    private const int MinWindowWidth = 340;
+    private const int MinWindowHeight = 360;
 
     private static float UIScaleBacking = 1.0f;
     private static float UIScale
@@ -169,6 +169,14 @@ public partial class Inspector : core.System
     public static void ClearListBoxSelection(string WindowId, string WidgetId)
         => Instance?.ClearListBoxSelectionInternal(WindowId, WidgetId);
 
+    /// <summary> Sets a fixed header row for a list box (uses "  |  " separator for columns). </summary>
+    public static void SetListBoxHeader(string WindowId, string WidgetId, string Header)
+        => Instance?.SetListBoxHeaderInternal(WindowId, WidgetId, Header);
+
+    /// <summary> Sets a callback invoked when a status control (checkbox/radio) is clicked in a list box. </summary>
+    public static void SetListBoxToggleCallback(string WindowId, string WidgetId, Action<int> Callback)
+        => Instance?.SetListBoxToggleCallbackInternal(WindowId, WidgetId, Callback);
+
     /// <summary> Adds a clickable button widget with inline ratio for horizontal layout. </summary>
     public static void AddButton(string WindowId, string WidgetId, string Text, Action Callback, float InlineRatio)
         => Instance?.AddButtonInternal(WindowId, WidgetId, Text, Callback, InlineRatio);
@@ -223,7 +231,7 @@ public partial class Inspector : core.System
         RenderOrder.Add(window);
         SortRenderOrder();
         RebuildWorkspaceMenu();
-        if (AutoPosition) AutoPositionAll();
+        PlaceNewWindow(window);
     }
 
     private void DestroyWindowInternal(string Id)
@@ -239,7 +247,11 @@ public partial class Inspector : core.System
         if (Windows.TryGetValue(Id, out var window))
         {
             window.Visible = Visible;
-            if (Visible) AutoPositionAll();
+            if (Visible)
+            {
+                BringToFront(window);
+                PlaceNewWindow(window);
+            }
         }
     }
 
@@ -248,7 +260,11 @@ public partial class Inspector : core.System
         if (Windows.TryGetValue(Id, out var window))
         {
             window.Visible = !window.Visible;
-            if (window.Visible) AutoPositionAll();
+            if (window.Visible)
+            {
+                BringToFront(window);
+                PlaceNewWindow(window);
+            }
         }
     }
 
@@ -350,6 +366,24 @@ public partial class Inspector : core.System
         if (!Windows.TryGetValue(WindowId, out var window)) return;
         if (!window.WidgetIndex.TryGetValue(WidgetId, out int index)) return;
         window.Widgets[index].ListBoxSelected?.Clear();
+    }
+
+    private void SetListBoxHeaderInternal(string WindowId, string WidgetId, string Header)
+    {
+        if (!Windows.TryGetValue(WindowId, out var window)) return;
+        if (!window.WidgetIndex.TryGetValue(WidgetId, out int index)) return;
+        var widget = window.Widgets[index];
+        widget.ListBoxHeader = Header;
+        window.Widgets[index] = widget;
+    }
+
+    private void SetListBoxToggleCallbackInternal(string WindowId, string WidgetId, Action<int> Callback)
+    {
+        if (!Windows.TryGetValue(WindowId, out var window)) return;
+        if (!window.WidgetIndex.TryGetValue(WidgetId, out int index)) return;
+        var widget = window.Widgets[index];
+        widget.ListBoxToggleCallback = Callback;
+        window.Widgets[index] = widget;
     }
 
     private void AddToggleInternal(string WindowId, string WidgetId, string Text, bool Initial, Action<bool> Callback)
@@ -531,6 +565,7 @@ public partial class Inspector : core.System
         widget.TextInputCursor = cursor;
         window.Widgets[index] = widget;
         CursorBlinkTimer = 0;
+        widget.TextInputCallback?.Invoke(value);
     }
 
     /// <summary> Recomputes UI scale and triggers layout recalculation on window resize. </summary>
@@ -629,7 +664,8 @@ public partial class Inspector : core.System
                 if (listDragWidget.ListBoxItems != null && listDragWidget.ListBoxItems.Length > 0)
                 {
                     int itemHeight = (int)(LineHeight + 4);
-                    int contentY = listDragWidget.Bounds.Y + 4;
+                    int headerOffset = listDragWidget.ListBoxHeader != null ? itemHeight + 2 : 0;
+                    int contentY = listDragWidget.Bounds.Y + 4 + headerOffset;
                     int localY = (int)virtualMouse.Y - contentY;
                     int currentIndex = Math.Clamp(localY / itemHeight + listDragWidget.ListBoxScroll, 0, listDragWidget.ListBoxItems.Length - 1);
 
@@ -666,9 +702,10 @@ public partial class Inspector : core.System
                 if (scrollWidget.ListBoxItems != null && scrollWidget.ListBoxItems.Length > 0)
                 {
                     int itemHeight = (int)(LineHeight + 4);
-                    int maxVisible = (scrollWidget.Bounds.Height - 8) / itemHeight;
-                    int trackY = scrollWidget.Bounds.Y + 4;
-                    int trackHeight = scrollWidget.Bounds.Height - 8;
+                    int headerOffset = scrollWidget.ListBoxHeader != null ? itemHeight + 2 : 0;
+                    int maxVisible = (scrollWidget.Bounds.Height - 8 - headerOffset) / itemHeight;
+                    int trackY = scrollWidget.Bounds.Y + 4 + headerOffset;
+                    int trackHeight = scrollWidget.Bounds.Height - 8 - headerOffset;
                     float dragRatio = Math.Clamp(((float)virtualMouse.Y - trackY) / trackHeight, 0f, 1f);
                     int maxScroll = Math.Max(0, scrollWidget.ListBoxItems.Length - maxVisible);
                     scrollWidget.ListBoxScroll = (int)(dragRatio * maxScroll);
@@ -839,7 +876,7 @@ public partial class Inspector : core.System
                     float normalizedValue = range > 0 ? (widget.SliderValue - widget.SliderMin) / range : 0;
                     int fillWidth = (int)(trackWidth * normalizedValue);
                     int handleCX = trackLeft + fillWidth;
-                    int handleCY = (int)(widget.Bounds.Y + LineHeight + 8) + SliderTrackHeight / 2;
+                    int handleCY = (int)(widget.Bounds.Y + LineHeight + 10) + SliderTrackHeight / 2;
                     float dx = Mouse.X - handleCX;
                     float dy = Mouse.Y - handleCY;
                     if (dx * dx + dy * dy > SliderHandleSize * SliderHandleSize) return;
@@ -859,6 +896,22 @@ public partial class Inspector : core.System
                     return;
 
                 case WidgetType.TextInput:
+                    string textValue = widget.TextInputValue ?? "";
+                    if (textValue.Length > 0)
+                    {
+                        int clearIconSize = widget.Bounds.Height - 36;
+                        int clearIconPad = 12;
+                        int clearX = widget.Bounds.Right - clearIconPad - clearIconSize;
+                        if (Mouse.X >= clearX)
+                        {
+                            widget.TextInputValue = "";
+                            widget.TextInputCursor = 0;
+                            Window.Widgets[i] = widget;
+                            widget.TextInputCallback?.Invoke("");
+                            ClearTextInputFocus();
+                            return;
+                        }
+                    }
                     FocusTextInput(Window.Id, widget.Id);
                     widget.TextInputCursor = (widget.TextInputValue ?? "").Length;
                     Window.Widgets[i] = widget;
@@ -878,7 +931,7 @@ public partial class Inspector : core.System
         }
     }
 
-    private const int ScrollbarTrackWidth = 14;
+    private const int ScrollbarTrackWidth = 18;
 
     private void HandleListBoxClick(WindowData Window, int WidgetIndex, Vector2 Mouse)
     {
@@ -886,12 +939,13 @@ public partial class Inspector : core.System
         if (widget.ListBoxItems == null || widget.ListBoxItems.Length == 0) return;
 
         int itemHeight = (int)(LineHeight + 4);
-        int maxVisible = (widget.Bounds.Height - 8) / itemHeight;
+        int headerOffset = widget.ListBoxHeader != null ? itemHeight + 2 : 0;
+        int maxVisible = (widget.Bounds.Height - 8 - headerOffset) / itemHeight;
 
         if (widget.ListBoxItems.Length > maxVisible && Mouse.X >= widget.Bounds.Right - ScrollbarTrackWidth)
         {
-            int trackY = widget.Bounds.Y + 4;
-            int trackHeight = widget.Bounds.Height - 8;
+            int trackY = widget.Bounds.Y + 4 + headerOffset;
+            int trackHeight = widget.Bounds.Height - 8 - headerOffset;
             float clickRatio = Math.Clamp(((float)Mouse.Y - trackY) / trackHeight, 0f, 1f);
             int maxScroll = Math.Max(0, widget.ListBoxItems.Length - maxVisible);
             widget.ListBoxScroll = (int)(clickRatio * maxScroll);
@@ -902,13 +956,30 @@ public partial class Inspector : core.System
             return;
         }
 
-        int contentY = widget.Bounds.Y + 4;
+        int contentY = widget.Bounds.Y + 4 + headerOffset;
         int localY = (int)Mouse.Y - contentY;
         if (localY < 0) return;
 
         int clickedIndex = localY / itemHeight + widget.ListBoxScroll;
         if (clickedIndex < 0 || clickedIndex >= widget.ListBoxItems.Length) return;
         if (widget.ListBoxItems[clickedIndex].Length > 0 && widget.ListBoxItems[clickedIndex][0] == '\x03') return;
+
+        if (widget.ListBoxToggleCallback != null)
+        {
+            string itemText = widget.ListBoxItems[clickedIndex];
+            bool hasStatus = itemText.Length > 0 && (itemText[0] == '\x01' || itemText[0] == '\x02' || itemText[0] == '\x04' || itemText[0] == '\x05');
+            if (hasStatus)
+            {
+                bool isIndented = itemText[0] == '\x04' || itemText[0] == '\x05';
+                int indent = isIndented ? 16 : 0;
+                float controlEndX = widget.Bounds.X + Padding + indent + 30;
+                if (Mouse.X <= controlEndX)
+                {
+                    widget.ListBoxToggleCallback.Invoke(clickedIndex);
+                    return;
+                }
+            }
+        }
 
         widget.ListBoxSelected ??= new HashSet<int>();
         var keyboard = Microsoft.Xna.Framework.Input.Keyboard.GetState();
@@ -948,7 +1019,8 @@ public partial class Inspector : core.System
                 if (!widget.Bounds.Contains((int)Mouse.X, (int)Mouse.Y)) continue;
 
                 int itemHeight = (int)(LineHeight + 4);
-                int maxVisible = (widget.Bounds.Height - 8) / itemHeight;
+                int headerOffset = widget.ListBoxHeader != null ? itemHeight + 2 : 0;
+                int maxVisible = (widget.Bounds.Height - 8 - headerOffset) / itemHeight;
                 int itemCount = widget.ListBoxItems?.Length ?? 0;
                 int maxScroll = Math.Max(0, itemCount - maxVisible);
                 widget.ListBoxScroll = Math.Clamp(widget.ListBoxScroll - Math.Sign(ScrollDelta), 0, maxScroll);

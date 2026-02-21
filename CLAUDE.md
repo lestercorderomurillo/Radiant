@@ -545,6 +545,7 @@ Inspector.SetDropdownOptions("win", "id", newOptions);
 Inspector.SetTextInputValue("win", "id", "text");
 Inspector.GetTextInputValue("win", "id"); // Returns current text
 Inspector.SetListBoxItems("win", "id", new[] { "item1", "item2" });
+Inspector.SetListBoxHeader("win", "id", "Name  |  Value"); // Fixed header row (uses "  |  " for columns)
 Inspector.GetListBoxSelected("win", "id");           // Returns HashSet<int> of selected indices
 Inspector.ClearListBoxSelection("win", "id");
 Inspector.SetWidgetEnabled("win", "id", enabled); // Greyed out + non-interactive when disabled
