@@ -154,14 +154,14 @@ public partial class Inspector
         {
             var solid = Renderer.GetSolidTexture(Color.White);
             Color gripColor = new Color(TextColor.R, TextColor.G, TextColor.B, (byte)160);
-            int bx = Window.WindowBounds.Right - 5;
-            int by = Window.WindowBounds.Bottom - 5;
-            Renderer.DrawSprite(solid, new Rectangle(bx, by, 2, 2), gripColor);
-            Renderer.DrawSprite(solid, new Rectangle(bx - 5, by, 2, 2), gripColor);
-            Renderer.DrawSprite(solid, new Rectangle(bx, by - 5, 2, 2), gripColor);
-            Renderer.DrawSprite(solid, new Rectangle(bx - 10, by, 2, 2), gripColor);
-            Renderer.DrawSprite(solid, new Rectangle(bx - 5, by - 5, 2, 2), gripColor);
-            Renderer.DrawSprite(solid, new Rectangle(bx, by - 10, 2, 2), gripColor);
+            int bx = Window.WindowBounds.Right - 7;
+            int by = Window.WindowBounds.Bottom - 7;
+            Renderer.DrawSprite(solid, new Rectangle(bx, by, 4, 4), gripColor);
+            Renderer.DrawSprite(solid, new Rectangle(bx - 8, by, 4, 4), gripColor);
+            Renderer.DrawSprite(solid, new Rectangle(bx, by - 8, 4, 4), gripColor);
+            Renderer.DrawSprite(solid, new Rectangle(bx - 16, by, 4, 4), gripColor);
+            Renderer.DrawSprite(solid, new Rectangle(bx - 8, by - 8, 4, 4), gripColor);
+            Renderer.DrawSprite(solid, new Rectangle(bx, by - 16, 4, 4), gripColor);
         }
     }
 
