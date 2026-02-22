@@ -4,6 +4,7 @@ using Microsoft.Xna.Framework.Graphics;
 
 namespace com.radiant.engine.bundle;
 
+[ComponentDescription("Surface color, emission and texture for rendering.")]
 public struct Material : Component
 {
     private Color AlbedoColor;

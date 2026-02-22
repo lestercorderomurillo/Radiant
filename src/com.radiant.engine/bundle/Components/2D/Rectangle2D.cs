@@ -3,6 +3,7 @@ using Microsoft.Xna.Framework;
 
 namespace com.radiant.engine.bundle;
 
+[ComponentDescription("Defines a rectangle shape with a size.")]
 public struct Rectangle2D : Component
 {
     public Vector2 Size;

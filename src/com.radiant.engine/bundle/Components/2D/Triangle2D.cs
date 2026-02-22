@@ -3,6 +3,7 @@ using Microsoft.Xna.Framework;
 
 namespace com.radiant.engine.bundle;
 
+[ComponentDescription("Defines a triangle shape with optional border.")]
 public struct Triangle2D : Component
 {
     public Vector2 Size;

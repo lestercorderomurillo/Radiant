@@ -3,6 +3,7 @@ using Microsoft.Xna.Framework;
 
 namespace com.radiant.engine.bundle;
 
+[ComponentDescription("Physical weight for 2D rigid body simulation.")]
 public struct RigidBody2D : Component
 {
     public float Weight;

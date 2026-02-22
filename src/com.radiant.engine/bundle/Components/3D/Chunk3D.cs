@@ -2,6 +2,7 @@ using com.radiant.engine.core;
 
 namespace com.radiant.engine.bundle;
 
+[ComponentDescription("16x16x16 voxel chunk of 3D tiles.")]
 public struct Chunk3D : Component
 {
     public const int Size = 16;

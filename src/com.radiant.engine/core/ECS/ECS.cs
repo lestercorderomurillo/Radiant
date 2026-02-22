@@ -402,6 +402,8 @@ public class ECS : IGameObject
         return record.Arch?.Types ?? Array.Empty<Type>();
     }
 
+    public IReadOnlyCollection<Type> GetRegisteredComponentTypes() => TypeToId.Keys;
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void SetPosition(int entity, Vector3 position)
     {

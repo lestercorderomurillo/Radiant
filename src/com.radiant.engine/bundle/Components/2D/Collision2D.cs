@@ -3,6 +3,7 @@ using Microsoft.Xna.Framework;
 
 namespace com.radiant.engine.bundle;
 
+[ComponentDescription("Axis-aligned collision bounds for 2D entities.")]
 public struct Collision2D : Component
 {
     public Vector2 Bounds;

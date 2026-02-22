@@ -168,6 +168,12 @@ var system = ECS.GetSystem<Geometry>(); // Returns null if not registered
 
 `Material`: setting Albedo/Emissive auto-recalculates Absorption and EmissiveScaled. Texture modulates emissive when non-null. Reference fields safe — ECS uses managed `Array.Copy`.
 
+`[ComponentDescription("...")]` — attribute on component structs, provides a description shown in the Component Inspector. Defined in `Component.cs`.
+
+```csharp
+IReadOnlyCollection<Type> types = ECS.GetRegisteredComponentTypes(); // All component types ever added
+```
+
 ## System Architecture
 
 ```csharp
@@ -567,7 +573,7 @@ Built-in themes: Solaris, Carbon, Midnight, Sentinel (light), Greenfields (olive
 
 ### Menu Bar
 
-F1 toggles a top-of-screen menu bar with **File**, **ECS**, **View**, and **Help** menus. ECS has "Open Entity Inspector" (search bar + results list), "Open Component Registry", and "Open System Inspector". View dynamically lists all registered Inspector windows with show/hide toggles plus "Reorder Windows", "Show All", and "Hide All" actions. Help has "About Radiant" (centered info window). File has "Close". Implementation is in `InspectorMenuBar.cs` (partial class Inspector). Menu bar uses frosted glass blur (45% opacity). Renders last (always on top). Hover-to-switch between menus when a dropdown is open (macOS behavior). Toggle items keep the dropdown open; action items close it.
+F1 toggles a top-of-screen menu bar with **File**, **ECS**, **View**, and **Help** menus. ECS has "Open Entity Inspector" (search bar + results list), "Open Component Inspector" (searchable list of registered component types with descriptions), and "Open System Inspector". View dynamically lists all registered Inspector windows with show/hide toggles plus "Reorder Windows", "Show All", and "Hide All" actions. Help has "About Radiant" (centered info window). File has "Close". Implementation is in `InspectorMenuBar.cs` (partial class Inspector). Menu bar uses frosted glass blur (45% opacity). Renders last (always on top). Hover-to-switch between menus when a dropdown is open (macOS behavior). Toggle items keep the dropdown open; action items close it.
 
 **Auto-positioning**: Windows are only repositioned on: game window resize, UI scale change, or View > Reorder Windows. Toggling visibility or creating/destroying windows does NOT reposition.
 

@@ -3,6 +3,7 @@ using Microsoft.Xna.Framework;
 
 namespace com.radiant.engine.bundle;
 
+[ComponentDescription("Position, rotation and scale in world space.")]
 public struct Transform : Component
 {
     public Vector3 Position;

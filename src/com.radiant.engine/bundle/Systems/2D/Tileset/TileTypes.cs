@@ -70,6 +70,7 @@ public static class TileTypeRegistry
     }
 }
 
+[ComponentDescription("Tile position, layer and type for 2D tilesets.")]
 public struct TileData : Component
 {
     public int X;

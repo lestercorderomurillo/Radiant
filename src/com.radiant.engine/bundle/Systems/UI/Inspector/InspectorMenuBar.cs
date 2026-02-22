@@ -61,7 +61,7 @@ public partial class Inspector
 
         var ecs = new MenuData { Id = "ecs", Label = "ECS" };
         ecs.Items.Add(new MenuItem { Id = "entity_inspector", Label = "Open Entity Inspector", Type = MenuItemType.Action, ActionCallback = OpenEntityInspector });
-        ecs.Items.Add(new MenuItem { Id = "component_registry", Label = "Open Component Registry", Type = MenuItemType.Action, ActionCallback = OpenComponentRegistry });
+        ecs.Items.Add(new MenuItem { Id = "component_inspector", Label = "Open Component Inspector", Type = MenuItemType.Action, ActionCallback = OpenComponentInspector });
         ecs.Items.Add(new MenuItem { Id = "system_inspector", Label = "Open System Inspector", Type = MenuItemType.Action, ActionCallback = OpenSystemsInspector });
 
         var file = new MenuData { Id = "file", Label = "File" };
@@ -556,18 +556,55 @@ public partial class Inspector
         ShowWindow("entity_inspector");
     }
 
-    private void OpenComponentRegistry()
+    private void OpenComponentInspector()
     {
-        if (!Windows.ContainsKey("component_registry"))
-            CreateWindow("component_registry", "Component Registry", 52);
-        ShowWindow("component_registry");
+        if (!Windows.ContainsKey("component_inspector"))
+        {
+            CreateWindow("component_inspector", "Component Inspector", 52);
+            if (Windows.TryGetValue("component_inspector", out var componentWindow))
+                componentWindow.Resizable = true;
+            AddSectionLabel("component_inspector", "components_section", "Find Component");
+            AddTextInput("component_inspector", "components_filter", "Search by Name...", (value) => RefreshComponentList(), 1f);
+            AddListBox("component_inspector", "components_list", 500);
+            RefreshComponentList();
+        }
+        ShowWindow("component_inspector");
+    }
+
+    private void RefreshComponentList()
+    {
+        var registeredTypes = Scene.ECS.GetRegisteredComponentTypes();
+        string filter = GetTextInputValue("component_inspector", "components_filter");
+
+        var sorted = new List<Type>(registeredTypes);
+        sorted.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.Ordinal));
+
+        List<string> items = new();
+        foreach (var type in sorted)
+        {
+            string name = type.Name;
+            var descAttr = (ComponentDescriptionAttribute)Attribute.GetCustomAttribute(type, typeof(ComponentDescriptionAttribute));
+            string description = descAttr?.Description;
+
+            if (filter.Length > 0)
+            {
+                bool matches = name.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                    || (description != null && description.Contains(filter, StringComparison.OrdinalIgnoreCase));
+                if (!matches) continue;
+            }
+
+            items.Add($"\x03{name}");
+            if (description != null)
+                items.Add(description);
+        }
+        SetListBoxItems("component_inspector", "components_list", items.ToArray());
     }
 
     private void OpenSystemsInspector()
     {
         if (!Windows.ContainsKey("system_inspector"))
         {
-            CreateWindow("system_inspector", "System Manager", 51);
+            CreateWindow("system_inspector", "System Inspector", 51);
 
             if (Windows.TryGetValue("system_inspector", out var systemWindow))
                 systemWindow.Resizable = true;

@@ -8,6 +8,7 @@ namespace com.radiant.engine.bundle;
 /// Add this component to entities that need motion vector tracking.
 /// Contains a fixed-size circular buffer for position history - no allocations.
 /// </summary>
+[ComponentDescription("Tracks position history for motion vector generation.")]
 public struct MotionTrackable : Component
 {
     private const int MaxHistory = 4;

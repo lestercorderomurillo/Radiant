@@ -3,6 +3,7 @@ using Microsoft.Xna.Framework;
 
 namespace com.radiant.engine.bundle;
 
+[ComponentDescription("Velocity and acceleration for 2D movement.")]
 public struct Movement2D : Component
 {
     public Vector2 Speed;
